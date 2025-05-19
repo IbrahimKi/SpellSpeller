@@ -608,7 +608,7 @@ public partial class @PlayerControls: IInputActionCollection2, IDisposable
             ""id"": ""6d22bc14-7ea8-427b-8bb1-2bfcbc8144f7"",
             ""actions"": [
                 {
-                    ""name"": ""MousePressed"",
+                    ""name"": ""MousePress"",
                     ""type"": ""Button"",
                     ""id"": ""52d781b4-ab90-4a6d-b302-794b561a014e"",
                     ""expectedControlType"": """",
@@ -617,7 +617,7 @@ public partial class @PlayerControls: IInputActionCollection2, IDisposable
                     ""initialStateCheck"": false
                 },
                 {
-                    ""name"": ""MouseReleased"",
+                    ""name"": ""MouseRelease"",
                     ""type"": ""Button"",
                     ""id"": ""5f0be8e1-7ac9-4a25-bfa0-bd37af91ec2e"",
                     ""expectedControlType"": """",
@@ -634,7 +634,7 @@ public partial class @PlayerControls: IInputActionCollection2, IDisposable
                     ""interactions"": """",
                     ""processors"": """",
                     ""groups"": """",
-                    ""action"": ""MousePressed"",
+                    ""action"": ""MousePress"",
                     ""isComposite"": false,
                     ""isPartOfComposite"": false
                 },
@@ -645,7 +645,7 @@ public partial class @PlayerControls: IInputActionCollection2, IDisposable
                     ""interactions"": """",
                     ""processors"": """",
                     ""groups"": """",
-                    ""action"": ""MouseReleased"",
+                    ""action"": ""MouseRelease"",
                     ""isComposite"": false,
                     ""isPartOfComposite"": false
                 }
@@ -668,8 +668,8 @@ public partial class @PlayerControls: IInputActionCollection2, IDisposable
         m_UI_TrackedDeviceOrientation = m_UI.FindAction("TrackedDeviceOrientation", throwIfNotFound: true);
         // Player
         m_Player = asset.FindActionMap("Player", throwIfNotFound: true);
-        m_Player_MousePressed = m_Player.FindAction("MousePressed", throwIfNotFound: true);
-        m_Player_MouseReleased = m_Player.FindAction("MouseReleased", throwIfNotFound: true);
+        m_Player_MousePress = m_Player.FindAction("MousePress", throwIfNotFound: true);
+        m_Player_MouseRelease = m_Player.FindAction("MouseRelease", throwIfNotFound: true);
     }
 
     ~@PlayerControls()
@@ -946,8 +946,8 @@ public partial class @PlayerControls: IInputActionCollection2, IDisposable
     // Player
     private readonly InputActionMap m_Player;
     private List<IPlayerActions> m_PlayerActionsCallbackInterfaces = new List<IPlayerActions>();
-    private readonly InputAction m_Player_MousePressed;
-    private readonly InputAction m_Player_MouseReleased;
+    private readonly InputAction m_Player_MousePress;
+    private readonly InputAction m_Player_MouseRelease;
     /// <summary>
     /// Provides access to input actions defined in input action map "Player".
     /// </summary>
@@ -960,13 +960,13 @@ public partial class @PlayerControls: IInputActionCollection2, IDisposable
         /// </summary>
         public PlayerActions(@PlayerControls wrapper) { m_Wrapper = wrapper; }
         /// <summary>
-        /// Provides access to the underlying input action "Player/MousePressed".
+        /// Provides access to the underlying input action "Player/MousePress".
         /// </summary>
-        public InputAction @MousePressed => m_Wrapper.m_Player_MousePressed;
+        public InputAction @MousePress => m_Wrapper.m_Player_MousePress;
         /// <summary>
-        /// Provides access to the underlying input action "Player/MouseReleased".
+        /// Provides access to the underlying input action "Player/MouseRelease".
         /// </summary>
-        public InputAction @MouseReleased => m_Wrapper.m_Player_MouseReleased;
+        public InputAction @MouseRelease => m_Wrapper.m_Player_MouseRelease;
         /// <summary>
         /// Provides access to the underlying input action map instance.
         /// </summary>
@@ -993,12 +993,12 @@ public partial class @PlayerControls: IInputActionCollection2, IDisposable
         {
             if (instance == null || m_Wrapper.m_PlayerActionsCallbackInterfaces.Contains(instance)) return;
             m_Wrapper.m_PlayerActionsCallbackInterfaces.Add(instance);
-            @MousePressed.started += instance.OnMousePressed;
-            @MousePressed.performed += instance.OnMousePressed;
-            @MousePressed.canceled += instance.OnMousePressed;
-            @MouseReleased.started += instance.OnMouseReleased;
-            @MouseReleased.performed += instance.OnMouseReleased;
-            @MouseReleased.canceled += instance.OnMouseReleased;
+            @MousePress.started += instance.OnMousePress;
+            @MousePress.performed += instance.OnMousePress;
+            @MousePress.canceled += instance.OnMousePress;
+            @MouseRelease.started += instance.OnMouseRelease;
+            @MouseRelease.performed += instance.OnMouseRelease;
+            @MouseRelease.canceled += instance.OnMouseRelease;
         }
 
         /// <summary>
@@ -1010,12 +1010,12 @@ public partial class @PlayerControls: IInputActionCollection2, IDisposable
         /// <seealso cref="PlayerActions" />
         private void UnregisterCallbacks(IPlayerActions instance)
         {
-            @MousePressed.started -= instance.OnMousePressed;
-            @MousePressed.performed -= instance.OnMousePressed;
-            @MousePressed.canceled -= instance.OnMousePressed;
-            @MouseReleased.started -= instance.OnMouseReleased;
-            @MouseReleased.performed -= instance.OnMouseReleased;
-            @MouseReleased.canceled -= instance.OnMouseReleased;
+            @MousePress.started -= instance.OnMousePress;
+            @MousePress.performed -= instance.OnMousePress;
+            @MousePress.canceled -= instance.OnMousePress;
+            @MouseRelease.started -= instance.OnMouseRelease;
+            @MouseRelease.performed -= instance.OnMouseRelease;
+            @MouseRelease.canceled -= instance.OnMouseRelease;
         }
 
         /// <summary>
@@ -1135,18 +1135,18 @@ public partial class @PlayerControls: IInputActionCollection2, IDisposable
     public interface IPlayerActions
     {
         /// <summary>
-        /// Method invoked when associated input action "MousePressed" is either <see cref="UnityEngine.InputSystem.InputAction.started" />, <see cref="UnityEngine.InputSystem.InputAction.performed" /> or <see cref="UnityEngine.InputSystem.InputAction.canceled" />.
+        /// Method invoked when associated input action "MousePress" is either <see cref="UnityEngine.InputSystem.InputAction.started" />, <see cref="UnityEngine.InputSystem.InputAction.performed" /> or <see cref="UnityEngine.InputSystem.InputAction.canceled" />.
         /// </summary>
         /// <seealso cref="UnityEngine.InputSystem.InputAction.started" />
         /// <seealso cref="UnityEngine.InputSystem.InputAction.performed" />
         /// <seealso cref="UnityEngine.InputSystem.InputAction.canceled" />
-        void OnMousePressed(InputAction.CallbackContext context);
+        void OnMousePress(InputAction.CallbackContext context);
         /// <summary>
-        /// Method invoked when associated input action "MouseReleased" is either <see cref="UnityEngine.InputSystem.InputAction.started" />, <see cref="UnityEngine.InputSystem.InputAction.performed" /> or <see cref="UnityEngine.InputSystem.InputAction.canceled" />.
+        /// Method invoked when associated input action "MouseRelease" is either <see cref="UnityEngine.InputSystem.InputAction.started" />, <see cref="UnityEngine.InputSystem.InputAction.performed" /> or <see cref="UnityEngine.InputSystem.InputAction.canceled" />.
         /// </summary>
         /// <seealso cref="UnityEngine.InputSystem.InputAction.started" />
         /// <seealso cref="UnityEngine.InputSystem.InputAction.performed" />
         /// <seealso cref="UnityEngine.InputSystem.InputAction.canceled" />
-        void OnMouseReleased(InputAction.CallbackContext context);
+        void OnMouseRelease(InputAction.CallbackContext context);
     }
 }

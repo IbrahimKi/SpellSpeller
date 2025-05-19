@@ -518,7 +518,7 @@
             ]
         },
         {
-            "name": "PlayerControls",
+            "name": "Player",
             "id": "6d22bc14-7ea8-427b-8bb1-2bfcbc8144f7",
             "actions": [
                 {

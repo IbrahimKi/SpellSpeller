@@ -32,14 +32,14 @@ public class InputManager : MonoBehaviour
     private void OnEnable()
     {
         _controls.Enable();
-        _controls.PlayerControls.MousePress.performed += HandleMousePress;
-        _controls.PlayerControls.MouseRelease.canceled += HandleMouseRelease;
+        _controls.Player.MousePress.performed += HandleMousePress;
+        _controls.Player.MouseRelease.canceled += HandleMouseRelease;
     }
 
     private void OnDisable()
     {
-        _controls.PlayerControls.MousePress.performed -= HandleMousePress;
-        _controls.PlayerControls.MouseRelease.canceled -= HandleMouseRelease;
+        _controls.Player.MousePress.performed -= HandleMousePress;
+        _controls.Player.MouseRelease.canceled -= HandleMouseRelease;
         _controls.Disable();
     }
 
