@@ -5,8 +5,8 @@ public class DragHandler : MonoBehaviour
 {
     public static DragHandler Instance { get; private set; }
 
-    private bool isDragging = false;
-    private DragObject lastDragged;
+    private bool _isDragging = false;
+    private DragObject _lastDragged;
 
     private void Awake()
     {
@@ -42,6 +42,7 @@ public class DragHandler : MonoBehaviour
 
     private void StartDrag(Vector2 mousePosition)
     {
+        Debug.Log("Dragging");
         Vector3 worldPosition = Camera.main.ScreenToWorldPoint(new Vector3(mousePosition.x, mousePosition.y, Camera.main.nearClipPlane));
         RaycastHit2D hit = Physics2D.Raycast(worldPosition, Vector2.zero);
 
@@ -50,25 +51,26 @@ public class DragHandler : MonoBehaviour
             DragObject dragObject = hit.transform.GetComponent<DragObject>();
             if (dragObject != null)
             {
-                lastDragged = dragObject;
-                isDragging = true;
+                _lastDragged = dragObject;
+                _isDragging = true;
             }
         }
     }
 
     private void StopDrag(Vector2 mousePosition)
     {
-        isDragging = false;
-        lastDragged = null;
+        
+        _isDragging = false;
+        _lastDragged = null;
     }
 
     private void Update()
     {
-        if (isDragging && lastDragged != null)
+        if (_isDragging && _lastDragged != null)
         {
             Vector3 mousePosition = Mouse.current.position.ReadValue();
             Vector3 worldPosition = Camera.main.ScreenToWorldPoint(new Vector3(mousePosition.x, mousePosition.y, Camera.main.nearClipPlane));
-            lastDragged.transform.position = new Vector3(worldPosition.x, worldPosition.y, 0);
+            _lastDragged.transform.position = new Vector3(worldPosition.x, worldPosition.y, 0);
         }
     }
 }
