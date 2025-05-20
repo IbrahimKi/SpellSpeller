@@ -613,7 +613,7 @@ public partial class @PlayerControls: IInputActionCollection2, IDisposable
                     ""id"": ""52d781b4-ab90-4a6d-b302-794b561a014e"",
                     ""expectedControlType"": """",
                     ""processors"": """",
-                    ""interactions"": ""Press(behavior=2)"",
+                    ""interactions"": ""Press"",
                     ""initialStateCheck"": false
                 },
                 {

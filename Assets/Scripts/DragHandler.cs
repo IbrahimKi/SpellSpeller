@@ -5,34 +5,40 @@ public class DragHandler : MonoBehaviour
 {
     public static DragHandler Instance { get; private set; }
 
-    private bool _isDragging = false;
+    private bool _isDragging;
     private DragObject _lastDragged;
+
+    [SerializeField] private Canvas canvas; // Referenz zum Canvas
+    private RectTransform canvasRectTransform; // RectTransform des Canvas
 
     private void Awake()
     {
-        // Singleton-Setup
         if (Instance == null)
         {
             Instance = this;
-            DontDestroyOnLoad(gameObject); // Objekt bleibt zwischen Szenenwechseln bestehen
+            DontDestroyOnLoad(gameObject);
         }
         else
         {
-            Destroy(gameObject); // Zusätzliche Instanzen entfernen
-            return;
+            Destroy(gameObject);
         }
     }
 
     private void Start()
     {
-        // Abonniere Events vom InputManager-Singleton
+        // Abonniere die InputManager Events
         InputManager.Instance.OnMousePressed += StartDrag;
         InputManager.Instance.OnMouseReleased += StopDrag;
+
+        // Hole das RectTransform des Canvas
+        if (canvas != null)
+        {
+            canvasRectTransform = canvas.GetComponent<RectTransform>();
+        }
     }
 
     private void OnDestroy()
     {
-        // Events abmelden, falls das Objekt zerstört wird
         if (InputManager.Instance != null)
         {
             InputManager.Instance.OnMousePressed -= StartDrag;
@@ -42,35 +48,43 @@ public class DragHandler : MonoBehaviour
 
     private void StartDrag(Vector2 mousePosition)
     {
-        Debug.Log("Dragging");
-        Vector3 worldPosition = Camera.main.ScreenToWorldPoint(new Vector3(mousePosition.x, mousePosition.y, Camera.main.nearClipPlane));
-        RaycastHit2D hit = Physics2D.Raycast(worldPosition, Vector2.zero);
+        if (canvasRectTransform == null) return;
 
-        if (hit.collider != null)
+        Debug.Log($"Mouse Position: {mousePosition.x}, {mousePosition.y}"); 
+        if (RectTransformUtility.ScreenPointToLocalPointInRectangle(canvasRectTransform, mousePosition, Camera.main, out Vector2 localPoint))
         {
-            DragObject dragObject = hit.transform.GetComponent<DragObject>();
-            if (dragObject != null)
+            Debug.Log($"Lokale Canvas-Position: {localPoint.x}, {localPoint.y}");
+            RaycastHit2D hit = Physics2D.Raycast(Camera.main.ScreenToWorldPoint(mousePosition), Vector2.zero);
+            if (hit.collider != null)
             {
-                _lastDragged = dragObject;
-                _isDragging = true;
+                DragObject dragObject = hit.transform.GetComponent<DragObject>();
+                if (dragObject != null)
+                {
+                    _lastDragged = dragObject;
+                    _isDragging = true;
+                }
             }
         }
     }
 
     private void StopDrag(Vector2 mousePosition)
     {
-        
+        Debug.Log("Dragging Ended");
         _isDragging = false;
         _lastDragged = null;
     }
 
-    private void Update()
+    private void FixedUpdate()
     {
         if (_isDragging && _lastDragged != null)
         {
-            Vector3 mousePosition = Mouse.current.position.ReadValue();
-            Vector3 worldPosition = Camera.main.ScreenToWorldPoint(new Vector3(mousePosition.x, mousePosition.y, Camera.main.nearClipPlane));
-            _lastDragged.transform.position = new Vector3(worldPosition.x, worldPosition.y, 0);
+            
+            Vector2 mousePosition = Mouse.current.position.ReadValue();
+            if (RectTransformUtility.ScreenPointToLocalPointInRectangle(canvasRectTransform, mousePosition, Camera.main, out Vector2 localPoint))
+            {
+                _lastDragged.transform.localPosition = new Vector3(localPoint.x, localPoint.y, _lastDragged.transform.localPosition.z);
+                Debug.Log($"Objekt bewegt: {localPoint.x}, {localPoint.y}");
+            }
         }
     }
 }
