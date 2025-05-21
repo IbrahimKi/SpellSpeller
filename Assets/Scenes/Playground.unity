@@ -451,6 +451,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   canvas: {fileID: 1485001753}
+  uiCamera: {fileID: 0}
+  _debugMode: 1
 --- !u!4 &760733663
 Transform:
   m_ObjectHideFlags: 0
@@ -616,6 +618,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3ba4bfc609d0ad14b93614c7c7a6d5f8, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  isDraggable: 1
 --- !u!61 &1418632215
 BoxCollider2D:
   m_ObjectHideFlags: 0
