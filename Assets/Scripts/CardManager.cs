@@ -1,464 +1,301 @@
-using UnityEngine;
 using System.Collections.Generic;
 using System.Linq;
-using System;
+using UnityEngine;
 
 public class CardManager : MonoBehaviour
 {
     public static CardManager Instance { get; private set; }
-
+    
     [Header("Card Database")]
     [SerializeField] private List<CardData> allCardData = new List<CardData>();
     
-    [Header("Runtime Management")]
-    [SerializeField] private List<Card> activeCards = new List<Card>();
-    [SerializeField] private List<Card> selectedCards = new List<Card>();
+    [Header("Spawning")]
+    [SerializeField] private GameObject cardPrefab;
+    [SerializeField] private Transform defaultSpawnParent;
+    [SerializeField] private bool useObjectPooling = true;
+    [SerializeField] private int poolSize = 20;
     
-    [Header("Game Settings")]
+    [Header("Hand Management")]  
+    [SerializeField] private Transform handContainer;
+    [SerializeField] private float handCardSpacing = 120f;
+    [SerializeField] private int maxHandSize = 7;
+    
+    [Header("Selection")]
     [SerializeField] private int maxSelectedCards = 1;
     [SerializeField] private bool allowMultiSelect = false;
     
-    // Events für das Spielsystem
-    public static event Action<Card> OnCardActivated;
-    public static event Action<Card> OnCardDeactivated;
-    public static event Action<List<Card>> OnSelectionChanged;
-    public static event Action<string, List<Card>> OnLetterCombination; // Letters, Affected Cards
-    public static event Action<Card, BonusEffect> OnBonusEffectTriggered;
+    // FIX: Added reverse lookup for better performance
+    private Dictionary<int, Card> _allCards = new Dictionary<int, Card>();
+    private Dictionary<Card, int> _cardToId = new Dictionary<Card, int>();
+    private List<Card> _handCards = new List<Card>();
+    private List<Card> _selectedCards = new List<Card>();
+    private Queue<GameObject> _cardPool = new Queue<GameObject>();
+    private int _nextCardId = 0;
     
-    // Scoring und Combos
-    [Header("Scoring System")]
-    [SerializeField] private int baseLetterScore = 10;
-    [SerializeField] private float comboMultiplier = 1.5f;
-    private int currentScore = 0;
-    private int currentCombo = 0;
-    
-    // Performance Caching
-    private Dictionary<string, List<Card>> _letterToCardsCache = new Dictionary<string, List<Card>>();
-    private Dictionary<CardType, List<Card>> _typeToCardsCache = new Dictionary<CardType, List<Card>>();
+    // Events
+    public static event System.Action<Card> OnCardSpawned;
+    public static event System.Action<Card> OnCardDestroyed;
+    public static event System.Action<List<Card>> OnHandUpdated;
+    public static event System.Action<List<Card>> OnSelectionChanged;
     
     private void Awake()
     {
-        // Singleton Pattern
         if (Instance == null)
         {
             Instance = this;
             DontDestroyOnLoad(gameObject);
+            InitializePool();
         }
         else
         {
             Destroy(gameObject);
-            return;
         }
     }
     
     private void OnEnable()
     {
-        // Subscribe to card events
-        Card.OnCardPlayed += HandleCardPlayed;
         Card.OnCardSelected += HandleCardSelected;
         Card.OnCardDeselected += HandleCardDeselected;
-        Card.OnCardLetterTriggered += HandleCardLetterTriggered;
-        
-        // Subscribe to drag events will be handled by individual DragObject instances
     }
     
     private void OnDisable()
     {
-        // Unsubscribe from events
-        Card.OnCardPlayed -= HandleCardPlayed;
         Card.OnCardSelected -= HandleCardSelected;
         Card.OnCardDeselected -= HandleCardDeselected;
-        Card.OnCardLetterTriggered -= HandleCardLetterTriggered;
-        
-        // Unsubscribe from drag events will be handled by individual DragObject instances
     }
     
-    private void Start()
+    private void InitializePool()
     {
-        // Initialize card database
-        InitializeCardDatabase();
+        if (!useObjectPooling || cardPrefab == null) return;
         
-        // Find all existing cards in scene
-        RefreshActiveCards();
-    }
-    
-    #region Card Database Management
-    
-    private void InitializeCardDatabase()
-    {
-        if (allCardData.Count == 0)
+        Transform poolParent = new GameObject("Card Pool").transform;
+        poolParent.SetParent(transform);
+        
+        for (int i = 0; i < poolSize; i++)
         {
-            // Auto-load all CardData assets
-            CardData[] foundCards = Resources.LoadAll<CardData>("");
-            allCardData.AddRange(foundCards);
-            Debug.Log($"[CardManager] Auto-loaded {foundCards.Length} card data assets");
-        }
-        
-        Debug.Log($"[CardManager] Initialized with {allCardData.Count} card types");
-    }
-    
-    public CardData GetCardDataByName(string cardName)
-    {
-        return allCardData.FirstOrDefault(card => card.cardName.Equals(cardName, StringComparison.OrdinalIgnoreCase));
-    }
-    
-    public List<CardData> GetCardDataByType(CardType cardType)
-    {
-        return allCardData.Where(card => card.cardType == cardType).ToList();
-    }
-    
-    public List<CardData> GetCardDataWithLetter(string letter)
-    {
-        return allCardData.Where(card => card.HasLetter(letter[0])).ToList();
-    }
-    
-    #endregion
-    
-    #region Active Card Management
-    
-   
-    public void RefreshActiveCards()
-    {
-        activeCards.Clear();
-        Card[] foundCards = FindObjectsOfType<Card>();
-        activeCards.AddRange(foundCards);
-        
-        // Rebuild caches
-        RebuildCaches();
-        
-        Debug.Log($"[CardManager] Found {activeCards.Count} active cards in scene");
-    }
-    
-    private void RebuildCaches()
-    {
-        _letterToCardsCache.Clear();
-        _typeToCardsCache.Clear();
-        
-        foreach (var card in activeCards)
-        {
-            if (card == null || card.Data == null) continue;
-            
-            // Cache by letters
-            foreach (char letter in card.Data.GetLetters())
-            {
-                string letterKey = letter.ToString();
-                if (!_letterToCardsCache.ContainsKey(letterKey))
-                    _letterToCardsCache[letterKey] = new List<Card>();
-                
-                _letterToCardsCache[letterKey].Add(card);
-            }
-            
-            // Cache by type
-            if (!_typeToCardsCache.ContainsKey(card.Data.cardType))
-                _typeToCardsCache[card.Data.cardType] = new List<Card>();
-            
-            _typeToCardsCache[card.Data.cardType].Add(card);
+            GameObject pooledCard = Instantiate(cardPrefab, poolParent);
+            pooledCard.SetActive(false);
+            _cardPool.Enqueue(pooledCard);
         }
     }
     
-    public void RegisterCard(Card card)
+    public Card SpawnCard(CardData cardData, Transform parent = null, bool addToHand = false)
     {
-        if (card != null && !activeCards.Contains(card))
+        if (cardData == null || cardPrefab == null) return null;
+        
+        GameObject cardObject = GetCardObject();
+        if (cardObject == null) return null;
+        
+        // Setup transform
+        Transform targetParent = parent ?? defaultSpawnParent ?? transform;
+        cardObject.transform.SetParent(targetParent);
+        cardObject.transform.localPosition = Vector3.zero;
+        cardObject.transform.localRotation = Quaternion.identity;
+        cardObject.transform.localScale = Vector3.one;
+        
+        // Setup card component
+        Card cardComponent = cardObject.GetComponent<Card>();
+        if (cardComponent == null)
         {
-            activeCards.Add(card);
-            RebuildCaches(); // TODO: Optimize to only update relevant caches
-            OnCardActivated?.Invoke(card);
+            Debug.LogError("[UnifiedCardController] Card prefab missing Card component!");
+            return null;
         }
+        
+        cardComponent.SetCardData(cardData);
+        cardObject.SetActive(true);
+        
+        // FIX: Register card with reverse lookup
+        int cardId = _nextCardId++;
+        _allCards[cardId] = cardComponent;
+        _cardToId[cardComponent] = cardId;
+        
+        if (addToHand && _handCards.Count < maxHandSize)
+        {
+            _handCards.Add(cardComponent);
+            cardComponent.transform.SetParent(handContainer);
+            UpdateHandLayout();
+            OnHandUpdated?.Invoke(new List<Card>(_handCards));
+        }
+        
+        OnCardSpawned?.Invoke(cardComponent);
+        return cardComponent;
     }
     
-    public void UnregisterCard(Card card)
+    private GameObject GetCardObject()
     {
-        if (activeCards.Contains(card))
+        if (useObjectPooling && _cardPool.Count > 0)
         {
-            activeCards.Remove(card);
-            selectedCards.Remove(card);
-            RebuildCaches();
-            OnCardDeactivated?.Invoke(card);
-            OnSelectionChanged?.Invoke(selectedCards);
+            return _cardPool.Dequeue();
         }
+        return cardPrefab != null ? Instantiate(cardPrefab) : null;
     }
     
-    #endregion
+    public void DestroyCard(Card card)
+    {
+        if (card == null) return;
+        
+        // FIX: Remove from all tracking with better performance
+        if (_cardToId.TryGetValue(card, out int cardId))
+        {
+            _allCards.Remove(cardId);
+            _cardToId.Remove(card);
+        }
+        
+        _handCards.Remove(card);
+        _selectedCards.Remove(card);
+        
+        GameObject cardObject = card.gameObject;
+        
+        if (useObjectPooling)
+        {
+            // FIX: Proper cleanup before returning to pool
+            card.ClearEventSubscriptions(); // Clear any lingering event subscriptions
+            card.ResetCardState();
+            cardObject.transform.SetParent(transform);
+            cardObject.SetActive(false);
+            _cardPool.Enqueue(cardObject);
+        }
+        else
+        {
+            Destroy(cardObject);
+        }
+        
+        UpdateHandLayout();
+        OnHandUpdated?.Invoke(new List<Card>(_handCards));
+        OnSelectionChanged?.Invoke(new List<Card>(_selectedCards));
+        OnCardDestroyed?.Invoke(card);
+    }
     
-    #region Selection Management
+    // FIX: Much faster card ID lookup using reverse dictionary
+    private int GetCardId(Card card)
+    {
+        return _cardToId.TryGetValue(card, out int id) ? id : -1;
+    }
     
     private void HandleCardSelected(Card card)
     {
-        if (selectedCards.Contains(card)) return;
+        if (card == null || _selectedCards.Contains(card)) return;
         
-        // Check selection limits
         if (!allowMultiSelect)
         {
-            // Deselect all other cards
-            foreach (var selectedCard in selectedCards.ToList())
+            // FIX: Clear existing selection properly
+            var cardsToDeselect = _selectedCards.ToList(); // Create copy to avoid modification during iteration
+            foreach (var selectedCard in cardsToDeselect)
             {
-                selectedCard.DeselectCard();
+                selectedCard.ForceDeselect(); // FIX: Use correct method name
             }
-            selectedCards.Clear();
+            _selectedCards.Clear();
         }
-        else if (selectedCards.Count >= maxSelectedCards)
+        else if (_selectedCards.Count >= maxSelectedCards)
         {
             // Remove oldest selection
-            Card oldestCard = selectedCards[0];
-            oldestCard.DeselectCard();
-            selectedCards.RemoveAt(0);
+            Card oldestCard = _selectedCards[0];
+            oldestCard.ForceDeselect(); // FIX: Use correct method name
+            _selectedCards.RemoveAt(0);
         }
         
-        selectedCards.Add(card);
-        OnSelectionChanged?.Invoke(selectedCards);
-        
-        Debug.Log($"[CardManager] Card selected: {card.Data.cardName}. Total selected: {selectedCards.Count}");
+        _selectedCards.Add(card);
+        OnSelectionChanged?.Invoke(new List<Card>(_selectedCards));
     }
     
     private void HandleCardDeselected(Card card)
     {
-        if (selectedCards.Remove(card))
-        {
-            OnSelectionChanged?.Invoke(selectedCards);
-        }
+        if (_selectedCards.Remove(card))
+            OnSelectionChanged?.Invoke(new List<Card>(_selectedCards));
     }
     
     public void ClearSelection()
     {
-        foreach (var card in selectedCards.ToList())
+        var cardsToDeselect = _selectedCards.ToList(); // FIX: Create copy to avoid modification during iteration
+        foreach (var card in cardsToDeselect)
         {
-            card.DeselectCard();
+            card.ForceDeselect(); // FIX: Use correct method name
         }
-        selectedCards.Clear();
-        OnSelectionChanged?.Invoke(selectedCards);
+        _selectedCards.Clear();
+        OnSelectionChanged?.Invoke(new List<Card>(_selectedCards));
     }
     
-    public List<Card> GetSelectedCards()
+    private void UpdateHandLayout()
     {
-        return new List<Card>(selectedCards);
-    }
-    
-    #endregion
-    
-    #region Letter System & Combos
-    
-    private void HandleCardLetterTriggered(Card card, string letter)
-    {
-        Debug.Log($"[CardManager] Letter '{letter}' triggered by {card.Data.cardName}");
+        if (handContainer == null || _handCards.Count == 0) return;
         
-        // Find all cards with this letter
-        if (_letterToCardsCache.TryGetValue(letter, out List<Card> cardsWithLetter))
+        float totalWidth = (_handCards.Count - 1) * handCardSpacing;
+        float startX = -totalWidth * 0.5f;
+        
+        for (int i = 0; i < _handCards.Count; i++)
         {
-            // Filter out the triggering card to avoid self-triggering
-            var affectedCards = cardsWithLetter.Where(c => c != card && c != null).ToList();
-            
-            if (affectedCards.Count > 0)
+            if (_handCards[i] != null)
             {
-                OnLetterCombination?.Invoke(letter, affectedCards);
-                ProcessLetterCombo(letter, affectedCards);
+                Vector3 targetPosition = new Vector3(startX + (i * handCardSpacing), 0, 0);
+                _handCards[i].transform.localPosition = targetPosition;
             }
         }
     }
     
-    private void ProcessLetterCombo(string letter, List<Card> affectedCards)
+    // FIX: Added method to clean up all cards (useful for scene transitions)
+    public void CleanupAllCards()
     {
-        currentCombo++;
-        int comboScore = Mathf.RoundToInt(baseLetterScore * Mathf.Pow(comboMultiplier, currentCombo - 1));
-        currentScore += comboScore * affectedCards.Count;
-        
-        Debug.Log($"[CardManager] Letter combo '{letter}' affects {affectedCards.Count} cards. Combo: {currentCombo}, Score: +{comboScore * affectedCards.Count}");
-        
-        // Trigger bonus effects on affected cards
-        foreach (var card in affectedCards)
+        var allCardsCopy = _allCards.Values.ToList();
+        foreach (var card in allCardsCopy)
         {
-            card.TriggerBonusEffects(BonusEffectType.Triggered);
+            if (card != null)
+                DestroyCard(card);
         }
         
-        // TODO: Hier können Sie weitere Combo-Effekte hinzufügen:
-        // - Visuelle Effekte für Combos
-        // - Sound-Effekte
-        // - Screen-Shake bei großen Combos
-        // - Bonus-Multiplier für aufeinanderfolgende Combos
+        _allCards.Clear();
+        _cardToId.Clear();
+        _handCards.Clear();
+        _selectedCards.Clear();
     }
     
-    public void TriggerLetterSequence(string letterSequence)
+    // FIX: Added null checks and better error handling
+    public bool AddCardToHand(Card card)
     {
-        foreach (char letter in letterSequence)
-        {
-            if (_letterToCardsCache.TryGetValue(letter.ToString(), out List<Card> cards))
-            {
-                foreach (var card in cards)
-                {
-                    if (card != null)
-                    {
-                        card.TriggerLetterEvent(letter.ToString());
-                    }
-                }
-            }
-        }
-    }
-    
-    public void ResetCombo()
-    {
-        currentCombo = 0;
-        Debug.Log("[CardManager] Combo reset");
-    }
-    
-    #endregion
-    
-    #region Bonus Effect System
-    
-    private void HandleCardPlayed(Card card)
-    {
-        Debug.Log($"[CardManager] Card played: {card.Data.cardName}");
+        if (card == null || _handCards.Contains(card) || _handCards.Count >= maxHandSize)
+            return false;
         
-        // Trigger OnPlay bonus effects
-        foreach (var effect in card.Data.bonusEffects)
-        {
-            if (effect.effectType == BonusEffectType.OnPlay)
-            {
-                ProcessBonusEffect(card, effect);
-            }
-        }
+        _handCards.Add(card);
+        card.transform.SetParent(handContainer);
+        UpdateHandLayout();
+        OnHandUpdated?.Invoke(new List<Card>(_handCards));
+        return true;
+    }
+    
+    public bool RemoveCardFromHand(Card card)
+    {
+        if (card == null || !_handCards.Remove(card))
+            return false;
         
-        // TODO: Hier können Sie weitere Spiel-Logik hinzufügen:
-        // - Karte zu gespielten Karten hinzufügen
-        // - Mana/Ressourcen verbrauchen
-        // - Gegner-Reaktionen auslösen
-        // - Spielfeld-Effekte aktivieren
+        UpdateHandLayout();
+        OnHandUpdated?.Invoke(new List<Card>(_handCards));
+        return true;
     }
     
-    private void ProcessBonusEffect(Card sourceCard, BonusEffect effect)
+    // Public accessors with null safety
+    public List<Card> GetSelectedCards() => _selectedCards != null ? new List<Card>(_selectedCards) : new List<Card>();
+    public List<Card> GetHandCards() => _handCards != null ? new List<Card>(_handCards) : new List<Card>();
+    public List<Card> GetAllCards() => _allCards != null ? new List<Card>(_allCards.Values) : new List<Card>();
+    public int ActiveCardCount => _allCards?.Count ?? 0;
+    public int HandSize => _handCards?.Count ?? 0;
+    public int SelectedCount => _selectedCards?.Count ?? 0;
+    public bool IsHandFull => _handCards != null && _handCards.Count >= maxHandSize;
+    
+    // FIX: Added validation method
+    public bool IsValidCard(Card card)
     {
-        OnBonusEffectTriggered?.Invoke(sourceCard, effect);
-        
-        switch (effect.effectName.ToLower())
-        {
-            case "heal":
-                // TODO: Implement healing logic
-                Debug.Log($"[CardManager] Healing for {effect.effectValue} points");
-                break;
-                
-            case "damage":
-                // TODO: Implement damage logic
-                Debug.Log($"[CardManager] Dealing {effect.effectValue} damage");
-                break;
-                
-            case "draw":
-                // TODO: Implement card draw logic
-                Debug.Log($"[CardManager] Drawing {effect.effectValue} cards");
-                break;
-                
-            case "buff":
-                // TODO: Implement buff logic
-                Debug.Log($"[CardManager] Applying buff with value {effect.effectValue}");
-                break;
-                
-            default:
-                Debug.LogWarning($"[CardManager] Unknown bonus effect: {effect.effectName}");
-                break;
-        }
+        return card != null && _cardToId.ContainsKey(card);
     }
     
-    #endregion
-    
-    #region Drag System Integration
-    
-    private void HandleDragStarted(DragObject dragObject)
+    [ContextMenu("Spawn Test Card")]
+    public void SpawnTestCard()
     {
-        Debug.Log($"[CardManager] Drag started on {dragObject.name} with {dragObject.AttachedCards.Count} cards");
-        
-        // TODO: Hier können Sie Drag-Start-Logik hinzufügen:
-        // - Highlight valid drop zones
-        // - Show card information
-        // - Pause other game elements
+        if (allCardData.Count > 0)
+            SpawnCard(allCardData[0], null, true);
     }
-    
-    private void HandleDragEnded(DragObject dragObject)
+
+    [ContextMenu("Clear All Cards")]
+    public void ClearAllCards()
     {
-        Debug.Log($"[CardManager] Drag ended on {dragObject.name}");
-        
-        // TODO: Hier können Sie Drag-End-Logik hinzufügen:
-        // - Check for valid drop zones
-        // - Process card interactions
-        // - Update game state
+        CleanupAllCards();
     }
-    
-    #endregion
-    
-    #region Query Methods
-    
-    public List<Card> GetCardsWithLetter(string letter)
-    {
-        return _letterToCardsCache.TryGetValue(letter, out List<Card> cards) ? 
-               new List<Card>(cards) : new List<Card>();
-    }
-    
-    public List<Card> GetCardsOfType(CardType cardType)
-    {
-        return _typeToCardsCache.TryGetValue(cardType, out List<Card> cards) ? 
-               new List<Card>(cards) : new List<Card>();
-    }
-    
-    public List<Card> GetCardsWithBonusEffect(string effectName)
-    {
-        return activeCards.Where(card => card != null && card.HasBonusEffect(effectName)).ToList();
-    }
-    
-    public int GetTotalCardsOfTier(int tier)
-    {
-        return activeCards.Count(card => card != null && card.Data != null && card.Data.tier == tier);
-    }
-    
-    public float GetAverageTierLevel()
-    {
-        var validCards = activeCards.Where(card => card != null && card.Data != null).ToList();
-        return validCards.Count > 0 ? (float)validCards.Average(card => card.Data.tier) : 0f;
-    }
-    
-    #endregion
-    
-    #region Utility Methods
-    
-    public void LogGameState()
-    {
-        Debug.Log($"=== CARD MANAGER STATE ===");
-        Debug.Log($"Active Cards: {activeCards.Count}");
-        Debug.Log($"Selected Cards: {selectedCards.Count}");
-        Debug.Log($"Current Score: {currentScore}");
-        Debug.Log($"Current Combo: {currentCombo}");
-        Debug.Log($"Cards by Type:");
-        
-        foreach (var kvp in _typeToCardsCache)
-        {
-            Debug.Log($"  {kvp.Key}: {kvp.Value.Count} cards");
-        }
-        
-        Debug.Log($"Cards by Letter:");
-        foreach (var kvp in _letterToCardsCache)
-        {
-            Debug.Log($"  {kvp.Key}: {kvp.Value.Count} cards");
-        }
-    }
-    
-    [ContextMenu("Refresh Active Cards")]
-    private void EditorRefreshActiveCards()
-    {
-        RefreshActiveCards();
-    }
-    
-    [ContextMenu("Log Game State")]
-    private void EditorLogGameState()
-    {
-        LogGameState();
-    }
-    
-    [ContextMenu("Clear Selection")]
-    private void EditorClearSelection()
-    {
-        ClearSelection();
-    }
-    
-    #endregion
-    
-    // Properties for external access
-    public int CurrentScore => currentScore;
-    public int CurrentCombo => currentCombo;
-    public int ActiveCardCount => activeCards.Count;
-    public int SelectedCardCount => selectedCards.Count;
 }

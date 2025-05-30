@@ -1,321 +1,204 @@
 using UnityEngine;
 using UnityEngine.UI;
 using System.Collections.Generic;
-using System.Linq;
+using System.Text;
 
-/// <summary>
-/// UI Handler für das Ausspielen von Karten - sendet Events an den GameManager
-/// </summary>
 public class CardPlayHandler : MonoBehaviour
 {
     [Header("UI References")]
     [SerializeField] private Button playButton;
     [SerializeField] private Button clearButton;
-    
-    [Header("Visual Feedback")]
-    [SerializeField] private TMPro.TextMeshProUGUI currentLettersDisplay;
+    [SerializeField] private Button drawButton;
     [SerializeField] private TMPro.TextMeshProUGUI statusDisplay;
     
-    [Header("Settings")]
-    [SerializeField] private bool autoPlayOnSelection = false;
-    [SerializeField] private bool showDebugInfo = false;
+    [Header("Draw Settings")]
+    [SerializeField] private List<CardData> drawPool = new List<CardData>();
+    [SerializeField] private int cardsPerDraw = 1;
     
-    // Cached selected cards für Performance
-    private List<Card> _cachedSelectedCards = new List<Card>();
+    private List<Card> _selectedCards = new List<Card>();
     private string _cachedLetterSequence = "";
     private bool _isDirty = true;
+    private bool _isDestroyed = false;
     
     private void Awake()
     {
-        // Setup UI event listeners
         if (playButton != null)
             playButton.onClick.AddListener(PlaySelectedCards);
-            
         if (clearButton != null)
             clearButton.onClick.AddListener(ClearSelection);
+        if (drawButton != null)
+            drawButton.onClick.AddListener(DrawCards);
     }
     
     private void OnEnable()
     {
-        // Subscribe to card selection events
+        if (_isDestroyed) return;
+        
         CardManager.OnSelectionChanged += OnSelectionChanged;
-        SpellcastManager.OnLetterSequenceUpdated += OnLetterSequenceUpdated;
+        CardManager.OnHandUpdated += OnHandUpdated;
         SpellcastManager.OnSpellFound += OnSpellFound;
         SpellcastManager.OnSpellNotFound += OnSpellNotFound;
     }
     
     private void OnDisable()
     {
-        // Unsubscribe from events
+        UnsubscribeFromEvents();
+    }
+    
+    private void UnsubscribeFromEvents()
+    {
         CardManager.OnSelectionChanged -= OnSelectionChanged;
-        SpellcastManager.OnLetterSequenceUpdated -= OnLetterSequenceUpdated;
+        CardManager.OnHandUpdated -= OnHandUpdated;
         SpellcastManager.OnSpellFound -= OnSpellFound;
         SpellcastManager.OnSpellNotFound -= OnSpellNotFound;
     }
     
-    private void OnSelectionChanged(List<Card> selectedCards)
+    private void OnDestroy()
     {
-        _cachedSelectedCards.Clear();
-        _cachedSelectedCards.AddRange(selectedCards);
-        _isDirty = true;
+        _isDestroyed = true;
+        UnsubscribeFromEvents();
         
-        UpdateUI();
+        if (playButton != null)
+            playButton.onClick.RemoveListener(PlaySelectedCards);
+        if (clearButton != null)
+            clearButton.onClick.RemoveListener(ClearSelection);
+        if (drawButton != null)
+            drawButton.onClick.RemoveListener(DrawCards);
+    }
+    
+    public void DrawCards()
+    {
+        if (_isDestroyed || CardManager.Instance == null || drawPool.Count == 0) return;
+        if (CardManager.Instance.IsHandFull) return;
         
-        // Auto-play wenn aktiviert
-        if (autoPlayOnSelection && _cachedSelectedCards.Count > 0)
+        for (int i = 0; i < cardsPerDraw && !CardManager.Instance.IsHandFull; i++)
         {
-            PlaySelectedCards();
+            CardData randomCard = drawPool[Random.Range(0, drawPool.Count)];
+            CardManager.Instance.SpawnCard(randomCard, null, true);
         }
     }
     
-    /// <summary>
-    /// Spielt alle ausgewählten Karten aus und sendet Letter Values an GameManager
-    /// </summary>
+    private void OnHandUpdated(List<Card> handCards)
+    {
+        if (_isDestroyed || drawButton == null) return;
+        drawButton.interactable = !CardManager.Instance.IsHandFull && drawPool.Count > 0;
+    }
+    
+    private void OnSelectionChanged(List<Card> selectedCards)
+    {
+        if (_isDestroyed) return;
+        
+        _selectedCards.Clear();
+        if (selectedCards != null)
+            _selectedCards.AddRange(selectedCards);
+        _isDirty = true;
+        UpdateUI();
+    }
+    
     public void PlaySelectedCards()
     {
-        if (_cachedSelectedCards.Count == 0)
-        {
-            if (showDebugInfo)
-                Debug.Log("[CardPlayHandler] No cards selected to play");
-            return;
-        }
+        if (_isDestroyed || _selectedCards.Count == 0) return;
         
-        // Letter Sequence aus Karten extrahieren (nur bei Bedarf neu berechnen)
         if (_isDirty)
         {
-            _cachedLetterSequence = ExtractLetterSequence(_cachedSelectedCards);
+            _cachedLetterSequence = ExtractLetterSequence(_selectedCards);
             _isDirty = false;
         }
         
-        if (string.IsNullOrEmpty(_cachedLetterSequence))
-        {
-            if (showDebugInfo)
-                Debug.Log("[CardPlayHandler] No letters found in selected cards");
-            return;
-        }
+        if (string.IsNullOrEmpty(_cachedLetterSequence)) return;
         
-        // Event an GameManager senden
-        SpellcastManager.Instance?.ProcessCardPlay(_cachedSelectedCards, _cachedLetterSequence);
-        
-        if (showDebugInfo)
-        {
-            Debug.Log($"[CardPlayHandler] Played {_cachedSelectedCards.Count} cards with letters: {_cachedLetterSequence}");
-        }
+        if (SpellcastManager.Instance != null)
+            SpellcastManager.Instance.ProcessCardPlay(_selectedCards, _cachedLetterSequence);
     }
     
-    /// <summary>
-    /// Auswahl zurücksetzen
-    /// </summary>
     public void ClearSelection()
     {
-        CardManager.Instance?.ClearSelection();
-        _cachedSelectedCards.Clear();
+        if (_isDestroyed) return;
+        
+        if (CardManager.Instance != null)
+            CardManager.Instance.ClearSelection();
+        _selectedCards.Clear();
         _cachedLetterSequence = "";
         _isDirty = true;
         UpdateUI();
     }
     
-    /// <summary>
-    /// Extrahiert Letter Sequence aus Karten (performant mit StringBuilder)
-    /// </summary>
     private string ExtractLetterSequence(List<Card> cards)
     {
         if (cards == null || cards.Count == 0) return "";
         
-        var letterBuilder = new System.Text.StringBuilder();
-        
+        var letterBuilder = new StringBuilder();
         foreach (var card in cards)
         {
             if (card?.Data?.letterValues != null)
-            {
                 letterBuilder.Append(card.Data.letterValues);
-            }
         }
-        
         return letterBuilder.ToString();
     }
     
-    /// <summary>
-    /// UI Updates basierend auf aktuellem Zustand
-    /// </summary>
     private void UpdateUI()
     {
-        bool hasCards = _cachedSelectedCards.Count > 0;
+        if (_isDestroyed) return;
         
-        // Button States
+        bool hasCards = _selectedCards.Count > 0;
+        
         if (playButton != null)
-        {
             playButton.interactable = hasCards;
-        }
         
         if (clearButton != null)
-        {
             clearButton.interactable = hasCards;
-        }
         
-        // Letter Display
-        if (currentLettersDisplay != null)
+        if (drawButton != null)
+            drawButton.interactable = !CardManager.Instance.IsHandFull && drawPool.Count > 0;
+        
+        if (statusDisplay != null)
         {
-            if (_isDirty && hasCards)
+            if (hasCards)
             {
-                _cachedLetterSequence = ExtractLetterSequence(_cachedSelectedCards);
-                _isDirty = false;
+                if (_isDirty)
+                {
+                    _cachedLetterSequence = ExtractLetterSequence(_selectedCards);
+                    _isDirty = false;
+                }
+                statusDisplay.text = $"Letters: {_cachedLetterSequence}";
             }
-            
-            currentLettersDisplay.text = hasCards ? $"Letters: {_cachedLetterSequence}" : "No cards selected";
-        }
-        
-        // Status Display
-        if (statusDisplay != null)
-        {
-            statusDisplay.text = hasCards ? $"{_cachedSelectedCards.Count} card(s) selected" : "Select cards to play";
-        }
-    }
-    
-    #region Event Handlers für GameManager Feedback
-    
-    private void OnLetterSequenceUpdated(string letterSequence)
-    {
-        if (showDebugInfo)
-        {
-            Debug.Log($"[CardPlayHandler] Letter sequence updated: {letterSequence}");
-        }
-        
-        // Optional: UI Feedback für Letter Updates
-        if (statusDisplay != null)
-        {
-            statusDisplay.text = $"Processing: {letterSequence}";
+            else
+            {
+                statusDisplay.text = "Select cards to play";
+            }
         }
     }
     
     private void OnSpellFound(string spellName, string usedLetters)
     {
-        if (showDebugInfo)
-        {
-            Debug.Log($"[CardPlayHandler] Spell found: {spellName} using letters: {usedLetters}");
-        }
+        if (_isDestroyed || statusDisplay == null) return;
         
-        // Visual Feedback für erfolgreichen Spell
-        if (statusDisplay != null)
-        {
-            statusDisplay.text = $"Spell Cast: {spellName}!";
-            statusDisplay.color = Color.green;
-        }
+        statusDisplay.text = $"Spell Cast: {spellName}!";
+        statusDisplay.color = Color.green;
         
-        // Optional: Erfolgs-Animation oder Effekte triggern
-        TriggerSuccessEffect();
+        CancelInvoke(nameof(ResetStatusDisplay));
+        Invoke(nameof(ResetStatusDisplay), 2f);
     }
     
     private void OnSpellNotFound(string attemptedLetters)
     {
-        if (showDebugInfo)
-        {
-            Debug.Log($"[CardPlayHandler] No spell found for letters: {attemptedLetters}");
-        }
+        if (_isDestroyed || statusDisplay == null) return;
         
-        // Visual Feedback für fehlgeschlagenen Spell
-        if (statusDisplay != null)
-        {
-            statusDisplay.text = $"No spell found for: {attemptedLetters}";
-            statusDisplay.color = Color.red;
-        }
+        statusDisplay.text = $"No spell found";
+        statusDisplay.color = Color.red;
         
-        // Optional: Fehler-Animation oder Effekte triggern
-        TriggerFailureEffect();
-    }
-    
-    #endregion
-    
-    #region Visual Effects (Optional - können erweitert werden)
-    
-    private void TriggerSuccessEffect()
-    {
-        // TODO: Hier können Erfolgs-Effekte implementiert werden:
-        // - Partikel-Effekte
-        // - Screen-Shake
-        // - Sound-Effekte
-        // - UI-Animationen
-        
-        // Beispiel: Status-Text nach kurzer Zeit zurücksetzen
-        if (statusDisplay != null)
-        {
-            Invoke(nameof(ResetStatusDisplay), 2f);
-        }
-    }
-    
-    private void TriggerFailureEffect()
-    {
-        // TODO: Hier können Fehler-Effekte implementiert werden:
-        // - Shake-Animation
-        // - Rote Farb-Animation
-        // - Sound-Effekte
-        
-        // Beispiel: Status-Text nach kurzer Zeit zurücksetzen
-        if (statusDisplay != null)
-        {
-            Invoke(nameof(ResetStatusDisplay), 1.5f);
-        }
+        CancelInvoke(nameof(ResetStatusDisplay));
+        Invoke(nameof(ResetStatusDisplay), 1.5f);
     }
     
     private void ResetStatusDisplay()
     {
-        if (statusDisplay != null)
-        {
-            statusDisplay.color = Color.white;
-            UpdateUI(); // Zurück zum normalen Status
-        }
-    }
-    
-    #endregion
-    
-    #region Public Methods für externe Verwendung
-    
-    /// <summary>
-    /// Prüft ob aktuell Karten ausgewählt sind
-    /// </summary>
-    public bool HasSelectedCards => _cachedSelectedCards.Count > 0;
-    
-    /// <summary>
-    /// Aktuelle Letter Sequence abrufen
-    /// </summary>
-    public string GetCurrentLetterSequence()
-    {
-        if (_isDirty)
-        {
-            _cachedLetterSequence = ExtractLetterSequence(_cachedSelectedCards);
-            _isDirty = false;
-        }
-        return _cachedLetterSequence;
-    }
-    
-    /// <summary>
-    /// Anzahl ausgewählter Karten
-    /// </summary>
-    public int SelectedCardCount => _cachedSelectedCards.Count;
-    
-    #endregion
-    
-    #region Editor Helpers
-    
-    #if UNITY_EDITOR
-    [ContextMenu("Play Selected Cards")]
-    private void EditorPlaySelectedCards()
-    {
-        PlaySelectedCards();
-    }
-    
-    [ContextMenu("Clear Selection")]
-    private void EditorClearSelection()
-    {
-        ClearSelection();
-    }
-    
-    [ContextMenu("Update UI")]
-    private void EditorUpdateUI()
-    {
+        if (_isDestroyed || statusDisplay == null) return;
+        
+        statusDisplay.color = Color.white;
         UpdateUI();
     }
-    #endif
     
-    #endregion
+    public bool HasSelectedCards => _selectedCards.Count > 0;
+    public int SelectedCardCount => _selectedCards.Count;
 }

@@ -3,26 +3,27 @@ using UnityEngine.InputSystem;
 
 public class InputManager : MonoBehaviour
 {
-    public static InputManager Instance { get; private set; } // Singleton-Instanz
+    public static InputManager Instance { get; private set; }
 
     private PlayerControls _controls;
+    private readonly object _eventLock = new object();
+    private bool _isProcessingInput = false;
 
-    // Events für Eingaben
+    // Thread-safe events
     public delegate void MouseAction(Vector2 mousePosition);
     public event MouseAction OnMousePressed;
     public event MouseAction OnMouseReleased;
 
     private void Awake()
     {
-        // Singleton-Setup
         if (Instance == null)
         {
             Instance = this;
-            DontDestroyOnLoad(gameObject); // Objekt bleibt zwischen Szenenwechseln bestehen
+            DontDestroyOnLoad(gameObject);
         }
         else
         {
-            Destroy(gameObject); // Zusätzliche Instanzen entfernen
+            Destroy(gameObject);
             return;
         }
 
@@ -31,27 +32,74 @@ public class InputManager : MonoBehaviour
 
     private void OnEnable()
     {
-        _controls.Enable();
-        _controls.Player.MousePress.performed += HandleMousePress;
-        _controls.Player.MouseRelease.canceled += HandleMouseRelease;
+        if (_controls != null)
+        {
+            _controls.Enable();
+            _controls.Player.MousePress.performed += HandleMousePress;
+            _controls.Player.MouseRelease.canceled += HandleMouseRelease;
+        }
     }
 
     private void OnDisable()
     {
-        _controls.Player.MousePress.performed -= HandleMousePress;
-        _controls.Player.MouseRelease.canceled -= HandleMouseRelease;
-        _controls.Disable();
+        if (_controls != null)
+        {
+            _controls.Player.MousePress.performed -= HandleMousePress;
+            _controls.Player.MouseRelease.canceled -= HandleMouseRelease;
+            _controls.Disable();
+        }
     }
 
-    private void HandleMousePress(InputAction.CallbackContext context)
+    private void OnDestroy()
     {
-        Vector2 mousePosition = Mouse.current.position.ReadValue();
-        OnMousePressed?.Invoke(mousePosition); // Event auslösen
+        if (_controls != null)
+        {
+            _controls.Dispose();
+            _controls = null;
+        }
     }
 
-    private void HandleMouseRelease(InputAction.CallbackContext context)
+    private void HandleMousePress(UnityEngine.InputSystem.InputAction.CallbackContext context)
     {
-        Vector2 mousePosition = Mouse.current.position.ReadValue();
-        OnMouseReleased?.Invoke(mousePosition); // Event auslösen
+        lock (_eventLock)
+        {
+            if (_isProcessingInput) return;
+            _isProcessingInput = true;
+        }
+
+        try
+        {
+            Vector2 mousePosition = UnityEngine.InputSystem.Mouse.current.position.ReadValue();
+            OnMousePressed?.Invoke(mousePosition);
+        }
+        finally
+        {
+            lock (_eventLock)
+            {
+                _isProcessingInput = false;
+            }
+        }
+    }
+
+    private void HandleMouseRelease(UnityEngine.InputSystem.InputAction.CallbackContext context)
+    {
+        lock (_eventLock)
+        {
+            if (_isProcessingInput) return;
+            _isProcessingInput = true;
+        }
+
+        try
+        {
+            Vector2 mousePosition = UnityEngine.InputSystem.Mouse.current.position.ReadValue();
+            OnMouseReleased?.Invoke(mousePosition);
+        }
+        finally
+        {
+            lock (_eventLock)
+            {
+                _isProcessingInput = false;
+            }
+        }
     }
 }

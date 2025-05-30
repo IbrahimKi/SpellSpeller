@@ -9,23 +9,17 @@ public class DragHandler : MonoBehaviour
     public static DragHandler Instance { get; private set; }
 
     private bool _isDragging;
-    private DragObject _lastDragged;
+    private DragObject _currentDragObject;
     private Vector2 _dragOffset;
 
-    [SerializeField] private Canvas canvas; // Reference to Canvas
-    private RectTransform _canvasRectTransform; // RectTransform of Canvas
+    [SerializeField] private Canvas canvas;
+    private RectTransform _canvasRectTransform;
     
-    // For UI raycasting
-    [SerializeField] private Camera uiCamera; // Assign your UI camera here
+    [SerializeField] private Camera uiCamera;
     private GraphicRaycaster _graphicRaycaster;
     
-    // Performance optimizations
     private readonly List<RaycastResult> _raycastResults = new List<RaycastResult>(4);
     private PointerEventData _pointerEventData;
-    private Vector3 _worldPoint;
-
-    // Debug mode flag - set to false in production
-    [SerializeField] private bool _debugMode = false;
 
     private void Awake()
     {
@@ -45,32 +39,30 @@ public class DragHandler : MonoBehaviour
 
     private void Start()
     {
-        // Subscribe to InputManager events
         if (InputManager.Instance != null)
         {
             InputManager.Instance.OnMousePressed += StartDrag;
             InputManager.Instance.OnMouseReleased += StopDrag;
         }
-        else
-        {
-            LogWarning("InputManager instance not found!");
-        }
 
-        // Set Canvas reference
+        SetupCanvas();
+    }
+
+    private void SetupCanvas()
+    {
         if (canvas != null)
         {
             _canvasRectTransform = canvas.GetComponent<RectTransform>();
             _graphicRaycaster = canvas.GetComponent<GraphicRaycaster>();
             
-            // If no UI camera assigned, try to use main camera
             if (uiCamera == null)
-            {
                 uiCamera = Camera.main;
-            }
         }
         else
         {
-            LogWarning("Canvas reference not assigned!");
+            canvas = FindObjectsByType<Canvas>(FindObjectsSortMode.None)[0];
+            if (canvas != null)
+                SetupCanvas();
         }
     }
 
@@ -85,121 +77,108 @@ public class DragHandler : MonoBehaviour
 
     private void StartDrag(Vector2 mousePosition)
     {
+        if (_isDragging) return;
         if (_canvasRectTransform == null || _graphicRaycaster == null) return;
 
-        LogDebug($"Mouse Position: {mousePosition.x}, {mousePosition.y}");
+        DragObject foundDragObject = FindDragObjectAtPosition(mousePosition);
         
-        // First, try UI raycasting since we're working with Canvas elements
+        if (foundDragObject != null && foundDragObject.IsDraggable)
+            StartDragging(foundDragObject, mousePosition);
+    }
+
+    private DragObject FindDragObjectAtPosition(Vector2 mousePosition)
+    {
         _raycastResults.Clear();
         _pointerEventData.position = mousePosition;
+        
         _graphicRaycaster.Raycast(_pointerEventData, _raycastResults);
         
-        // Check UI hits first
         foreach (var result in _raycastResults)
         {
-            DragObject dragObject = result.gameObject.GetComponent<DragObject>();
-            if (dragObject != null && dragObject.IsDraggable)
-            {
-                _lastDragged = dragObject;
-                _isDragging = true;
-                
-                // Calculate drag offset so the object doesn't jump to cursor position
-                RectTransformUtility.ScreenPointToLocalPointInRectangle(
-                    _canvasRectTransform, mousePosition, uiCamera, out Vector2 localPoint);
-                Vector3 worldPos = _canvasRectTransform.TransformPoint(localPoint);
-                _dragOffset = (Vector2)_lastDragged.transform.position - (Vector2)worldPos;
-                
-                _lastDragged.OnDragStart();
-                LogDebug($"Dragging started on {result.gameObject.name} (UI)");
-                return; // Found a draggable UI object, exit
-            }
+            DragObject dragObject = result.gameObject.GetComponentInParent<DragObject>();
+            if (dragObject != null)
+                return dragObject;
         }
         
-        // If no UI hit, try physics raycast as fallback only if needed
-        if (TryPhysicsRaycast(mousePosition)) return;
-        
-        // No draggable object found
-        ResetDragState();
+        return TryPhysicsRaycast(mousePosition);
     }
-    
-    private bool TryPhysicsRaycast(Vector2 mousePosition)
+
+    private DragObject TryPhysicsRaycast(Vector2 mousePosition)
     {
         if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(
             _canvasRectTransform, mousePosition, uiCamera, out Vector2 localPoint))
-            return false;
+            return null;
             
-        LogDebug($"Local Canvas Position: {localPoint.x}, {localPoint.y}");
+        Vector3 worldPoint = uiCamera.ScreenToWorldPoint(new Vector3(mousePosition.x, mousePosition.y, Mathf.Abs(uiCamera.transform.position.z)));
+        RaycastHit2D hit = Physics2D.Raycast(worldPoint, Vector2.zero);
         
-        // Perform Raycast
-        _worldPoint = uiCamera.ScreenToWorldPoint(new Vector3(mousePosition.x, mousePosition.y, Mathf.Abs(uiCamera.transform.position.z)));
-        RaycastHit2D hit = Physics2D.Raycast(_worldPoint, Vector2.zero);
+        return hit.collider?.GetComponent<DragObject>();
+    }
+
+    private void StartDragging(DragObject dragObject, Vector2 mousePosition)
+    {
+        _currentDragObject = dragObject;
+        _isDragging = true;
         
-        if (hit.collider != null)
+        if (RectTransformUtility.ScreenPointToLocalPointInRectangle(
+            _canvasRectTransform, mousePosition, uiCamera, out Vector2 localPoint))
         {
-            LogDebug($"Hit Object: {hit.collider.name}");
-            DragObject dragObject = hit.transform.GetComponent<DragObject>();
-            if (dragObject != null && dragObject.IsDraggable)
-            {
-                _lastDragged = dragObject;
-                _isDragging = true;
-                
-                // Calculate drag offset
-                Vector3 worldPos = _canvasRectTransform.TransformPoint(localPoint);
-                _dragOffset = (Vector2)_lastDragged.transform.position - (Vector2)worldPos;
-                
-                _lastDragged.OnDragStart();
-                LogDebug("Dragging started (Physics)");
-                return true;
-            }
+            Vector3 worldPos = _canvasRectTransform.TransformPoint(localPoint);
+            _dragOffset = (Vector2)_currentDragObject.transform.position - (Vector2)worldPos;
+        }
+        else
+        {
+            _dragOffset = Vector2.zero;
         }
         
-        return false;
+        _currentDragObject.OnDragStart();
     }
 
     private void StopDrag(Vector2 mousePosition)
     {
-        LogDebug("Dragging ended");
+        if (!_isDragging || _currentDragObject == null) return;
         
-        if (_lastDragged != null)
-        {
-            _lastDragged.OnDragEnd();
-        }
-        
+        _currentDragObject.OnDragEnd();
         ResetDragState();
     }
 
     private void ResetDragState()
     {
         _isDragging = false;
-        _lastDragged = null;
+        _currentDragObject = null;
+        _dragOffset = Vector2.zero;
     }
 
     private void Update()
     {
-        if (!_isDragging || _lastDragged == null) return;
+        if (!_isDragging || _currentDragObject == null) return;
         
+        UpdateDragPosition();
+    }
+
+    private void UpdateDragPosition()
+    {
         Vector2 mousePosition = Mouse.current.position.ReadValue();
 
-        // Calculate local position in Canvas - only do this calculation if actually dragging
         if (RectTransformUtility.ScreenPointToLocalPointInRectangle(
             _canvasRectTransform, mousePosition, uiCamera, out Vector2 localPoint))
         {
             Vector3 targetPosition = _canvasRectTransform.TransformPoint(localPoint);
-            _lastDragged.transform.position = new Vector3(targetPosition.x + _dragOffset.x, targetPosition.y + _dragOffset.y, _lastDragged.transform.position.z);
+            _currentDragObject.transform.position = new Vector3(
+                targetPosition.x + _dragOffset.x, 
+                targetPosition.y + _dragOffset.y, 
+                _currentDragObject.transform.position.z
+            );
         }
     }
     
-    // Conditional logging methods to avoid string concatenation overhead when debug is disabled
-    private void LogDebug(string message)
+    public bool IsDragging => _isDragging;
+    public DragObject CurrentDragObject => _currentDragObject;
+
+    public void ForceStopDragging()
     {
-        if (_debugMode)
-        {
-            Debug.Log($"[DragHandler] {message}");
-        }
-    }
-    
-    private void LogWarning(string message)
-    {
-        Debug.LogWarning($"[DragHandler] {message}");
+        if (_isDragging && _currentDragObject != null)
+            _currentDragObject.OnDragEnd();
+        ResetDragState();
     }
 }

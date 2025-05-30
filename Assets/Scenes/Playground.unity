@@ -781,65 +781,16 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 415948980}
   m_CullTransparentMesh: 1
+--- !u!1 &439729228 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 540635717832519159, guid: 96cceb73c3e0c864c908614bef102af2, type: 3}
+  m_PrefabInstance: {fileID: 3685603596531780707}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1 &469498187 stripped
 GameObject:
   m_CorrespondingSourceObject: {fileID: 3273422712610422236, guid: 1ebc97c05de9a514b8f48b935a9b227c, type: 3}
   m_PrefabInstance: {fileID: 1082663341557646604}
   m_PrefabAsset: {fileID: 0}
---- !u!114 &469498192
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 469498187}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: eb9fa76a2465e88429b6fae8daa6c899, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  cardPrefab: {fileID: 1418632210}
-  defaultSpawnParent: {fileID: 1485001754}
-  spawnOffset: {x: 0, y: 100, z: 0}
-  useRandomPosition: 0
-  randomPositionRange: {x: 100, y: 50}
-  useObjectPooling: 1
-  poolSize: 20
-  poolParent: {fileID: 0}
-  animateSpawn: 1
-  spawnAnimationDuration: 0.5
-  spawnCurve:
-    serializedVersion: 2
-    m_Curve:
-    - serializedVersion: 3
-      time: 0
-      value: 0
-      inSlope: 0
-      outSlope: 1.70158
-      tangentMode: 0
-      weightedMode: 0
-      inWeight: 0
-      outWeight: 0
-    - serializedVersion: 3
-      time: 1
-      value: 1
-      inSlope: -1.70158
-      outSlope: 0
-      tangentMode: 0
-      weightedMode: 0
-      inWeight: 0
-      outWeight: 0
-    m_PreInfinity: 2
-    m_PostInfinity: 2
-    m_RotationOrder: 4
-  spawnScale: {x: 0.8, y: 0.8, z: 0.8}
-  handContainer: {fileID: 551723659}
-  autoAttachToHand: 1
-  handCardSpacing: 120
-  maxHandSize: 7
-  audioSource: {fileID: 0}
-  spawnSound: {fileID: 0}
-  attachToHandSound: {fileID: 0}
 --- !u!114 &469498193
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -852,9 +803,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 6fd5937ea3766a44d87ce59869c41d3c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  letterSequenceHistory: []
-  maxHistoryLength: 10
-  showDebugInfo: 1
   availableSpells:
   - spellName: AttackSingle
     letterSequence: MI
@@ -888,11 +836,52 @@ MonoBehaviour:
     description: Basic Disrupt Spell
   allowPartialMatches: 0
   caseSensitive: 0
+  maxHistoryLength: 10
 --- !u!224 &551723659 stripped
 RectTransform:
   m_CorrespondingSourceObject: {fileID: 4365848951285813839, guid: 96cceb73c3e0c864c908614bef102af2, type: 3}
   m_PrefabInstance: {fileID: 3685603596531780707}
   m_PrefabAsset: {fileID: 0}
+--- !u!114 &551723662
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 439729228}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0c8438dab45f8f5438b5a479ae722e04, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  cardSpacing: 120
+  arcHeight: 50
+  maxRotationAngle: 15
+  animationDuration: 0.5
+  animationCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 0
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 1
+      value: 1
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
 --- !u!1 &832575517
 GameObject:
   m_ObjectHideFlags: 0
@@ -1297,11 +1286,6 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!1 &1418632210 stripped
-GameObject:
-  m_CorrespondingSourceObject: {fileID: 5616216882207267079, guid: 96cceb73c3e0c864c908614bef102af2, type: 3}
-  m_PrefabInstance: {fileID: 3685603596531780707}
-  m_PrefabAsset: {fileID: 0}
 --- !u!1 &1485001750 stripped
 GameObject:
   m_CorrespondingSourceObject: {fileID: 4777973443236849084, guid: 96cceb73c3e0c864c908614bef102af2, type: 3}
@@ -1510,6 +1494,22 @@ PrefabInstance:
       propertyPath: uiCamera
       value: 
       objectReference: {fileID: 330585545}
+    - target: {fileID: 3967375511727751859, guid: 1ebc97c05de9a514b8f48b935a9b227c, type: 3}
+      propertyPath: _debugMode
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 9027851080643802321, guid: 1ebc97c05de9a514b8f48b935a9b227c, type: 3}
+      propertyPath: cardPrefab
+      value: 
+      objectReference: {fileID: 5103030169791602621, guid: cbc657f776aec9c4da309a8360774ecb, type: 3}
+    - target: {fileID: 9027851080643802321, guid: 1ebc97c05de9a514b8f48b935a9b227c, type: 3}
+      propertyPath: handContainer
+      value: 
+      objectReference: {fileID: 551723659}
+    - target: {fileID: 9027851080643802321, guid: 1ebc97c05de9a514b8f48b935a9b227c, type: 3}
+      propertyPath: defaultSpawnParent
+      value: 
+      objectReference: {fileID: 551723659}
     - target: {fileID: 9027851080643802321, guid: 1ebc97c05de9a514b8f48b935a9b227c, type: 3}
       propertyPath: allCardData.Array.size
       value: 6
@@ -1548,9 +1548,6 @@ PrefabInstance:
     m_AddedComponents:
     - targetCorrespondingSourceObject: {fileID: 3273422712610422236, guid: 1ebc97c05de9a514b8f48b935a9b227c, type: 3}
       insertIndex: -1
-      addedObject: {fileID: 469498192}
-    - targetCorrespondingSourceObject: {fileID: 3273422712610422236, guid: 1ebc97c05de9a514b8f48b935a9b227c, type: 3}
-      insertIndex: -1
       addedObject: {fileID: 469498193}
   m_SourcePrefab: {fileID: 100100000, guid: 1ebc97c05de9a514b8f48b935a9b227c, type: 3}
 --- !u!1001 &3685603596531780707
@@ -1561,6 +1558,18 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 0}
     m_Modifications:
+    - target: {fileID: 446453657700231304, guid: 96cceb73c3e0c864c908614bef102af2, type: 3}
+      propertyPath: m_RaycastTarget
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 1225333937126039484, guid: 96cceb73c3e0c864c908614bef102af2, type: 3}
+      propertyPath: m_RaycastTarget
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 1339412491333728213, guid: 96cceb73c3e0c864c908614bef102af2, type: 3}
+      propertyPath: m_RaycastTarget
+      value: 0
+      objectReference: {fileID: 0}
     - target: {fileID: 3635830941649659449, guid: 96cceb73c3e0c864c908614bef102af2, type: 3}
       propertyPath: m_AnchorMin.x
       value: 0.66232425
@@ -1665,6 +1674,10 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 4395948020723641990, guid: 96cceb73c3e0c864c908614bef102af2, type: 3}
+      propertyPath: m_RaycastTarget
+      value: 0
+      objectReference: {fileID: 0}
     - target: {fileID: 4768163872233138747, guid: 96cceb73c3e0c864c908614bef102af2, type: 3}
       propertyPath: m_Camera
       value: 
@@ -1686,6 +1699,9 @@ PrefabInstance:
       insertIndex: -1
       addedObject: {fileID: 34353576}
     m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 540635717832519159, guid: 96cceb73c3e0c864c908614bef102af2, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 551723662}
     - targetCorrespondingSourceObject: {fileID: 5800391183376870308, guid: 96cceb73c3e0c864c908614bef102af2, type: 3}
       insertIndex: -1
       addedObject: {fileID: 3685603596531780710}
@@ -1695,17 +1711,6 @@ GameObject:
   m_CorrespondingSourceObject: {fileID: 5800391183376870308, guid: 96cceb73c3e0c864c908614bef102af2, type: 3}
   m_PrefabInstance: {fileID: 3685603596531780707}
   m_PrefabAsset: {fileID: 0}
---- !u!114 &3685603596531780709 stripped
-MonoBehaviour:
-  m_CorrespondingSourceObject: {fileID: 961920003107374981, guid: 96cceb73c3e0c864c908614bef102af2, type: 3}
-  m_PrefabInstance: {fileID: 3685603596531780707}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 0}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: f4688fdb7df04437aeb418b961361dc5, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
 --- !u!114 &3685603596531780710
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1720,10 +1725,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   playButton: {fileID: 415948982}
   clearButton: {fileID: 34353577}
-  currentLettersDisplay: {fileID: 3685603596531780709}
   statusDisplay: {fileID: 0}
-  autoPlayOnSelection: 0
-  showDebugInfo: 0
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0
