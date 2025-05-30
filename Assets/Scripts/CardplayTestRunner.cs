@@ -57,7 +57,7 @@ public class CardPlayTestRunner : MonoBehaviour
             cardManager = CardManager.Instance;
         
         if (cardPlayHandler == null)
-            cardPlayHandler = FindObjectOfType<CardPlayHandler>();
+            cardPlayHandler = FindObjectsByType<CardPlayHandler>(FindObjectsSortMode.None)[0];
         
         if (cardManager == null)
         {

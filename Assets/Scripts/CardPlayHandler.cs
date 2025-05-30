@@ -130,8 +130,8 @@ public class CardPlayHandler : MonoBehaviour
         var letterBuilder = new StringBuilder();
         foreach (var card in cards)
         {
-            if (card?.Data?.letterValues != null)
-                letterBuilder.Append(card.Data.letterValues);
+            if (card?.CardData?.letterValues != null)
+                letterBuilder.Append(card.CardData.letterValues);
         }
         return letterBuilder.ToString();
     }

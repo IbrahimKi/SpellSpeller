@@ -31,15 +31,15 @@ public class InputManager : MonoBehaviour
     {
         _controls = new PlayerControls();
         
-        // Mouse Press Event (performed = gedrückt)
+        // FIXED: Mouse Press Event (performed = gedrückt)
         _controls.Player.MousePress.performed += ctx => 
         {
             Vector2 mousePos = Mouse.current.position.ReadValue();
             OnMousePressed?.Invoke(mousePos);
         };
         
-        // Mouse Release Event (canceled = losgelassen)
-        _controls.Player.MouseRelease.canceled += ctx => 
+        // FIXED: Mouse Release Event (performed statt canceled!)
+        _controls.Player.MouseRelease.performed += ctx => 
         {
             Vector2 mousePos = Mouse.current.position.ReadValue();
             OnMouseReleased?.Invoke(mousePos);

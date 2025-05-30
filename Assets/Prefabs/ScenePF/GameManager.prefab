@@ -102,7 +102,6 @@ MonoBehaviour:
   useObjectPooling: 1
   poolSize: 20
   handContainer: {fileID: 0}
-  handCardSpacing: 120
   maxHandSize: 7
   maxSelectedCards: 1
   allowMultiSelect: 0

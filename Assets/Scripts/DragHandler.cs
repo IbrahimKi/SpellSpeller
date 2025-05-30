@@ -23,6 +23,9 @@ public class DragHandler : MonoBehaviour
     
     private readonly List<RaycastResult> _raycastResults = new List<RaycastResult>(4);
     private PointerEventData _pointerEventData;
+    
+    // OPTIMIZED: Cache mouse position to avoid multiple reads per frame
+    private Vector2 _cachedMousePosition;
 
     private void Awake()
     {
@@ -63,7 +66,8 @@ public class DragHandler : MonoBehaviour
         }
         else
         {
-            canvas = FindObjectsByType<Canvas>(FindObjectsSortMode.None)[0];
+            // OPTIMIZED: Use FindFirstObjectByType instead of FindObjectsByType for single object
+            canvas = FindFirstObjectByType<Canvas>();
             if (canvas != null)
                 SetupCanvas();
         }
@@ -98,24 +102,15 @@ public class DragHandler : MonoBehaviour
         
         foreach (var result in _raycastResults)
         {
-            DragObject dragObject = result.gameObject.GetComponentInParent<DragObject>();
-            if (dragObject != null)
-                return dragObject;
+            // OPTIMIZED: Try direct component first, then parent lookup
+            DragObject dragObject = result.gameObject.GetComponent<DragObject>();
+            if (dragObject != null) return dragObject;
+            
+            dragObject = result.gameObject.GetComponentInParent<DragObject>();
+            if (dragObject != null) return dragObject;
         }
         
-        return TryPhysicsRaycast(mousePosition);
-    }
-
-    private DragObject TryPhysicsRaycast(Vector2 mousePosition)
-    {
-        if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(
-            _canvasRectTransform, mousePosition, uiCamera, out Vector2 localPoint))
-            return null;
-            
-        Vector3 worldPoint = uiCamera.ScreenToWorldPoint(new Vector3(mousePosition.x, mousePosition.y, Mathf.Abs(uiCamera.transform.position.z)));
-        RaycastHit2D hit = Physics2D.Raycast(worldPoint, Vector2.zero);
-        
-        return hit.collider?.GetComponent<DragObject>();
+        return null; // REMOVED: Physics2D fallback (not needed for UI cards)
     }
 
     private void StartDragging(DragObject dragObject, Vector2 mousePosition)
@@ -123,16 +118,17 @@ public class DragHandler : MonoBehaviour
         _currentDragObject = dragObject;
         _isDragging = true;
         
-        // Store original transform for return animation
+        // Store original transform
         RectTransform dragRect = _currentDragObject.GetComponent<RectTransform>();
         _originalPosition = dragRect.localPosition;
         _originalRotation = dragRect.localRotation;
         _originalScale = dragRect.localScale;
         
-        // Notify HandLayoutManager to pause updates for this card
+        // Notify systems
         if (HandLayoutManager.Instance != null)
             HandLayoutManager.Instance.SetCardDragging(_currentDragObject, true);
         
+        // Calculate drag offset
         if (RectTransformUtility.ScreenPointToLocalPointInRectangle(
             _canvasRectTransform, mousePosition, uiCamera, out Vector2 localPoint))
         {
@@ -152,8 +148,6 @@ public class DragHandler : MonoBehaviour
         if (!_isDragging || _currentDragObject == null) return;
         
         _currentDragObject.OnDragEnd();
-        
-        // Return card to original position
         StartCoroutine(ReturnToOriginalPosition());
     }
 
@@ -172,8 +166,7 @@ public class DragHandler : MonoBehaviour
         while (elapsed < duration && dragRect != null)
         {
             elapsed += Time.deltaTime;
-            float t = elapsed / duration;
-            t = Mathf.SmoothStep(0f, 1f, t);
+            float t = Mathf.SmoothStep(0f, 1f, elapsed / duration);
             
             dragRect.localPosition = Vector3.Lerp(startPos, _originalPosition, t);
             dragRect.localRotation = Quaternion.Lerp(startRot, _originalRotation, t);
@@ -182,6 +175,7 @@ public class DragHandler : MonoBehaviour
             yield return null;
         }
         
+        // Ensure final position
         if (dragRect != null)
         {
             dragRect.localPosition = _originalPosition;
@@ -189,7 +183,7 @@ public class DragHandler : MonoBehaviour
             dragRect.localScale = _originalScale;
         }
         
-        // Re-enable layout updates for this card
+        // Re-enable layout updates
         if (HandLayoutManager.Instance != null)
             HandLayoutManager.Instance.SetCardDragging(_currentDragObject, false);
         
@@ -207,15 +201,15 @@ public class DragHandler : MonoBehaviour
     {
         if (!_isDragging || _currentDragObject == null) return;
         
+        // OPTIMIZED: Cache mouse position once per frame
+        _cachedMousePosition = Mouse.current.position.ReadValue();
         UpdateDragPosition();
     }
 
     private void UpdateDragPosition()
     {
-        Vector2 mousePosition = Mouse.current.position.ReadValue();
-
         if (RectTransformUtility.ScreenPointToLocalPointInRectangle(
-            _canvasRectTransform, mousePosition, uiCamera, out Vector2 localPoint))
+            _canvasRectTransform, _cachedMousePosition, uiCamera, out Vector2 localPoint))
         {
             Vector3 targetPosition = _canvasRectTransform.TransformPoint(localPoint);
             _currentDragObject.transform.position = new Vector3(
@@ -235,7 +229,6 @@ public class DragHandler : MonoBehaviour
         {
             _currentDragObject.OnDragEnd();
             
-            // Immediately return to position without animation
             RectTransform dragRect = _currentDragObject.GetComponent<RectTransform>();
             if (dragRect != null)
             {
