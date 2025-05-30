@@ -119,6 +119,23 @@ NavMeshSettings:
     debug:
       m_Flags: 0
   m_NavMeshData: {fileID: 0}
+--- !u!1 &338794403 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 334018914305449464, guid: caae495249123394caf3d5fcd2f26a1f, type: 3}
+  m_PrefabInstance: {fileID: 6743933080846455888}
+  m_PrefabAsset: {fileID: 0}
+--- !u!225 &338794405
+CanvasGroup:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 338794403}
+  m_Enabled: 1
+  m_Alpha: 1
+  m_Interactable: 1
+  m_BlocksRaycasts: 1
+  m_IgnoreParentGroups: 0
 --- !u!1 &452538581
 GameObject:
   m_ObjectHideFlags: 0
@@ -422,6 +439,10 @@ PrefabInstance:
       value: 
       objectReference: {fileID: 1347711640}
     - target: {fileID: 8291265475034265126, guid: 341c1f5da92f4a74eb7d7e7e9ffe1ecf, type: 3}
+      propertyPath: handCardSpacing
+      value: 30
+      objectReference: {fileID: 0}
+    - target: {fileID: 8291265475034265126, guid: 341c1f5da92f4a74eb7d7e7e9ffe1ecf, type: 3}
       propertyPath: defaultSpawnParent
       value: 
       objectReference: {fileID: 1347711640}
@@ -441,6 +462,74 @@ PrefabInstance:
     - target: {fileID: 4082564174892169672, guid: caae495249123394caf3d5fcd2f26a1f, type: 3}
       propertyPath: m_Name
       value: GameCanvas
+      objectReference: {fileID: 0}
+    - target: {fileID: 4832217143574826556, guid: caae495249123394caf3d5fcd2f26a1f, type: 3}
+      propertyPath: m_BlocksRaycasts
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 8061170319694174372, guid: caae495249123394caf3d5fcd2f26a1f, type: 3}
+      propertyPath: m_AnchorMax.x
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 8061170319694174372, guid: caae495249123394caf3d5fcd2f26a1f, type: 3}
+      propertyPath: m_AnchorMax.y
+      value: 0.40485722
+      objectReference: {fileID: 0}
+    - target: {fileID: 8061170319694174372, guid: caae495249123394caf3d5fcd2f26a1f, type: 3}
+      propertyPath: m_SizeDelta.x
+      value: 0.9900055
+      objectReference: {fileID: 0}
+    - target: {fileID: 8061170319694174372, guid: caae495249123394caf3d5fcd2f26a1f, type: 3}
+      propertyPath: m_SizeDelta.y
+      value: 0.000015258789
+      objectReference: {fileID: 0}
+    - target: {fileID: 8061170319694174372, guid: caae495249123394caf3d5fcd2f26a1f, type: 3}
+      propertyPath: m_AnchoredPosition.x
+      value: 0.49700928
+      objectReference: {fileID: 0}
+    - target: {fileID: 8061170319694174372, guid: caae495249123394caf3d5fcd2f26a1f, type: 3}
+      propertyPath: m_AnchoredPosition.y
+      value: 0.000030517578
+      objectReference: {fileID: 0}
+    - target: {fileID: 9110910959325880325, guid: caae495249123394caf3d5fcd2f26a1f, type: 3}
+      propertyPath: arcHeight
+      value: 20
+      objectReference: {fileID: 0}
+    - target: {fileID: 9110910959325880325, guid: caae495249123394caf3d5fcd2f26a1f, type: 3}
+      propertyPath: cardSpacing
+      value: 120
+      objectReference: {fileID: 0}
+    - target: {fileID: 9110910959325880325, guid: caae495249123394caf3d5fcd2f26a1f, type: 3}
+      propertyPath: baseCardScale.x
+      value: 0.25
+      objectReference: {fileID: 0}
+    - target: {fileID: 9110910959325880325, guid: caae495249123394caf3d5fcd2f26a1f, type: 3}
+      propertyPath: baseCardScale.y
+      value: 0.5
+      objectReference: {fileID: 0}
+    - target: {fileID: 9110910959325880325, guid: caae495249123394caf3d5fcd2f26a1f, type: 3}
+      propertyPath: baseCardScale.z
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 9110910959325880325, guid: caae495249123394caf3d5fcd2f26a1f, type: 3}
+      propertyPath: handCardScale.x
+      value: 10
+      objectReference: {fileID: 0}
+    - target: {fileID: 9110910959325880325, guid: caae495249123394caf3d5fcd2f26a1f, type: 3}
+      propertyPath: handCardScale.y
+      value: 10
+      objectReference: {fileID: 0}
+    - target: {fileID: 9110910959325880325, guid: caae495249123394caf3d5fcd2f26a1f, type: 3}
+      propertyPath: handCardScale.z
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 9110910959325880325, guid: caae495249123394caf3d5fcd2f26a1f, type: 3}
+      propertyPath: preserveCardScale
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 9110910959325880325, guid: caae495249123394caf3d5fcd2f26a1f, type: 3}
+      propertyPath: scaleBasedOnHandSize
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 9134740343749226285, guid: caae495249123394caf3d5fcd2f26a1f, type: 3}
       propertyPath: m_Pivot.x
@@ -525,7 +614,10 @@ PrefabInstance:
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
-    m_AddedComponents: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 334018914305449464, guid: caae495249123394caf3d5fcd2f26a1f, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 338794405}
   m_SourcePrefab: {fileID: 100100000, guid: caae495249123394caf3d5fcd2f26a1f, type: 3}
 --- !u!1660057539 &9223372036854775807
 SceneRoots:

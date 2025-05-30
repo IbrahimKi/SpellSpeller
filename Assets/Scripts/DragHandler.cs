@@ -11,6 +11,9 @@ public class DragHandler : MonoBehaviour
     private bool _isDragging;
     private DragObject _currentDragObject;
     private Vector2 _dragOffset;
+    private Vector3 _originalPosition;
+    private Quaternion _originalRotation;
+    private Vector3 _originalScale;
 
     [SerializeField] private Canvas canvas;
     private RectTransform _canvasRectTransform;
@@ -120,6 +123,16 @@ public class DragHandler : MonoBehaviour
         _currentDragObject = dragObject;
         _isDragging = true;
         
+        // Store original transform for return animation
+        RectTransform dragRect = _currentDragObject.GetComponent<RectTransform>();
+        _originalPosition = dragRect.localPosition;
+        _originalRotation = dragRect.localRotation;
+        _originalScale = dragRect.localScale;
+        
+        // Notify HandLayoutManager to pause updates for this card
+        if (HandLayoutManager.Instance != null)
+            HandLayoutManager.Instance.SetCardDragging(_currentDragObject, true);
+        
         if (RectTransformUtility.ScreenPointToLocalPointInRectangle(
             _canvasRectTransform, mousePosition, uiCamera, out Vector2 localPoint))
         {
@@ -139,6 +152,47 @@ public class DragHandler : MonoBehaviour
         if (!_isDragging || _currentDragObject == null) return;
         
         _currentDragObject.OnDragEnd();
+        
+        // Return card to original position
+        StartCoroutine(ReturnToOriginalPosition());
+    }
+
+    private System.Collections.IEnumerator ReturnToOriginalPosition()
+    {
+        if (_currentDragObject == null) yield break;
+        
+        RectTransform dragRect = _currentDragObject.GetComponent<RectTransform>();
+        Vector3 startPos = dragRect.localPosition;
+        Quaternion startRot = dragRect.localRotation;
+        Vector3 startScale = dragRect.localScale;
+        
+        float duration = 0.3f;
+        float elapsed = 0f;
+        
+        while (elapsed < duration && dragRect != null)
+        {
+            elapsed += Time.deltaTime;
+            float t = elapsed / duration;
+            t = Mathf.SmoothStep(0f, 1f, t);
+            
+            dragRect.localPosition = Vector3.Lerp(startPos, _originalPosition, t);
+            dragRect.localRotation = Quaternion.Lerp(startRot, _originalRotation, t);
+            dragRect.localScale = Vector3.Lerp(startScale, _originalScale, t);
+            
+            yield return null;
+        }
+        
+        if (dragRect != null)
+        {
+            dragRect.localPosition = _originalPosition;
+            dragRect.localRotation = _originalRotation;
+            dragRect.localScale = _originalScale;
+        }
+        
+        // Re-enable layout updates for this card
+        if (HandLayoutManager.Instance != null)
+            HandLayoutManager.Instance.SetCardDragging(_currentDragObject, false);
+        
         ResetDragState();
     }
 
@@ -178,7 +232,21 @@ public class DragHandler : MonoBehaviour
     public void ForceStopDragging()
     {
         if (_isDragging && _currentDragObject != null)
+        {
             _currentDragObject.OnDragEnd();
+            
+            // Immediately return to position without animation
+            RectTransform dragRect = _currentDragObject.GetComponent<RectTransform>();
+            if (dragRect != null)
+            {
+                dragRect.localPosition = _originalPosition;
+                dragRect.localRotation = _originalRotation;
+                dragRect.localScale = _originalScale;
+            }
+            
+            if (HandLayoutManager.Instance != null)
+                HandLayoutManager.Instance.SetCardDragging(_currentDragObject, false);
+        }
         ResetDragState();
     }
 }

@@ -622,7 +622,7 @@ public partial class @PlayerControls: IInputActionCollection2, IDisposable
                     ""id"": ""5f0be8e1-7ac9-4a25-bfa0-bd37af91ec2e"",
                     ""expectedControlType"": """",
                     ""processors"": """",
-                    ""interactions"": ""Press(behavior=1)"",
+                    ""interactions"": """",
                     ""initialStateCheck"": false
                 }
             ],
@@ -631,7 +631,7 @@ public partial class @PlayerControls: IInputActionCollection2, IDisposable
                     ""name"": """",
                     ""id"": ""9fbc2033-8471-4059-8bc8-19c763e8cdd4"",
                     ""path"": ""<Mouse>/leftButton"",
-                    ""interactions"": """",
+                    ""interactions"": ""Press"",
                     ""processors"": """",
                     ""groups"": """",
                     ""action"": ""MousePress"",

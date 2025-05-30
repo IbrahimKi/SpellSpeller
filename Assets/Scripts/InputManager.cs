@@ -6,100 +6,69 @@ public class InputManager : MonoBehaviour
     public static InputManager Instance { get; private set; }
 
     private PlayerControls _controls;
-    private readonly object _eventLock = new object();
-    private bool _isProcessingInput = false;
 
-    // Thread-safe events
+    // Events für Mouse Actions
     public delegate void MouseAction(Vector2 mousePosition);
     public event MouseAction OnMousePressed;
     public event MouseAction OnMouseReleased;
 
     private void Awake()
     {
+        // Singleton Pattern
         if (Instance == null)
         {
             Instance = this;
             DontDestroyOnLoad(gameObject);
+            InitializeControls();
         }
         else
         {
             Destroy(gameObject);
-            return;
         }
+    }
 
+    private void InitializeControls()
+    {
         _controls = new PlayerControls();
+        
+        // Mouse Press Event (performed = gedrückt)
+        _controls.Player.MousePress.performed += ctx => 
+        {
+            Vector2 mousePos = Mouse.current.position.ReadValue();
+            OnMousePressed?.Invoke(mousePos);
+        };
+        
+        // Mouse Release Event (canceled = losgelassen)
+        _controls.Player.MouseRelease.canceled += ctx => 
+        {
+            Vector2 mousePos = Mouse.current.position.ReadValue();
+            OnMouseReleased?.Invoke(mousePos);
+        };
     }
 
     private void OnEnable()
     {
-        if (_controls != null)
-        {
-            _controls.Enable();
-            _controls.Player.MousePress.performed += HandleMousePress;
-            _controls.Player.MouseRelease.canceled += HandleMouseRelease;
-        }
+        _controls?.Enable();
     }
 
     private void OnDisable()
     {
-        if (_controls != null)
-        {
-            _controls.Player.MousePress.performed -= HandleMousePress;
-            _controls.Player.MouseRelease.canceled -= HandleMouseRelease;
-            _controls.Disable();
-        }
+        _controls?.Disable();
     }
 
     private void OnDestroy()
     {
-        if (_controls != null)
-        {
-            _controls.Dispose();
-            _controls = null;
-        }
+        _controls?.Dispose();
     }
 
-    private void HandleMousePress(UnityEngine.InputSystem.InputAction.CallbackContext context)
+    // Utility Methods
+    public Vector2 GetMousePosition()
     {
-        lock (_eventLock)
-        {
-            if (_isProcessingInput) return;
-            _isProcessingInput = true;
-        }
-
-        try
-        {
-            Vector2 mousePosition = UnityEngine.InputSystem.Mouse.current.position.ReadValue();
-            OnMousePressed?.Invoke(mousePosition);
-        }
-        finally
-        {
-            lock (_eventLock)
-            {
-                _isProcessingInput = false;
-            }
-        }
+        return Mouse.current.position.ReadValue();
     }
 
-    private void HandleMouseRelease(UnityEngine.InputSystem.InputAction.CallbackContext context)
+    public bool IsMousePressed()
     {
-        lock (_eventLock)
-        {
-            if (_isProcessingInput) return;
-            _isProcessingInput = true;
-        }
-
-        try
-        {
-            Vector2 mousePosition = UnityEngine.InputSystem.Mouse.current.position.ReadValue();
-            OnMouseReleased?.Invoke(mousePosition);
-        }
-        finally
-        {
-            lock (_eventLock)
-            {
-                _isProcessingInput = false;
-            }
-        }
+        return Mouse.current.leftButton.isPressed;
     }
 }

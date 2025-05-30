@@ -17,20 +17,22 @@ public class CardManager : MonoBehaviour
     
     [Header("Hand Management")]  
     [SerializeField] private Transform handContainer;
-    [SerializeField] private float handCardSpacing = 120f;
     [SerializeField] private int maxHandSize = 7;
     
     [Header("Selection")]
     [SerializeField] private int maxSelectedCards = 1;
     [SerializeField] private bool allowMultiSelect = false;
     
-    // FIX: Added reverse lookup for better performance
+    // OPTIMIZED: Simplified data structures
     private Dictionary<int, Card> _allCards = new Dictionary<int, Card>();
     private Dictionary<Card, int> _cardToId = new Dictionary<Card, int>();
     private List<Card> _handCards = new List<Card>();
     private List<Card> _selectedCards = new List<Card>();
     private Queue<GameObject> _cardPool = new Queue<GameObject>();
     private int _nextCardId = 0;
+    
+    // OPTIMIZED: Reference to HandLayoutManager (removes duplication)
+    private HandLayoutManager _handLayoutManager;
     
     // Events
     public static event System.Action<Card> OnCardSpawned;
@@ -45,6 +47,7 @@ public class CardManager : MonoBehaviour
             Instance = this;
             DontDestroyOnLoad(gameObject);
             InitializePool();
+            InitializeHandLayout();
         }
         else
         {
@@ -79,6 +82,19 @@ public class CardManager : MonoBehaviour
         }
     }
     
+    // OPTIMIZED: Initialize HandLayoutManager reference
+    private void InitializeHandLayout()
+    {
+        if (handContainer != null)
+        {
+            _handLayoutManager = handContainer.GetComponent<HandLayoutManager>();
+            if (_handLayoutManager == null)
+            {
+                _handLayoutManager = handContainer.gameObject.AddComponent<HandLayoutManager>();
+            }
+        }
+    }
+    
     public Card SpawnCard(CardData cardData, Transform parent = null, bool addToHand = false)
     {
         if (cardData == null || cardPrefab == null) return null;
@@ -86,35 +102,45 @@ public class CardManager : MonoBehaviour
         GameObject cardObject = GetCardObject();
         if (cardObject == null) return null;
         
-        // Setup transform
+        // FIXED: Proper transform setup without conflicts
         Transform targetParent = parent ?? defaultSpawnParent ?? transform;
-        cardObject.transform.SetParent(targetParent);
-        cardObject.transform.localPosition = Vector3.zero;
-        cardObject.transform.localRotation = Quaternion.identity;
-        cardObject.transform.localScale = Vector3.one;
+        cardObject.transform.SetParent(targetParent, false); // worldPositionStays = false
+        
+        // FIXED: Reset transform properly
+        var rectTransform = cardObject.GetComponent<RectTransform>();
+        if (rectTransform != null)
+        {
+            rectTransform.localPosition = Vector3.zero;
+            rectTransform.localRotation = Quaternion.identity;
+            rectTransform.localScale = Vector3.one; // FIXED: Always start with proper scale
+        }
+        else
+        {
+            cardObject.transform.localPosition = Vector3.zero;
+            cardObject.transform.localRotation = Quaternion.identity;
+            cardObject.transform.localScale = Vector3.one;
+        }
         
         // Setup card component
         Card cardComponent = cardObject.GetComponent<Card>();
         if (cardComponent == null)
         {
-            Debug.LogError("[UnifiedCardController] Card prefab missing Card component!");
+            Debug.LogError("[CardManager] Card prefab missing Card component!");
+            ReturnToPool(cardObject);
             return null;
         }
         
         cardComponent.SetCardData(cardData);
         cardObject.SetActive(true);
         
-        // FIX: Register card with reverse lookup
+        // Register card
         int cardId = _nextCardId++;
         _allCards[cardId] = cardComponent;
         _cardToId[cardComponent] = cardId;
         
         if (addToHand && _handCards.Count < maxHandSize)
         {
-            _handCards.Add(cardComponent);
-            cardComponent.transform.SetParent(handContainer);
-            UpdateHandLayout();
-            OnHandUpdated?.Invoke(new List<Card>(_handCards));
+            AddCardToHandInternal(cardComponent);
         }
         
         OnCardSpawned?.Invoke(cardComponent);
@@ -130,11 +156,22 @@ public class CardManager : MonoBehaviour
         return cardPrefab != null ? Instantiate(cardPrefab) : null;
     }
     
+    // OPTIMIZED: Separate internal method to avoid duplicate layout updates
+    private void AddCardToHandInternal(Card card)
+    {
+        _handCards.Add(card);
+        card.transform.SetParent(handContainer, false); // FIXED: worldPositionStays = false
+        
+        // FIXED: Don't manually set position here - let HandLayoutManager handle it
+        UpdateHandLayout();
+        OnHandUpdated?.Invoke(new List<Card>(_handCards));
+    }
+    
     public void DestroyCard(Card card)
     {
         if (card == null) return;
         
-        // FIX: Remove from all tracking with better performance
+        // Remove from tracking
         if (_cardToId.TryGetValue(card, out int cardId))
         {
             _allCards.Remove(cardId);
@@ -148,12 +185,8 @@ public class CardManager : MonoBehaviour
         
         if (useObjectPooling)
         {
-            // FIX: Proper cleanup before returning to pool
-            card.ClearEventSubscriptions(); // Clear any lingering event subscriptions
-            card.ResetCardState();
-            cardObject.transform.SetParent(transform);
-            cardObject.SetActive(false);
-            _cardPool.Enqueue(cardObject);
+            CleanupCardForPool(card);
+            ReturnToPool(cardObject);
         }
         else
         {
@@ -166,7 +199,38 @@ public class CardManager : MonoBehaviour
         OnCardDestroyed?.Invoke(card);
     }
     
-    // FIX: Much faster card ID lookup using reverse dictionary
+    // OPTIMIZED: Centralized pool return method
+    private void ReturnToPool(GameObject cardObject)
+    {
+        cardObject.transform.SetParent(transform, false);
+        cardObject.SetActive(false);
+        _cardPool.Enqueue(cardObject);
+    }
+    
+    // OPTIMIZED: Proper cleanup method
+    private void CleanupCardForPool(Card card)
+    {
+        if (card == null) return;
+        
+        card.ClearEventSubscriptions();
+        card.ResetCardState();
+        
+        // FIXED: Reset transform properly
+        var rectTransform = card.GetComponent<RectTransform>();
+        if (rectTransform != null)
+        {
+            rectTransform.localPosition = Vector3.zero;
+            rectTransform.localRotation = Quaternion.identity;
+            rectTransform.localScale = Vector3.one;
+        }
+        else
+        {
+            card.transform.localPosition = Vector3.zero;
+            card.transform.localRotation = Quaternion.identity;
+            card.transform.localScale = Vector3.one;
+        }
+    }
+    
     private int GetCardId(Card card)
     {
         return _cardToId.TryGetValue(card, out int id) ? id : -1;
@@ -178,19 +242,17 @@ public class CardManager : MonoBehaviour
         
         if (!allowMultiSelect)
         {
-            // FIX: Clear existing selection properly
-            var cardsToDeselect = _selectedCards.ToList(); // Create copy to avoid modification during iteration
+            var cardsToDeselect = _selectedCards.ToList();
             foreach (var selectedCard in cardsToDeselect)
             {
-                selectedCard.ForceDeselect(); // FIX: Use correct method name
+                selectedCard.ForceDeselect();
             }
             _selectedCards.Clear();
         }
         else if (_selectedCards.Count >= maxSelectedCards)
         {
-            // Remove oldest selection
             Card oldestCard = _selectedCards[0];
-            oldestCard.ForceDeselect(); // FIX: Use correct method name
+            oldestCard.ForceDeselect();
             _selectedCards.RemoveAt(0);
         }
         
@@ -206,33 +268,24 @@ public class CardManager : MonoBehaviour
     
     public void ClearSelection()
     {
-        var cardsToDeselect = _selectedCards.ToList(); // FIX: Create copy to avoid modification during iteration
+        var cardsToDeselect = _selectedCards.ToList();
         foreach (var card in cardsToDeselect)
         {
-            card.ForceDeselect(); // FIX: Use correct method name
+            card.ForceDeselect();
         }
         _selectedCards.Clear();
         OnSelectionChanged?.Invoke(new List<Card>(_selectedCards));
     }
     
+    // OPTIMIZED: Delegate to HandLayoutManager instead of duplicate logic
     private void UpdateHandLayout()
     {
-        if (handContainer == null || _handCards.Count == 0) return;
-        
-        float totalWidth = (_handCards.Count - 1) * handCardSpacing;
-        float startX = -totalWidth * 0.5f;
-        
-        for (int i = 0; i < _handCards.Count; i++)
+        if (_handLayoutManager != null)
         {
-            if (_handCards[i] != null)
-            {
-                Vector3 targetPosition = new Vector3(startX + (i * handCardSpacing), 0, 0);
-                _handCards[i].transform.localPosition = targetPosition;
-            }
+            _handLayoutManager.UpdateLayout();
         }
     }
     
-    // FIX: Added method to clean up all cards (useful for scene transitions)
     public void CleanupAllCards()
     {
         var allCardsCopy = _allCards.Values.ToList();
@@ -248,16 +301,12 @@ public class CardManager : MonoBehaviour
         _selectedCards.Clear();
     }
     
-    // FIX: Added null checks and better error handling
     public bool AddCardToHand(Card card)
     {
         if (card == null || _handCards.Contains(card) || _handCards.Count >= maxHandSize)
             return false;
         
-        _handCards.Add(card);
-        card.transform.SetParent(handContainer);
-        UpdateHandLayout();
-        OnHandUpdated?.Invoke(new List<Card>(_handCards));
+        AddCardToHandInternal(card);
         return true;
     }
     
@@ -271,7 +320,7 @@ public class CardManager : MonoBehaviour
         return true;
     }
     
-    // Public accessors with null safety
+    // Public accessors
     public List<Card> GetSelectedCards() => _selectedCards != null ? new List<Card>(_selectedCards) : new List<Card>();
     public List<Card> GetHandCards() => _handCards != null ? new List<Card>(_handCards) : new List<Card>();
     public List<Card> GetAllCards() => _allCards != null ? new List<Card>(_allCards.Values) : new List<Card>();
@@ -280,7 +329,6 @@ public class CardManager : MonoBehaviour
     public int SelectedCount => _selectedCards?.Count ?? 0;
     public bool IsHandFull => _handCards != null && _handCards.Count >= maxHandSize;
     
-    // FIX: Added validation method
     public bool IsValidCard(Card card)
     {
         return card != null && _cardToId.ContainsKey(card);
