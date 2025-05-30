@@ -1,0 +1,301 @@
+using System.Collections.Generic;
+using System.Linq;
+using UnityEngine;
+
+public class CardManager : MonoBehaviour
+{
+    public static CardManager Instance { get; private set; }
+    
+    [Header("Card Database")]
+    [SerializeField] private List<CardData> allCardData = new List<CardData>();
+    
+    [Header("Spawning")]
+    [SerializeField] private GameObject cardPrefab;
+    [SerializeField] private Transform defaultSpawnParent;
+    [SerializeField] private bool useObjectPooling = true;
+    [SerializeField] private int poolSize = 20;
+    
+    [Header("Hand Management")]  
+    [SerializeField] private Transform handContainer;
+    [SerializeField] private float handCardSpacing = 120f;
+    [SerializeField] private int maxHandSize = 7;
+    
+    [Header("Selection")]
+    [SerializeField] private int maxSelectedCards = 1;
+    [SerializeField] private bool allowMultiSelect = false;
+    
+    // FIX: Added reverse lookup for better performance
+    private Dictionary<int, Card> _allCards = new Dictionary<int, Card>();
+    private Dictionary<Card, int> _cardToId = new Dictionary<Card, int>();
+    private List<Card> _handCards = new List<Card>();
+    private List<Card> _selectedCards = new List<Card>();
+    private Queue<GameObject> _cardPool = new Queue<GameObject>();
+    private int _nextCardId = 0;
+    
+    // Events
+    public static event System.Action<Card> OnCardSpawned;
+    public static event System.Action<Card> OnCardDestroyed;
+    public static event System.Action<List<Card>> OnHandUpdated;
+    public static event System.Action<List<Card>> OnSelectionChanged;
+    
+    private void Awake()
+    {
+        if (Instance == null)
+        {
+            Instance = this;
+            DontDestroyOnLoad(gameObject);
+            InitializePool();
+        }
+        else
+        {
+            Destroy(gameObject);
+        }
+    }
+    
+    private void OnEnable()
+    {
+        Card.OnCardSelected += HandleCardSelected;
+        Card.OnCardDeselected += HandleCardDeselected;
+    }
+    
+    private void OnDisable()
+    {
+        Card.OnCardSelected -= HandleCardSelected;
+        Card.OnCardDeselected -= HandleCardDeselected;
+    }
+    
+    private void InitializePool()
+    {
+        if (!useObjectPooling || cardPrefab == null) return;
+        
+        Transform poolParent = new GameObject("Card Pool").transform;
+        poolParent.SetParent(transform);
+        
+        for (int i = 0; i < poolSize; i++)
+        {
+            GameObject pooledCard = Instantiate(cardPrefab, poolParent);
+            pooledCard.SetActive(false);
+            _cardPool.Enqueue(pooledCard);
+        }
+    }
+    
+    public Card SpawnCard(CardData cardData, Transform parent = null, bool addToHand = false)
+    {
+        if (cardData == null || cardPrefab == null) return null;
+        
+        GameObject cardObject = GetCardObject();
+        if (cardObject == null) return null;
+        
+        // Setup transform
+        Transform targetParent = parent ?? defaultSpawnParent ?? transform;
+        cardObject.transform.SetParent(targetParent);
+        cardObject.transform.localPosition = Vector3.zero;
+        cardObject.transform.localRotation = Quaternion.identity;
+        cardObject.transform.localScale = Vector3.one;
+        
+        // Setup card component
+        Card cardComponent = cardObject.GetComponent<Card>();
+        if (cardComponent == null)
+        {
+            Debug.LogError("[UnifiedCardController] Card prefab missing Card component!");
+            return null;
+        }
+        
+        cardComponent.SetCardData(cardData);
+        cardObject.SetActive(true);
+        
+        // FIX: Register card with reverse lookup
+        int cardId = _nextCardId++;
+        _allCards[cardId] = cardComponent;
+        _cardToId[cardComponent] = cardId;
+        
+        if (addToHand && _handCards.Count < maxHandSize)
+        {
+            _handCards.Add(cardComponent);
+            cardComponent.transform.SetParent(handContainer);
+            UpdateHandLayout();
+            OnHandUpdated?.Invoke(new List<Card>(_handCards));
+        }
+        
+        OnCardSpawned?.Invoke(cardComponent);
+        return cardComponent;
+    }
+    
+    private GameObject GetCardObject()
+    {
+        if (useObjectPooling && _cardPool.Count > 0)
+        {
+            return _cardPool.Dequeue();
+        }
+        return cardPrefab != null ? Instantiate(cardPrefab) : null;
+    }
+    
+    public void DestroyCard(Card card)
+    {
+        if (card == null) return;
+        
+        // FIX: Remove from all tracking with better performance
+        if (_cardToId.TryGetValue(card, out int cardId))
+        {
+            _allCards.Remove(cardId);
+            _cardToId.Remove(card);
+        }
+        
+        _handCards.Remove(card);
+        _selectedCards.Remove(card);
+        
+        GameObject cardObject = card.gameObject;
+        
+        if (useObjectPooling)
+        {
+            // FIX: Proper cleanup before returning to pool
+            card.ClearEventSubscriptions(); // Clear any lingering event subscriptions
+            card.ResetCardState();
+            cardObject.transform.SetParent(transform);
+            cardObject.SetActive(false);
+            _cardPool.Enqueue(cardObject);
+        }
+        else
+        {
+            Destroy(cardObject);
+        }
+        
+        UpdateHandLayout();
+        OnHandUpdated?.Invoke(new List<Card>(_handCards));
+        OnSelectionChanged?.Invoke(new List<Card>(_selectedCards));
+        OnCardDestroyed?.Invoke(card);
+    }
+    
+    // FIX: Much faster card ID lookup using reverse dictionary
+    private int GetCardId(Card card)
+    {
+        return _cardToId.TryGetValue(card, out int id) ? id : -1;
+    }
+    
+    private void HandleCardSelected(Card card)
+    {
+        if (card == null || _selectedCards.Contains(card)) return;
+        
+        if (!allowMultiSelect)
+        {
+            // FIX: Clear existing selection properly
+            var cardsToDeselect = _selectedCards.ToList(); // Create copy to avoid modification during iteration
+            foreach (var selectedCard in cardsToDeselect)
+            {
+                selectedCard.ForceDeselect(); // FIX: Use correct method name
+            }
+            _selectedCards.Clear();
+        }
+        else if (_selectedCards.Count >= maxSelectedCards)
+        {
+            // Remove oldest selection
+            Card oldestCard = _selectedCards[0];
+            oldestCard.ForceDeselect(); // FIX: Use correct method name
+            _selectedCards.RemoveAt(0);
+        }
+        
+        _selectedCards.Add(card);
+        OnSelectionChanged?.Invoke(new List<Card>(_selectedCards));
+    }
+    
+    private void HandleCardDeselected(Card card)
+    {
+        if (_selectedCards.Remove(card))
+            OnSelectionChanged?.Invoke(new List<Card>(_selectedCards));
+    }
+    
+    public void ClearSelection()
+    {
+        var cardsToDeselect = _selectedCards.ToList(); // FIX: Create copy to avoid modification during iteration
+        foreach (var card in cardsToDeselect)
+        {
+            card.ForceDeselect(); // FIX: Use correct method name
+        }
+        _selectedCards.Clear();
+        OnSelectionChanged?.Invoke(new List<Card>(_selectedCards));
+    }
+    
+    private void UpdateHandLayout()
+    {
+        if (handContainer == null || _handCards.Count == 0) return;
+        
+        float totalWidth = (_handCards.Count - 1) * handCardSpacing;
+        float startX = -totalWidth * 0.5f;
+        
+        for (int i = 0; i < _handCards.Count; i++)
+        {
+            if (_handCards[i] != null)
+            {
+                Vector3 targetPosition = new Vector3(startX + (i * handCardSpacing), 0, 0);
+                _handCards[i].transform.localPosition = targetPosition;
+            }
+        }
+    }
+    
+    // FIX: Added method to clean up all cards (useful for scene transitions)
+    public void CleanupAllCards()
+    {
+        var allCardsCopy = _allCards.Values.ToList();
+        foreach (var card in allCardsCopy)
+        {
+            if (card != null)
+                DestroyCard(card);
+        }
+        
+        _allCards.Clear();
+        _cardToId.Clear();
+        _handCards.Clear();
+        _selectedCards.Clear();
+    }
+    
+    // FIX: Added null checks and better error handling
+    public bool AddCardToHand(Card card)
+    {
+        if (card == null || _handCards.Contains(card) || _handCards.Count >= maxHandSize)
+            return false;
+        
+        _handCards.Add(card);
+        card.transform.SetParent(handContainer);
+        UpdateHandLayout();
+        OnHandUpdated?.Invoke(new List<Card>(_handCards));
+        return true;
+    }
+    
+    public bool RemoveCardFromHand(Card card)
+    {
+        if (card == null || !_handCards.Remove(card))
+            return false;
+        
+        UpdateHandLayout();
+        OnHandUpdated?.Invoke(new List<Card>(_handCards));
+        return true;
+    }
+    
+    // Public accessors with null safety
+    public List<Card> GetSelectedCards() => _selectedCards != null ? new List<Card>(_selectedCards) : new List<Card>();
+    public List<Card> GetHandCards() => _handCards != null ? new List<Card>(_handCards) : new List<Card>();
+    public List<Card> GetAllCards() => _allCards != null ? new List<Card>(_allCards.Values) : new List<Card>();
+    public int ActiveCardCount => _allCards?.Count ?? 0;
+    public int HandSize => _handCards?.Count ?? 0;
+    public int SelectedCount => _selectedCards?.Count ?? 0;
+    public bool IsHandFull => _handCards != null && _handCards.Count >= maxHandSize;
+    
+    // FIX: Added validation method
+    public bool IsValidCard(Card card)
+    {
+        return card != null && _cardToId.ContainsKey(card);
+    }
+    
+    [ContextMenu("Spawn Test Card")]
+    public void SpawnTestCard()
+    {
+        if (allCardData.Count > 0)
+            SpawnCard(allCardData[0], null, true);
+    }
+
+    [ContextMenu("Clear All Cards")]
+    public void ClearAllCards()
+    {
+        CleanupAllCards();
+    }
+}
