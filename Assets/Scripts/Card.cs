@@ -10,7 +10,7 @@ public enum CardState
     Disabled
 }
 
-public class Card : MonoBehaviour, IPointerClickHandler, IPointerEnterHandler, IPointerExitHandler
+public class Card : MonoBehaviour, IPointerClickHandler, IPointerEnterHandler, IPointerExitHandler, IPointerDownHandler, IPointerUpHandler
 {
     [Header("Card Data")]
     [SerializeField] private CardData cardData;
@@ -36,6 +36,7 @@ public class Card : MonoBehaviour, IPointerClickHandler, IPointerEnterHandler, I
     public static System.Action<Card> OnCardDeselected;
     public static System.Action<Card> OnCardHovered;
     public static System.Action<Card> OnCardUnhovered;
+    public static System.Action<Card> OnCardPlayTriggered; // NEW: Direct play event
     
     // Cached components for performance
     private RectTransform rectTransform;
@@ -44,6 +45,13 @@ public class Card : MonoBehaviour, IPointerClickHandler, IPointerEnterHandler, I
     // Current state tracking
     private CardState currentState = CardState.Idle;
     private bool isHovered = false;
+    
+    // NEW: Play interaction tracking
+    private float lastClickTime = 0f;
+    private const float DOUBLE_CLICK_TIME = 0.3f;
+    private bool isMouseDown = false;
+    private float mouseDownTime = 0f;
+    private const float HOLD_THRESHOLD = 0.5f;
     
     // Properties
     public CardData CardData => cardData;
@@ -102,6 +110,16 @@ public class Card : MonoBehaviour, IPointerClickHandler, IPointerEnterHandler, I
         UpdateVisuals();
     }
     
+    private void Update()
+    {
+        // Check for hold-to-play
+        if (isMouseDown && Time.time - mouseDownTime >= HOLD_THRESHOLD)
+        {
+            isMouseDown = false; // Prevent multiple triggers
+            TriggerCardPlay();
+        }
+    }
+    
     private void OnDestroy()
     {
         // Notify layout manager to clean up references
@@ -143,13 +161,45 @@ public class Card : MonoBehaviour, IPointerClickHandler, IPointerEnterHandler, I
         gameObject.name = $"Card_{cardData.cardName}";
     }
     
+    public void OnPointerDown(PointerEventData eventData)
+    {
+        if (!isInteractable || eventData.button != PointerEventData.InputButton.Left) return;
+        
+        isMouseDown = true;
+        mouseDownTime = Time.time;
+    }
+    
+    public void OnPointerUp(PointerEventData eventData)
+    {
+        isMouseDown = false;
+    }
+    
     public void OnPointerClick(PointerEventData eventData)
     {
         if (!isInteractable) return;
         
         if (eventData.button == PointerEventData.InputButton.Left)
         {
+            float timeSinceLastClick = Time.time - lastClickTime;
+            
+            // Check for double-click
+            if (timeSinceLastClick <= DOUBLE_CLICK_TIME)
+            {
+                TriggerCardPlay();
+                return;
+            }
+            
+            // Check for modifier key (Ctrl/Cmd for instant play)
+            if (Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl) || 
+                Input.GetKey(KeyCode.LeftCommand) || Input.GetKey(KeyCode.RightCommand))
+            {
+                TriggerCardPlay();
+                return;
+            }
+            
+            // Regular selection
             ToggleSelection();
+            lastClickTime = Time.time;
         }
     }
     
@@ -167,8 +217,16 @@ public class Card : MonoBehaviour, IPointerClickHandler, IPointerEnterHandler, I
         if (!isInteractable) return;
         
         isHovered = false;
+        isMouseDown = false; // Cancel hold if mouse leaves
         UpdateVisuals();
         OnCardUnhovered?.Invoke(this);
+    }
+    
+    private void TriggerCardPlay()
+    {
+        if (!isInteractable) return;
+        
+        OnCardPlayTriggered?.Invoke(this);
     }
     
     public void ToggleSelection()
@@ -246,6 +304,7 @@ public class Card : MonoBehaviour, IPointerClickHandler, IPointerEnterHandler, I
         OnCardDeselected = null;
         OnCardHovered = null;
         OnCardUnhovered = null;
+        OnCardPlayTriggered = null;
     }
     
     public void ResetCardState()
@@ -253,8 +312,11 @@ public class Card : MonoBehaviour, IPointerClickHandler, IPointerEnterHandler, I
         isSelected = false;
         isInteractable = true;
         isHovered = false;
+        isMouseDown = false;
         currentState = CardState.Idle;
         cardData = null;
+        lastClickTime = 0f;
+        mouseDownTime = 0f;
         
         // Clear UI elements
         if (cardNameText != null) cardNameText.text = "";
@@ -303,6 +365,9 @@ public class Card : MonoBehaviour, IPointerClickHandler, IPointerEnterHandler, I
     
     [ContextMenu("Toggle Interactable")]
     public void DebugToggleInteractable() => SetInteractable(!isInteractable);
+    
+    [ContextMenu("Trigger Play")]
+    public void DebugTriggerPlay() => TriggerCardPlay();
     
     private void OnValidate()
     {

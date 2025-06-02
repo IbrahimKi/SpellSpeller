@@ -45,12 +45,17 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   allCardData:
-  - {fileID: 11400000, guid: cf4a841ab2928a740993c74f4d0b0ed6, type: 2}
-  - {fileID: 11400000, guid: 943a891ae2693754fa0ae4dd99131b53, type: 2}
-  - {fileID: 11400000, guid: 47bdd2bfdfa2d3a4b9cab259107a404e, type: 2}
-  - {fileID: 11400000, guid: 2e8c36916f082c74e91fb3c56aa13042, type: 2}
-  - {fileID: 11400000, guid: d5ffcd21a943b924a8458000823dbcab, type: 2}
-  - {fileID: 11400000, guid: 4f7ff938bd40e54468957522fce463cf, type: 2}
+  - {fileID: 11400000, guid: 618d617a769eee1448dfdcd900ab18b0, type: 2}
+  - {fileID: 11400000, guid: 298a3b5ca8bfbbd4b86f024b5acfb55c, type: 2}
+  - {fileID: 11400000, guid: 7bf28af1962ff3c4699839cab9ce4cd6, type: 2}
+  - {fileID: 11400000, guid: 1564cd2b393ad8149bf56154e3fa5e8b, type: 2}
+  - {fileID: 11400000, guid: 779d0685831921142934bf15d6e4d0e6, type: 2}
+  - {fileID: 11400000, guid: eaccdf877a7afac4b9277e7d17b432f5, type: 2}
+  - {fileID: 11400000, guid: 7d7f3066e76ead940a7c9d779aa12708, type: 2}
+  - {fileID: 11400000, guid: 23de81d7d26a58f469ea56017ac628b6, type: 2}
+  - {fileID: 11400000, guid: 9be0b35cf7bf3794e9b61d06d708f830, type: 2}
+  - {fileID: 11400000, guid: 1fbe65f187789ff4d9b0c4226f796806, type: 2}
+  - {fileID: 11400000, guid: a932cb074942bc84191393d40792f63e, type: 2}
   cardPrefab: {fileID: 5103030169791602621, guid: cbc657f776aec9c4da309a8360774ecb, type: 3}
   defaultSpawnParent: {fileID: 0}
   useObjectPooling: 1
@@ -235,36 +240,16 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   availableSpells:
-  - spellName: Attack 1
-    letterSequence: MI
-    effectType: Single Damage
-    effectValue: 1
-    description: Test
-  - spellName: Attack 2
-    letterSequence: MA
-    effectType: Area Damage
-    effectValue: 1
-    description: Test
-  - spellName: Block 1
-    letterSequence: DI
-    effectType: Area Damage
-    effectValue: 1
-    description: Test
-  - spellName: Block 2
-    letterSequence: DE
-    effectType: Defense Block
-    effectValue: 1
-    description: Test
-  - spellName: Heal
-    letterSequence: LU
-    effectType: Heal
-    effectValue: 1
-    description: Test
-  - spellName: Disrupt
-    letterSequence: KO
-    effectType: Disrupt
-    effectValue: 1
-    description: Test
-  allowPartialMatches: 0
+  - {fileID: 11400000, guid: 6e38dea2c2683a044926973c22d77795, type: 2}
+  - {fileID: 11400000, guid: 2b09b3054f14bbc42be6df488f716967, type: 2}
+  - {fileID: 11400000, guid: abce300963152bd43a66124749d0c1c0, type: 2}
+  - {fileID: 11400000, guid: bca7f521b4bde61439f4a06f47eacbdf, type: 2}
+  - {fileID: 11400000, guid: 26b6c0d2535dc344389597e7a6c6a416, type: 2}
+  - {fileID: 11400000, guid: 34d9931efb9b40547b0aee08cb52ee30, type: 2}
+  - {fileID: 11400000, guid: d003f3aa6e8bc19458e7698b02feb414, type: 2}
+  - {fileID: 11400000, guid: 40cd8193265695f4fa7dd703ef753329, type: 2}
+  - {fileID: 11400000, guid: b860a7c774bf7c147affe259c160823a, type: 2}
+  - {fileID: 11400000, guid: 2dd18ed20cba55d49a31658c9b75d209, type: 2}
+  - {fileID: 11400000, guid: b715d3fc35397ad4bbe5e06cce303d60, type: 2}
+  - {fileID: 11400000, guid: 61a326255c2fb4643b3c289ef544fbbc, type: 2}
   caseSensitive: 0
-  maxHistoryLength: 10

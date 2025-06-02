@@ -9,12 +9,11 @@ MonoBehaviour:
   m_GameObject: {fileID: 0}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 5ac0c6bfa9cb9b340861fdbefcea2476, type: 3}
-  m_Name: TestCard
+  m_Script: {fileID: 11500000, guid: d2baaa2329b36e746b06c6ecc5687b67, type: 3}
+  m_Name: Spell_0_LU_Heal
   m_EditorClassIdentifier: 
-  cardName: TestCard
-  cardImage: {fileID: 10913, guid: 0000000000000000f000000000000000, type: 0}
-  description: Test Card Description
-  tier: 1
-  cardType: 0
-  letterValues: XX
+  spellName: Base Heal
+  letterCode: LU
+  spellType: 0
+  spellSubtypes: 08000000
+  effects: []

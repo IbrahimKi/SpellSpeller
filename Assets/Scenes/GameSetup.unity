@@ -332,11 +332,6 @@ MonoBehaviour:
   m_LightCookieSize: {x: 1, y: 1}
   m_LightCookieOffset: {x: 0, y: 0}
   m_SoftShadowQuality: 0
---- !u!223 &694182379 stripped
-Canvas:
-  m_CorrespondingSourceObject: {fileID: 2429728887630363850, guid: caae495249123394caf3d5fcd2f26a1f, type: 3}
-  m_PrefabInstance: {fileID: 6743933080846455888}
-  m_PrefabAsset: {fileID: 0}
 --- !u!224 &1347711640 stripped
 RectTransform:
   m_CorrespondingSourceObject: {fileID: 8061170319694174372, guid: caae495249123394caf3d5fcd2f26a1f, type: 3}
@@ -409,14 +404,6 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
-    - target: {fileID: 8032768691469178009, guid: 341c1f5da92f4a74eb7d7e7e9ffe1ecf, type: 3}
-      propertyPath: canvas
-      value: 
-      objectReference: {fileID: 694182379}
-    - target: {fileID: 8032768691469178009, guid: 341c1f5da92f4a74eb7d7e7e9ffe1ecf, type: 3}
-      propertyPath: uiCamera
-      value: 
-      objectReference: {fileID: 452538583}
     - target: {fileID: 8291265475034265126, guid: 341c1f5da92f4a74eb7d7e7e9ffe1ecf, type: 3}
       propertyPath: handContainer
       value: 

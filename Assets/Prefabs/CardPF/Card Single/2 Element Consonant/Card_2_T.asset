@@ -10,11 +10,12 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 5ac0c6bfa9cb9b340861fdbefcea2476, type: 3}
-  m_Name: TestCard
+  m_Name: Card_2_T
   m_EditorClassIdentifier: 
-  cardName: TestCard
-  cardImage: {fileID: 10913, guid: 0000000000000000f000000000000000, type: 0}
-  description: Test Card Description
+  cardName: T
+  cardImage: {fileID: 10911, guid: 0000000000000000f000000000000000, type: 0}
+  description: Test
   tier: 1
-  cardType: 0
-  letterValues: XX
+  cardType: 1
+  CardSubType: 1
+  letterValues: T

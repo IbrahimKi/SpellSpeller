@@ -5,34 +5,55 @@ using System;
 
 public class SpellcastManager : SingletonBehaviour<SpellcastManager>
 {
-    [Header("Spell System")]
-    [SerializeField] private List<SpellData> availableSpells = new List<SpellData>();
-    [SerializeField] private bool allowPartialMatches = false;
+    [Header("Spell Configuration")]
+    [SerializeField] private List<SpellAsset> availableSpells = new List<SpellAsset>();
     [SerializeField] private bool caseSensitive = false;
-    [SerializeField] private int maxHistoryLength = 10;
     
-    private Dictionary<string, SpellData> _spellCache = new Dictionary<string, SpellData>();
-    private List<string> _letterHistory = new List<string>();
-    private string _currentSequence = "";
-    private bool _cacheDirty = true;
+    private string _currentCombo = "";
+    private Dictionary<string, SpellAsset> _spellCache = new Dictionary<string, SpellAsset>();
     
+    // Events
     public static event Action<List<Card>, string> OnCardsPlayed;
-    public static event Action<string> OnLetterSequenceUpdated;
-    public static event Action<string, string> OnSpellFound;
+    public static event Action<string> OnComboUpdated;
+    public static event Action<SpellAsset, string> OnSpellFound;
     public static event Action<string> OnSpellNotFound;
-    public static event Action OnLetterSequenceCleared;
-    public static event Action<SpellData, List<Card>> OnSpellCast;
+    public static event Action OnComboCleared;
+    public static event Action<SpellAsset, List<Card>> OnSpellCast;
+    public static event Action<SpellEffect> OnSpellEffectTriggered;
+    
+    // Properties
+    public string CurrentCombo => _currentCombo;
+    public IReadOnlyList<SpellAsset> AvailableSpells => availableSpells.AsReadOnly();
     
     protected override void OnAwakeInitialize()
     {
-        // Initialization code that was previously in Start()
-        RebuildSpellCache();
+        InitializeSpellCache();
+    }
+    
+    private void InitializeSpellCache()
+    {
+        _spellCache.Clear();
+        
+        foreach (var spell in availableSpells)
+        {
+            if (spell != null && spell.IsValid)
+            {
+                string key = caseSensitive ? spell.LetterCode : spell.LetterCode.ToUpper();
+                if (!_spellCache.ContainsKey(key))
+                    _spellCache[key] = spell;
+            }
+        }
+        
+        Debug.Log($"[SpellcastManager] Initialized {_spellCache.Count} spells.");
     }
     
     public void ProcessCardPlay(List<Card> playedCards, string letterSequence)
     {
         if (playedCards == null || playedCards.Count == 0 || string.IsNullOrEmpty(letterSequence))
+        {
+            Debug.LogWarning("[SpellcastManager] Invalid cards or letter sequence.");
             return;
+        }
         
         OnCardsPlayed?.Invoke(playedCards, letterSequence);
         ProcessLetterSequence(letterSequence, playedCards);
@@ -41,133 +62,217 @@ public class SpellcastManager : SingletonBehaviour<SpellcastManager>
     private void ProcessLetterSequence(string newLetters, List<Card> sourceCards)
     {
         string normalizedLetters = caseSensitive ? newLetters : newLetters.ToUpper();
-        _currentSequence += normalizedLetters;
         
-        UpdateHistory(normalizedLetters);
-        OnLetterSequenceUpdated?.Invoke(_currentSequence);
+        // Check if new letters can extend current combo
+        string testCombo = _currentCombo + normalizedLetters;
         
-        bool spellFound = TryMatchSpell(_currentSequence, sourceCards);
-        
-        if (!spellFound && ShouldClearCache(_currentSequence))
+        if (HasPotentialMatches(testCombo))
         {
-            OnSpellNotFound?.Invoke(_currentSequence);
-            ClearLetterSequence();
+            // Extend combo
+            _currentCombo = testCombo;
+            OnComboUpdated?.Invoke(_currentCombo);
+            
+            // Check for exact matches
+            if (TryMatchSpell(_currentCombo, sourceCards))
+                return;
         }
-    }
-    
-    private void UpdateHistory(string letters)
-    {
-        _letterHistory.Add(letters);
-        while (_letterHistory.Count > maxHistoryLength)
-            _letterHistory.RemoveAt(0);
+        else
+        {
+            // Current combo + new letters don't work, try just new letters
+            if (HasPotentialMatches(normalizedLetters))
+            {
+                _currentCombo = normalizedLetters;
+                OnComboUpdated?.Invoke(_currentCombo);
+                
+                if (TryMatchSpell(_currentCombo, sourceCards))
+                    return;
+            }
+            else
+            {
+                // No potential matches at all
+                OnSpellNotFound?.Invoke(normalizedLetters);
+                ClearCombo();
+            }
+        }
     }
     
     private bool TryMatchSpell(string letterSequence, List<Card> sourceCards)
     {
-        if (_cacheDirty)
-            RebuildSpellCache();
+        string key = caseSensitive ? letterSequence : letterSequence.ToUpper();
         
-        if (_spellCache.TryGetValue(letterSequence, out SpellData exactMatch))
+        // Check for exact match
+        if (_spellCache.TryGetValue(key, out SpellAsset exactMatch))
         {
             ExecuteSpell(exactMatch, sourceCards, letterSequence);
             return true;
         }
         
-        if (allowPartialMatches)
+        // Check for partial matches (spell contained in sequence)
+        var partialMatches = FindPartialMatches(letterSequence);
+        if (partialMatches.Count > 0)
         {
-            var partialMatches = FindPartialMatches(letterSequence);
-            if (partialMatches.Count > 0)
+            // Get longest match
+            var bestMatch = partialMatches.OrderByDescending(s => s.LetterCode.Length).First();
+            string spellCode = caseSensitive ? bestMatch.LetterCode : bestMatch.LetterCode.ToUpper();
+            
+            ExecuteSpell(bestMatch, sourceCards, spellCode);
+            
+            // Update combo by removing used part
+            int index = letterSequence.IndexOf(spellCode, StringComparison.OrdinalIgnoreCase);
+            if (index >= 0)
             {
-                var bestMatch = partialMatches.OrderByDescending(s => s.letterSequence.Length).First();
-                ExecuteSpell(bestMatch, sourceCards, bestMatch.letterSequence);
-                _currentSequence = _currentSequence.Substring(bestMatch.letterSequence.Length);
-                return true;
+                _currentCombo = letterSequence.Remove(index, spellCode.Length);
+                OnComboUpdated?.Invoke(_currentCombo);
+                
+                // Clear combo if no potential matches remain
+                if (!HasPotentialMatches(_currentCombo))
+                    ClearCombo();
             }
+            
+            return true;
         }
         
         return false;
     }
     
-    private List<SpellData> FindPartialMatches(string letterSequence)
+    private List<SpellAsset> FindPartialMatches(string letterSequence)
     {
-        return _spellCache.Values.Where(spell => letterSequence.Contains(spell.letterSequence)).ToList();
+        var matches = new List<SpellAsset>();
+        string searchSequence = caseSensitive ? letterSequence : letterSequence.ToUpper();
+        
+        foreach (var spell in availableSpells)
+        {
+            if (spell?.IsValid == true)
+            {
+                string spellCode = caseSensitive ? spell.LetterCode : spell.LetterCode.ToUpper();
+                if (searchSequence.Contains(spellCode))
+                    matches.Add(spell);
+            }
+        }
+        
+        return matches;
     }
     
-    private void ExecuteSpell(SpellData spell, List<Card> sourceCards, string usedLetters)
+    private void ExecuteSpell(SpellAsset spell, List<Card> sourceCards, string usedLetters)
     {
-        OnSpellFound?.Invoke(spell.spellName, usedLetters);
+        if (spell?.IsValid != true)
+        {
+            Debug.LogError($"[SpellcastManager] Invalid spell: {spell?.SpellName ?? "null"}");
+            return;
+        }
+        
+        Debug.Log($"[SpellcastManager] Casting '{spell.SpellName}' with sequence: {usedLetters}");
+        
+        OnSpellFound?.Invoke(spell, usedLetters);
         OnSpellCast?.Invoke(spell, sourceCards);
-        ClearLetterSequence();
-    }
-    
-    private bool ShouldClearCache(string currentSequence)
-    {
-        return !allowPartialMatches || !HasPotentialMatches(currentSequence);
+        
+        spell.ExecuteEffects();
     }
     
     private bool HasPotentialMatches(string sequence)
     {
-        if (_cacheDirty)
-            RebuildSpellCache();
+        if (string.IsNullOrEmpty(sequence)) return false;
         
-        return _spellCache.Values.Any(spell => 
-            spell.letterSequence.StartsWith(sequence, StringComparison.OrdinalIgnoreCase));
-    }
-    
-    private void RebuildSpellCache()
-    {
-        _spellCache.Clear();
+        string searchSequence = caseSensitive ? sequence : sequence.ToUpper();
         
-        foreach (var spell in availableSpells)
+        // Check if any spell starts with this sequence or contains it
+        foreach (var key in _spellCache.Keys)
         {
-            if (spell != null && !string.IsNullOrEmpty(spell.letterSequence))
-            {
-                string key = caseSensitive ? spell.letterSequence : spell.letterSequence.ToUpper();
-                if (!_spellCache.ContainsKey(key))
-                    _spellCache[key] = spell;
-            }
+            if (key.StartsWith(searchSequence, StringComparison.OrdinalIgnoreCase) || 
+                searchSequence.Contains(key))
+                return true;
         }
         
-        _cacheDirty = false;
+        return false;
     }
     
-    public string GetCurrentLetterSequence() => _currentSequence;
-    
-    public void ClearLetterSequence()
+    public void TriggerSpellEffect(SpellEffect effect)
     {
-        _currentSequence = "";
-        OnLetterSequenceCleared?.Invoke();
-    }
-    
-    public void UpdateSpellDatabase(List<SpellData> newSpells)
-    {
-        availableSpells.Clear();
-        availableSpells.AddRange(newSpells);
-        _cacheDirty = true;
-        RebuildSpellCache();
-    }
-    
-    public bool HasSpell(string letterSequence)
-    {
-        if (_cacheDirty)
-            RebuildSpellCache();
+        OnSpellEffectTriggered?.Invoke(effect);
         
-        string key = caseSensitive ? letterSequence : letterSequence.ToUpper();
+        switch (effect.effectType)
+        {
+            case SpellEffectType.Damage:
+                HandleDamageEffect(effect);
+                break;
+            case SpellEffectType.Heal:
+                HandleHealEffect(effect);
+                break;
+            case SpellEffectType.Buff:
+                HandleBuffEffect(effect);
+                break;
+            case SpellEffectType.Debuff:
+                HandleDebuffEffect(effect);
+                break;
+            default:
+                HandleCustomEffect(effect);
+                break;
+        }
+    }
+    
+    private void HandleDamageEffect(SpellEffect effect)
+    {
+        Debug.Log($"[SpellcastManager] Damage: {effect.value}");
+    }
+    
+    private void HandleHealEffect(SpellEffect effect)
+    {
+        Debug.Log($"[SpellcastManager] Heal: {effect.value}");
+    }
+    
+    private void HandleBuffEffect(SpellEffect effect)
+    {
+        Debug.Log($"[SpellcastManager] Buff: {effect.effectName}");
+    }
+    
+    private void HandleDebuffEffect(SpellEffect effect)
+    {
+        Debug.Log($"[SpellcastManager] Debuff: {effect.effectName}");
+    }
+    
+    private void HandleCustomEffect(SpellEffect effect)
+    {
+        Debug.Log($"[SpellcastManager] Custom: {effect.effectName}");
+    }
+    
+    public void ClearCombo()
+    {
+        _currentCombo = "";
+        OnComboCleared?.Invoke();
+        OnComboUpdated?.Invoke(_currentCombo);
+    }
+    
+    public bool HasSpell(string letterCode)
+    {
+        string key = caseSensitive ? letterCode : letterCode.ToUpper();
         return _spellCache.ContainsKey(key);
     }
     
-    public List<SpellData> GetAvailableSpells()
+    public SpellAsset FindSpell(string letterCode)
     {
-        return new List<SpellData>(availableSpells);
+        string key = caseSensitive ? letterCode : letterCode.ToUpper();
+        return _spellCache.TryGetValue(key, out SpellAsset spell) ? spell : null;
     }
-}
-
-[System.Serializable]
-public class SpellData
-{
-    public string spellName = "Fireball";
-    public string letterSequence = "FIRE";
-    public string effectType = "damage";
-    public int effectValue = 5;
-    public string description = "Deals fire damage";
+    
+#if UNITY_EDITOR
+    [ContextMenu("Log Available Spells")]
+    public void LogAvailableSpells()
+    {
+        Debug.Log($"[SpellcastManager] Available Spells ({availableSpells.Count}):");
+        
+        foreach (var spell in availableSpells)
+        {
+            if (spell != null)
+            {
+                Debug.Log($"  - {spell.SpellName}: '{spell.LetterCode}' ({spell.Type}, {spell.Effects.Count} effects)");
+            }
+        }
+    }
+    
+    [ContextMenu("Clear Combo")]
+    public void DebugClearCombo()
+    {
+        ClearCombo();
+    }
+#endif
 }

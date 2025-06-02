@@ -12,7 +12,8 @@ public class CardData : ScriptableObject
     [Header("Card Properties")]
     [Range(1, 10)]
     public int tier = 1;
-    public CardType cardType = CardType.Basic;
+    public CardType cardType = CardType.Consonant;
+    public CardSubType CardSubType = CardSubType.Basic;
     
     [Header("Letter Values")]
     public string letterValues = "";
@@ -39,9 +40,15 @@ public class CardData : ScriptableObject
 
 public enum CardType
 {
+    Vowel,
+    Consonant,
+    Special
+}
+
+public enum CardSubType
+{
     Basic,
-    Special,
-    Event,
-    Bonus,
-    Legendary
+    Element,
+    School,
+    Ender
 }

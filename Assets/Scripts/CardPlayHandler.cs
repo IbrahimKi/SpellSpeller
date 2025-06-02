@@ -10,6 +10,11 @@ public class CardPlayHandler : MonoBehaviour
     [SerializeField] private Button clearButton;
     [SerializeField] private Button drawButton;
     [SerializeField] private TMPro.TextMeshProUGUI statusDisplay;
+    [SerializeField] private TMPro.TextMeshProUGUI comboDisplay;
+    [SerializeField] private TMPro.TextMeshProUGUI historyDisplay;
+    
+    [Header("History Settings")]
+    [SerializeField] private int maxHistoryEntries = 10;
     
     [Header("Draw Settings")]
     [SerializeField] private List<CardData> drawPool = new List<CardData>();
@@ -19,6 +24,10 @@ public class CardPlayHandler : MonoBehaviour
     private string _cachedLetterSequence = "";
     private bool _isDirty = true;
     private bool _isDestroyed = false;
+    
+    // History tracking
+    private Queue<string> _playHistory = new Queue<string>();
+    private Queue<string> _spellHistory = new Queue<string>();
     
     private void Awake()
     {
@@ -38,6 +47,12 @@ public class CardPlayHandler : MonoBehaviour
         CardManager.OnHandUpdated += OnHandUpdated;
         SpellcastManager.OnSpellFound += OnSpellFound;
         SpellcastManager.OnSpellNotFound += OnSpellNotFound;
+        SpellcastManager.OnSpellCast += OnSpellCast;
+        SpellcastManager.OnSpellEffectTriggered += OnSpellEffectTriggered;
+        SpellcastManager.OnComboUpdated += OnComboUpdated;
+        
+        // NEW: Subscribe to direct card play events
+        Card.OnCardPlayTriggered += OnCardPlayTriggered;
     }
     
     private void OnDisable()
@@ -51,6 +66,10 @@ public class CardPlayHandler : MonoBehaviour
         CardManager.OnHandUpdated -= OnHandUpdated;
         SpellcastManager.OnSpellFound -= OnSpellFound;
         SpellcastManager.OnSpellNotFound -= OnSpellNotFound;
+        SpellcastManager.OnSpellCast -= OnSpellCast;
+        SpellcastManager.OnSpellEffectTriggered -= OnSpellEffectTriggered;
+        SpellcastManager.OnComboUpdated -= OnComboUpdated;
+        Card.OnCardPlayTriggered -= OnCardPlayTriggered;
     }
     
     private void OnDestroy()
@@ -64,6 +83,15 @@ public class CardPlayHandler : MonoBehaviour
             clearButton.onClick.RemoveListener(ClearSelection);
         if (drawButton != null)
             drawButton.onClick.RemoveListener(DrawCards);
+    }
+    
+    // NEW: Handle direct card play (double-click, hold, modifier key)
+    private void OnCardPlayTriggered(Card card)
+    {
+        if (_isDestroyed || card == null) return;
+        
+        var singleCardList = new List<Card> { card };
+        PlayCards(singleCardList);
     }
     
     public void DrawCards()
@@ -98,17 +126,48 @@ public class CardPlayHandler : MonoBehaviour
     public void PlaySelectedCards()
     {
         if (_isDestroyed || _selectedCards.Count == 0) return;
+        PlayCards(_selectedCards);
+    }
+    
+    // REFACTORED: Common play logic for both selected cards and direct play
+    private void PlayCards(List<Card> cardsToPlay)
+    {
+        if (_isDestroyed || cardsToPlay.Count == 0) return;
         
-        if (_isDirty)
+        string letterSequence = ExtractLetterSequence(cardsToPlay);
+        if (string.IsNullOrEmpty(letterSequence)) return;
+        
+        // Process spell first
+        if (SpellcastManager.Instance != null)
+            SpellcastManager.Instance.ProcessCardPlay(cardsToPlay, letterSequence);
+        
+        // Add to play history
+        AddToPlayHistory(letterSequence);
+        
+        // Destroy card objects immediately
+        foreach (var card in cardsToPlay)
         {
-            _cachedLetterSequence = ExtractLetterSequence(_selectedCards);
-            _isDirty = false;
+            if (card != null)
+            {
+                // Remove from hand first
+                CardManager.Instance?.RemoveCardFromHand(card);
+                
+                // Clean up layout references
+                HandLayoutManager.Instance?.CleanupCardReference(card);
+                
+                // Destroy the GameObject
+                Destroy(card.gameObject);
+            }
         }
         
-        if (string.IsNullOrEmpty(_cachedLetterSequence)) return;
-        
-        if (SpellcastManager.Instance != null)
-            SpellcastManager.Instance.ProcessCardPlay(_selectedCards, _cachedLetterSequence);
+        // Clear selection if playing selected cards
+        if (cardsToPlay == _selectedCards)
+        {
+            _selectedCards.Clear();
+            _cachedLetterSequence = "";
+            _isDirty = true;
+            UpdateUI();
+        }
     }
     
     public void ClearSelection()
@@ -164,20 +223,75 @@ public class CardPlayHandler : MonoBehaviour
             }
             else
             {
-                statusDisplay.text = "Select cards to play";
+                statusDisplay.text = "Select cards to play\nTip: Double-click, hold, or Ctrl+click to play instantly";
             }
         }
     }
     
-    private void OnSpellFound(string spellName, string usedLetters)
+    private void OnComboUpdated(string currentCombo)
+    {
+        if (_isDestroyed || comboDisplay == null) return;
+        
+        if (string.IsNullOrEmpty(currentCombo))
+        {
+            comboDisplay.text = "Combo: -";
+            comboDisplay.color = Color.gray;
+        }
+        else
+        {
+            comboDisplay.text = $"Combo: {currentCombo}";
+            comboDisplay.color = Color.yellow;
+        }
+    }
+    
+    private void OnSpellFound(SpellAsset spell, string usedLetters)
     {
         if (_isDestroyed || statusDisplay == null) return;
         
-        statusDisplay.text = $"Spell Cast: {spellName}!";
+        statusDisplay.text = $"Spell: {spell.SpellName}!";
         statusDisplay.color = Color.green;
+        
+        // Add to spell history
+        AddToSpellHistory(spell.SpellName, usedLetters);
         
         CancelInvoke(nameof(ResetStatusDisplay));
         Invoke(nameof(ResetStatusDisplay), 2f);
+    }
+    
+    private void OnSpellCast(SpellAsset spell, List<Card> sourceCards)
+    {
+        if (_isDestroyed) return;
+        
+        Debug.Log($"[CardPlayHandler] Spell '{spell.SpellName}' cast with {sourceCards.Count} cards");
+    }
+    
+    private void OnSpellEffectTriggered(SpellEffect effect)
+    {
+        if (_isDestroyed) return;
+        
+        Debug.Log($"[CardPlayHandler] Spell effect triggered: {effect.effectName} ({effect.effectType})");
+        
+        if (statusDisplay != null)
+        {
+            statusDisplay.text = $"Effect: {effect.effectName}";
+            statusDisplay.color = GetEffectColor(effect.effectType);
+            
+            CancelInvoke(nameof(ResetStatusDisplay));
+            Invoke(nameof(ResetStatusDisplay), 1f);
+        }
+    }
+    
+    private Color GetEffectColor(SpellEffectType effectType)
+    {
+        return effectType switch
+        {
+            SpellEffectType.Damage => Color.red,
+            SpellEffectType.Heal => Color.green,
+            SpellEffectType.Buff => Color.blue,
+            SpellEffectType.Debuff => Color.magenta,
+            SpellEffectType.Shield => Color.cyan,
+            _ => Color.white
+        };
     }
     
     private void OnSpellNotFound(string attemptedLetters)
@@ -191,6 +305,62 @@ public class CardPlayHandler : MonoBehaviour
         Invoke(nameof(ResetStatusDisplay), 1.5f);
     }
     
+    private void AddToPlayHistory(string letters)
+    {
+        string timestamp = System.DateTime.Now.ToString("HH:mm:ss");
+        string entry = $"[{timestamp}] Played: {letters}";
+        
+        _playHistory.Enqueue(entry);
+        if (_playHistory.Count > maxHistoryEntries)
+            _playHistory.Dequeue();
+            
+        UpdateHistoryDisplay();
+    }
+    
+    private void AddToSpellHistory(string spellName, string letters)
+    {
+        string timestamp = System.DateTime.Now.ToString("HH:mm:ss");
+        string entry = $"[{timestamp}] Cast: {spellName} ({letters})";
+        
+        _spellHistory.Enqueue(entry);
+        if (_spellHistory.Count > maxHistoryEntries)
+            _spellHistory.Dequeue();
+            
+        UpdateHistoryDisplay();
+    }
+    
+    private void UpdateHistoryDisplay()
+    {
+        if (_isDestroyed || historyDisplay == null) return;
+        
+        var history = new System.Text.StringBuilder();
+        
+        // Add spell history (most recent first)
+        if (_spellHistory.Count > 0)
+        {
+            history.AppendLine("SPELLS CAST:");
+            var spells = _spellHistory.ToArray();
+            for (int i = spells.Length - 1; i >= 0; i--)
+            {
+                history.AppendLine(spells[i]);
+            }
+            history.AppendLine();
+        }
+        
+        // Add play history (most recent first)
+        if (_playHistory.Count > 0)
+        {
+            history.AppendLine("CARDS PLAYED:");
+            var plays = _playHistory.ToArray();
+            for (int i = plays.Length - 1; i >= 0; i--)
+            {
+                history.AppendLine(plays[i]);
+            }
+        }
+        
+        historyDisplay.text = history.Length > 0 ? history.ToString().TrimEnd() : "No history yet";
+    }
+    
     private void ResetStatusDisplay()
     {
         if (_isDestroyed || statusDisplay == null) return;
@@ -201,4 +371,12 @@ public class CardPlayHandler : MonoBehaviour
     
     public bool HasSelectedCards => _selectedCards.Count > 0;
     public int SelectedCardCount => _selectedCards.Count;
+    
+    // History access
+    public void ClearHistory()
+    {
+        _playHistory.Clear();
+        _spellHistory.Clear();
+        UpdateHistoryDisplay();
+    }
 }
