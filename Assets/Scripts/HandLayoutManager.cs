@@ -2,41 +2,34 @@ using UnityEngine;
 using System.Collections.Generic;
 using System.Collections;
 
-public class HandLayoutManager : MonoBehaviour
+public class HandLayoutManager : SingletonBehaviour<HandLayoutManager>
 {
-    public static HandLayoutManager Instance { get; private set; }
-    
     [Header("Layout Settings")]
     [SerializeField] private float cardSpacing = 120f;
     [SerializeField] private float arcHeight = 50f;
     [SerializeField] private float maxRotationAngle = 15f;
     
-    [Header("Animation")]
-    [SerializeField] private float animationDuration = 0.5f;
-    [SerializeField] private AnimationCurve animationCurve = AnimationCurve.EaseInOut(0, 0, 1, 1);
-    
     [Header("Scale Settings")]
-    [SerializeField] private Vector3 baseCardScale = Vector3.one;
-    [SerializeField] private bool enableDynamicScaling = false;
-    [SerializeField] private float minScaleMultiplier = 0.8f;
-    [SerializeField] private int maxCardsForFullScale = 5;
+    [SerializeField] private float handScaleMultiplier = 0.75f;
+    [SerializeField] private bool enableDynamicScaling = true;
+    [SerializeField] private float minScaleReduction = 0.8f;
+    [SerializeField] private int maxCardsForFullScale = 7;
+    
+    [Header("Animation")]
+    [SerializeField] private float animationDuration = 0.3f;
+    [SerializeField] private AnimationCurve animationCurve = AnimationCurve.EaseInOut(0, 0, 1, 1);
     
     private RectTransform rectTransform;
     private bool isAnimating = false;
-    private List<Card> cachedHandCards = new List<Card>();
-    private HashSet<DragObject> draggingCards = new HashSet<DragObject>();
+    private List<Card> cachedHandCards = new();
+    private readonly Dictionary<Card, Vector3> targetPositions = new();
     
-    private void Awake()
+    // Cached component references for performance
+    private readonly Dictionary<Card, RectTransform> cardRectTransforms = new();
+    
+    protected override void OnAwakeInitialize()
     {
-        if (Instance == null)
-        {
-            Instance = this;
-            rectTransform = GetComponent<RectTransform>();
-        }
-        else
-        {
-            Destroy(gameObject);
-        }
+        rectTransform = GetComponent<RectTransform>();
     }
     
     public void UpdateLayout()
@@ -47,17 +40,10 @@ public class HandLayoutManager : MonoBehaviour
         
         if (HasHandChanged(handCards))
         {
-            cachedHandCards = new List<Card>(handCards);
-            StartCoroutine(AnimateCardsToPositions(handCards));
+            cachedHandCards.Clear();
+            cachedHandCards.AddRange(handCards);
+            StartCoroutine(AnimateLayout());
         }
-    }
-    
-    public void SetCardDragging(DragObject dragObject, bool isDragging)
-    {
-        if (isDragging)
-            draggingCards.Add(dragObject);
-        else
-            draggingCards.Remove(dragObject);
     }
     
     private bool HasHandChanged(List<Card> newHandCards)
@@ -73,22 +59,21 @@ public class HandLayoutManager : MonoBehaviour
         return false;
     }
     
-    private IEnumerator AnimateCardsToPositions(List<Card> handCards)
+    private IEnumerator AnimateLayout()
     {
-        if (handCards.Count == 0) yield break;
+        if (cachedHandCards.Count == 0) yield break;
         
         isAnimating = true;
         
-        var layoutData = CalculateLayoutData(handCards);
-        
+        var layoutData = CalculateLayout();
         float elapsed = 0f;
+        
         while (elapsed < animationDuration)
         {
             elapsed += Time.deltaTime;
             float progress = animationCurve.Evaluate(elapsed / animationDuration);
             
             ApplyLayoutProgress(layoutData, progress);
-            
             yield return null;
         }
         
@@ -96,104 +81,110 @@ public class HandLayoutManager : MonoBehaviour
         isAnimating = false;
     }
     
-    private struct CardLayoutData
+    private struct CardLayout
     {
-        public Card card;
         public RectTransform rectTransform;
-        public Vector3 startPosition;
-        public Quaternion startRotation;
+        public Vector3 startPos;
+        public Quaternion startRot;
         public Vector3 startScale;
-        public Vector3 targetPosition;
-        public Quaternion targetRotation;
+        public Vector3 targetPos;
+        public Quaternion targetRot;
         public Vector3 targetScale;
-        public bool isDragging;
         
-        public CardLayoutData(Card card, RectTransform rect, bool dragging)
+        public CardLayout(RectTransform rt, Vector3 tPos, Quaternion tRot, Vector3 tScale)
         {
-            this.card = card;
-            this.rectTransform = rect;
-            this.startPosition = rect.localPosition;
-            this.startRotation = rect.localRotation;
-            this.startScale = rect.localScale;
-            this.targetPosition = Vector3.zero;
-            this.targetRotation = Quaternion.identity;
-            this.targetScale = Vector3.one;
-            this.isDragging = dragging;
+            rectTransform = rt;
+            startPos = rt.localPosition;
+            startRot = rt.localRotation;
+            startScale = rt.localScale;
+            targetPos = tPos;
+            targetRot = tRot;
+            targetScale = tScale;
         }
     }
     
-    private List<CardLayoutData> CalculateLayoutData(List<Card> handCards)
+    private List<CardLayout> CalculateLayout()
     {
-        var layoutData = new List<CardLayoutData>();
-        int cardCount = handCards.Count;
+        var layouts = new List<CardLayout>(cachedHandCards.Count);
+        int cardCount = cachedHandCards.Count;
+        float handScale = GetHandScale();
         
-        Vector3 calculatedScale = CalculateCardScale(cardCount);
         float totalWidth = (cardCount - 1) * cardSpacing;
         float startX = -totalWidth * 0.5f;
         
+        targetPositions.Clear();
+        
         for (int i = 0; i < cardCount; i++)
         {
-            Card card = handCards[i];
+            var card = cachedHandCards[i];
             if (card == null) continue;
             
-            RectTransform cardRect = card.GetComponent<RectTransform>();
-            if (cardRect == null) continue;
+            var rectTransform = GetCachedRectTransform(card);
+            if (rectTransform == null || rectTransform.parent != this.rectTransform) continue;
             
-            DragObject dragObj = card.GetComponent<DragObject>();
-            bool isDragging = dragObj != null && draggingCards.Contains(dragObj);
-            
-            var data = new CardLayoutData(card, cardRect, isDragging);
-            
-            // Calculate target position
+            // Calculate arc position
             float normalizedPos = cardCount > 1 ? (float)i / (cardCount - 1) : 0.5f;
             float xPos = startX + (i * cardSpacing);
             float yPos = Mathf.Sin(normalizedPos * Mathf.PI) * arcHeight;
-            data.targetPosition = new Vector3(xPos, yPos, 0);
+            var targetPos = new Vector3(xPos, yPos, 0);
             
-            // Calculate target rotation
-            float rotation = (normalizedPos - 0.5f) * maxRotationAngle * 2f;
-            data.targetRotation = Quaternion.Euler(0, 0, rotation);
+            // Calculate rotation
+            float rotationAngle = (normalizedPos - 0.5f) * maxRotationAngle * 2f;
+            var targetRot = Quaternion.Euler(0, 0, rotationAngle);
             
-            data.targetScale = calculatedScale;
+            // Calculate scale
+            Vector3 targetScale = Vector3.one * handScale;
             
-            layoutData.Add(data);
+            layouts.Add(new CardLayout(rectTransform, targetPos, targetRot, targetScale));
+            targetPositions[card] = targetPos;
         }
         
-        return layoutData;
+        return layouts;
     }
     
-    private Vector3 CalculateCardScale(int cardCount)
+    private float GetHandScale()
     {
-        if (!enableDynamicScaling || cardCount <= maxCardsForFullScale)
-            return baseCardScale;
+        if (!enableDynamicScaling) return handScaleMultiplier;
         
-        float scaleMultiplier = Mathf.Lerp(1f, minScaleMultiplier, 
-            (float)(cardCount - maxCardsForFullScale) / (10 - maxCardsForFullScale));
+        int cardCount = cachedHandCards.Count;
+        if (cardCount <= maxCardsForFullScale) return handScaleMultiplier;
         
-        return baseCardScale * scaleMultiplier;
+        float reductionFactor = Mathf.InverseLerp(maxCardsForFullScale, 12, cardCount);
+        return handScaleMultiplier * Mathf.Lerp(1f, minScaleReduction, reductionFactor);
     }
     
-    private void ApplyLayoutProgress(List<CardLayoutData> layoutData, float progress)
+    private RectTransform GetCachedRectTransform(Card card)
     {
-        foreach (var data in layoutData)
+        if (!cardRectTransforms.TryGetValue(card, out var rectTransform) || rectTransform == null)
         {
-            if (data.rectTransform == null || data.isDragging) continue;
+            rectTransform = card.GetComponent<RectTransform>();
+            if (rectTransform != null)
+                cardRectTransforms[card] = rectTransform;
+        }
+        return rectTransform;
+    }
+    
+    private void ApplyLayoutProgress(List<CardLayout> layouts, float progress)
+    {
+        foreach (var layout in layouts)
+        {
+            if (layout.rectTransform == null) continue;
             
-            data.rectTransform.localPosition = Vector3.Lerp(data.startPosition, data.targetPosition, progress);
-            data.rectTransform.localRotation = Quaternion.Lerp(data.startRotation, data.targetRotation, progress);
-            data.rectTransform.localScale = Vector3.Lerp(data.startScale, data.targetScale, progress);
+            layout.rectTransform.localPosition = Vector3.Lerp(layout.startPos, layout.targetPos, progress);
+            layout.rectTransform.localRotation = Quaternion.Lerp(layout.startRot, layout.targetRot, progress);
+            layout.rectTransform.localScale = Vector3.Lerp(layout.startScale, layout.targetScale, progress);
         }
     }
     
-    private void ApplyFinalLayout(List<CardLayoutData> layoutData)
+    private void ApplyFinalLayout(List<CardLayout> layouts)
     {
-        foreach (var data in layoutData)
+        foreach (var layout in layouts)
         {
-            if (data.rectTransform == null || data.isDragging) continue;
+            if (layout.rectTransform == null) continue;
             
-            data.rectTransform.localPosition = data.targetPosition;
-            data.rectTransform.localRotation = data.targetRotation;
-            data.rectTransform.localScale = data.targetScale;
+            layout.rectTransform.localPosition = layout.targetPos;
+            layout.rectTransform.localRotation = layout.targetRot;
+            layout.rectTransform.localScale = layout.targetScale;
         }
     }
     
@@ -206,33 +197,38 @@ public class HandLayoutManager : MonoBehaviour
         }
         
         var handCards = CardManager.Instance?.GetHandCards() ?? new List<Card>();
-        if (handCards.Count == 0) return;
+        cachedHandCards.Clear();
+        cachedHandCards.AddRange(handCards);
         
-        var layoutData = CalculateLayoutData(handCards);
-        ApplyFinalLayout(layoutData);
-        
-        cachedHandCards = new List<Card>(handCards);
+        var layouts = CalculateLayout();
+        ApplyFinalLayout(layouts);
     }
     
-    // Public properties
+    public Vector3 GetTargetPositionForCard(Card card)
+    {
+        return targetPositions.TryGetValue(card, out var pos) ? pos : Vector3.zero;
+    }
+    
+    // Cleanup cached references when cards are removed
+    public void CleanupCardReference(Card card)
+    {
+        cardRectTransforms.Remove(card);
+        targetPositions.Remove(card);
+    }
+    
+    // Properties
     public float CardSpacing 
     { 
         get => cardSpacing; 
         set { cardSpacing = value; UpdateLayout(); }
     }
     
-    public Vector3 BaseCardScale 
+    public float HandScaleMultiplier 
     { 
-        get => baseCardScale; 
-        set { baseCardScale = value; UpdateLayout(); }
+        get => handScaleMultiplier; 
+        set { handScaleMultiplier = value; UpdateLayout(); }
     }
     
-    public bool DynamicScaling 
-    { 
-        get => enableDynamicScaling; 
-        set { enableDynamicScaling = value; UpdateLayout(); }
-    }
-    
-    public int GetHandSize() => cachedHandCards.Count;
     public bool IsAnimating => isAnimating;
+    public int HandSize => cachedHandCards.Count;
 }

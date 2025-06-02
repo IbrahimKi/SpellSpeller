@@ -613,16 +613,7 @@ public partial class @PlayerControls: IInputActionCollection2, IDisposable
                     ""id"": ""52d781b4-ab90-4a6d-b302-794b561a014e"",
                     ""expectedControlType"": """",
                     ""processors"": """",
-                    ""interactions"": ""Press"",
-                    ""initialStateCheck"": false
-                },
-                {
-                    ""name"": ""MouseRelease"",
-                    ""type"": ""Button"",
-                    ""id"": ""5f0be8e1-7ac9-4a25-bfa0-bd37af91ec2e"",
-                    ""expectedControlType"": """",
-                    ""processors"": """",
-                    ""interactions"": """",
+                    ""interactions"": ""Press(behavior=2)"",
                     ""initialStateCheck"": false
                 }
             ],
@@ -631,21 +622,10 @@ public partial class @PlayerControls: IInputActionCollection2, IDisposable
                     ""name"": """",
                     ""id"": ""9fbc2033-8471-4059-8bc8-19c763e8cdd4"",
                     ""path"": ""<Mouse>/leftButton"",
-                    ""interactions"": ""Press"",
+                    ""interactions"": ""Press(behavior=2)"",
                     ""processors"": """",
                     ""groups"": """",
                     ""action"": ""MousePress"",
-                    ""isComposite"": false,
-                    ""isPartOfComposite"": false
-                },
-                {
-                    ""name"": """",
-                    ""id"": ""7d2f10f0-9ff7-42fa-a4b6-59b2b6f0d58e"",
-                    ""path"": ""<Mouse>/leftButton"",
-                    ""interactions"": """",
-                    ""processors"": """",
-                    ""groups"": """",
-                    ""action"": ""MouseRelease"",
                     ""isComposite"": false,
                     ""isPartOfComposite"": false
                 }
@@ -669,7 +649,6 @@ public partial class @PlayerControls: IInputActionCollection2, IDisposable
         // Player
         m_Player = asset.FindActionMap("Player", throwIfNotFound: true);
         m_Player_MousePress = m_Player.FindAction("MousePress", throwIfNotFound: true);
-        m_Player_MouseRelease = m_Player.FindAction("MouseRelease", throwIfNotFound: true);
     }
 
     ~@PlayerControls()
@@ -947,7 +926,6 @@ public partial class @PlayerControls: IInputActionCollection2, IDisposable
     private readonly InputActionMap m_Player;
     private List<IPlayerActions> m_PlayerActionsCallbackInterfaces = new List<IPlayerActions>();
     private readonly InputAction m_Player_MousePress;
-    private readonly InputAction m_Player_MouseRelease;
     /// <summary>
     /// Provides access to input actions defined in input action map "Player".
     /// </summary>
@@ -963,10 +941,6 @@ public partial class @PlayerControls: IInputActionCollection2, IDisposable
         /// Provides access to the underlying input action "Player/MousePress".
         /// </summary>
         public InputAction @MousePress => m_Wrapper.m_Player_MousePress;
-        /// <summary>
-        /// Provides access to the underlying input action "Player/MouseRelease".
-        /// </summary>
-        public InputAction @MouseRelease => m_Wrapper.m_Player_MouseRelease;
         /// <summary>
         /// Provides access to the underlying input action map instance.
         /// </summary>
@@ -996,9 +970,6 @@ public partial class @PlayerControls: IInputActionCollection2, IDisposable
             @MousePress.started += instance.OnMousePress;
             @MousePress.performed += instance.OnMousePress;
             @MousePress.canceled += instance.OnMousePress;
-            @MouseRelease.started += instance.OnMouseRelease;
-            @MouseRelease.performed += instance.OnMouseRelease;
-            @MouseRelease.canceled += instance.OnMouseRelease;
         }
 
         /// <summary>
@@ -1013,9 +984,6 @@ public partial class @PlayerControls: IInputActionCollection2, IDisposable
             @MousePress.started -= instance.OnMousePress;
             @MousePress.performed -= instance.OnMousePress;
             @MousePress.canceled -= instance.OnMousePress;
-            @MouseRelease.started -= instance.OnMouseRelease;
-            @MouseRelease.performed -= instance.OnMouseRelease;
-            @MouseRelease.canceled -= instance.OnMouseRelease;
         }
 
         /// <summary>
@@ -1141,12 +1109,5 @@ public partial class @PlayerControls: IInputActionCollection2, IDisposable
         /// <seealso cref="UnityEngine.InputSystem.InputAction.performed" />
         /// <seealso cref="UnityEngine.InputSystem.InputAction.canceled" />
         void OnMousePress(InputAction.CallbackContext context);
-        /// <summary>
-        /// Method invoked when associated input action "MouseRelease" is either <see cref="UnityEngine.InputSystem.InputAction.started" />, <see cref="UnityEngine.InputSystem.InputAction.performed" /> or <see cref="UnityEngine.InputSystem.InputAction.canceled" />.
-        /// </summary>
-        /// <seealso cref="UnityEngine.InputSystem.InputAction.started" />
-        /// <seealso cref="UnityEngine.InputSystem.InputAction.performed" />
-        /// <seealso cref="UnityEngine.InputSystem.InputAction.canceled" />
-        void OnMouseRelease(InputAction.CallbackContext context);
     }
 }

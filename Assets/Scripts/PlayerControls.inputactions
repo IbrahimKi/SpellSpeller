@@ -527,16 +527,7 @@
                     "id": "52d781b4-ab90-4a6d-b302-794b561a014e",
                     "expectedControlType": "",
                     "processors": "",
-                    "interactions": "Press",
-                    "initialStateCheck": false
-                },
-                {
-                    "name": "MouseRelease",
-                    "type": "Button",
-                    "id": "5f0be8e1-7ac9-4a25-bfa0-bd37af91ec2e",
-                    "expectedControlType": "",
-                    "processors": "",
-                    "interactions": "",
+                    "interactions": "Press(behavior=2)",
                     "initialStateCheck": false
                 }
             ],
@@ -545,21 +536,10 @@
                     "name": "",
                     "id": "9fbc2033-8471-4059-8bc8-19c763e8cdd4",
                     "path": "<Mouse>/leftButton",
-                    "interactions": "Press",
+                    "interactions": "Press(behavior=2)",
                     "processors": "",
                     "groups": "",
                     "action": "MousePress",
-                    "isComposite": false,
-                    "isPartOfComposite": false
-                },
-                {
-                    "name": "",
-                    "id": "7d2f10f0-9ff7-42fa-a4b6-59b2b6f0d58e",
-                    "path": "<Mouse>/leftButton",
-                    "interactions": "",
-                    "processors": "",
-                    "groups": "",
-                    "action": "MouseRelease",
                     "isComposite": false,
                     "isPartOfComposite": false
                 }

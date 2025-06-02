@@ -184,7 +184,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.17345983, y: 0.32849437}
   m_AnchorMax: {x: 0.82600003, y: 0.76900005}
-  m_AnchoredPosition: {x: 0.4999962, y: 0.0000038146973}
+  m_AnchoredPosition: {x: 0.49999237, y: 0.0000038146973}
   m_SizeDelta: {x: -2.2003994, y: 1.6378994}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!222 &6541880592582225883
@@ -242,7 +242,7 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 68.75
+  m_fontSize: 71.2
   m_fontSizeBase: 36
   m_fontWeight: 400
   m_enableAutoSizing: 1
@@ -299,7 +299,6 @@ GameObject:
   - component: {fileID: 2824690273073437493}
   - component: {fileID: 5790769241806564121}
   - component: {fileID: 1845068507205391882}
-  - component: {fileID: 4488252686085430523}
   - component: {fileID: 6709828844614811440}
   m_Layer: 6
   m_Name: PF_Card
@@ -361,6 +360,12 @@ MonoBehaviour:
   normalColor: {r: 1, g: 1, b: 1, a: 1}
   selectedColor: {r: 1, g: 0.92156863, b: 0.015686275, a: 1}
   hoverColor: {r: 0.5, g: 0.5, b: 0.5, a: 1}
+  disabledColor: {r: 1, g: 1, b: 1, a: 0.5}
+  cardNameText: {fileID: 6606596521047070508}
+  descriptionText: {fileID: 6818972708747099594}
+  letterValuesText: {fileID: 1425231329787308729}
+  tierText: {fileID: 6745450362370731897}
+  cardImage: {fileID: 7710080438283891858}
 --- !u!223 &5790769241806564121
 Canvas:
   m_ObjectHideFlags: 0
@@ -401,21 +406,6 @@ MonoBehaviour:
   m_BlockingMask:
     serializedVersion: 2
     m_Bits: 4294967295
---- !u!114 &4488252686085430523
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 5103030169791602621}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 3ba4bfc609d0ad14b93614c7c7a6d5f8, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  isDraggable: 1
-  autoDetectCards: 1
-  attachedCards: []
 --- !u!225 &6709828844614811440
 CanvasGroup:
   m_ObjectHideFlags: 0
@@ -595,7 +585,7 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 10.8
+  m_fontSize: 11.25
   m_fontSizeBase: 36
   m_fontWeight: 400
   m_enableAutoSizing: 1
@@ -731,7 +721,7 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 17.7
+  m_fontSize: 18.3
   m_fontSizeBase: 36
   m_fontWeight: 400
   m_enableAutoSizing: 1
@@ -867,7 +857,7 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 16.3
+  m_fontSize: 16.9
   m_fontSizeBase: 36
   m_fontWeight: 400
   m_enableAutoSizing: 1

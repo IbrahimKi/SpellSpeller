@@ -2,10 +2,8 @@ using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 
-public class CardManager : MonoBehaviour
+public class CardManager : SingletonBehaviour<CardManager>
 {
-    public static CardManager Instance { get; private set; }
-    
     [Header("Card Database")]
     [SerializeField] private List<CardData> allCardData = new List<CardData>();
     
@@ -23,7 +21,7 @@ public class CardManager : MonoBehaviour
     [SerializeField] private int maxSelectedCards = 1;
     [SerializeField] private bool allowMultiSelect = false;
     
-    // OPTIMIZED: Simplified data structures
+    // Simplified data structures
     private Dictionary<int, Card> _allCards = new Dictionary<int, Card>();
     private Dictionary<Card, int> _cardToId = new Dictionary<Card, int>();
     private List<Card> _handCards = new List<Card>();
@@ -31,7 +29,7 @@ public class CardManager : MonoBehaviour
     private Queue<GameObject> _cardPool = new Queue<GameObject>();
     private int _nextCardId = 0;
     
-    // OPTIMIZED: Reference to HandLayoutManager (removes duplication)
+    // Reference to HandLayoutManager
     private HandLayoutManager _handLayoutManager;
     
     // Events
@@ -40,19 +38,10 @@ public class CardManager : MonoBehaviour
     public static event System.Action<List<Card>> OnHandUpdated;
     public static event System.Action<List<Card>> OnSelectionChanged;
     
-    private void Awake()
+    protected override void OnAwakeInitialize()
     {
-        if (Instance == null)
-        {
-            Instance = this;
-            DontDestroyOnLoad(gameObject);
-            InitializePool();
-            InitializeHandLayout();
-        }
-        else
-        {
-            Destroy(gameObject);
-        }
+        InitializePool();
+        InitializeHandLayout();
     }
     
     private void OnEnable()
@@ -82,7 +71,6 @@ public class CardManager : MonoBehaviour
         }
     }
     
-    // OPTIMIZED: Initialize HandLayoutManager reference
     private void InitializeHandLayout()
     {
         if (handContainer != null)
@@ -102,17 +90,17 @@ public class CardManager : MonoBehaviour
         GameObject cardObject = GetCardObject();
         if (cardObject == null) return null;
         
-        // FIXED: Proper transform setup without conflicts
+        // Setup transform
         Transform targetParent = parent ?? defaultSpawnParent ?? transform;
-        cardObject.transform.SetParent(targetParent, false); // worldPositionStays = false
+        cardObject.transform.SetParent(targetParent, false);
         
-        // FIXED: Reset transform properly
+        // Reset transform properly
         var rectTransform = cardObject.GetComponent<RectTransform>();
         if (rectTransform != null)
         {
             rectTransform.localPosition = Vector3.zero;
             rectTransform.localRotation = Quaternion.identity;
-            rectTransform.localScale = Vector3.one; // FIXED: Always start with proper scale
+            rectTransform.localScale = Vector3.one;
         }
         else
         {
@@ -156,13 +144,11 @@ public class CardManager : MonoBehaviour
         return cardPrefab != null ? Instantiate(cardPrefab) : null;
     }
     
-    // OPTIMIZED: Separate internal method to avoid duplicate layout updates
     private void AddCardToHandInternal(Card card)
     {
         _handCards.Add(card);
-        card.transform.SetParent(handContainer, false); // FIXED: worldPositionStays = false
+        card.transform.SetParent(handContainer, false);
         
-        // FIXED: Don't manually set position here - let HandLayoutManager handle it
         UpdateHandLayout();
         OnHandUpdated?.Invoke(new List<Card>(_handCards));
     }
@@ -199,7 +185,6 @@ public class CardManager : MonoBehaviour
         OnCardDestroyed?.Invoke(card);
     }
     
-    // OPTIMIZED: Centralized pool return method
     private void ReturnToPool(GameObject cardObject)
     {
         cardObject.transform.SetParent(transform, false);
@@ -207,7 +192,6 @@ public class CardManager : MonoBehaviour
         _cardPool.Enqueue(cardObject);
     }
     
-    // OPTIMIZED: Proper cleanup method
     private void CleanupCardForPool(Card card)
     {
         if (card == null) return;
@@ -215,7 +199,7 @@ public class CardManager : MonoBehaviour
         card.ClearEventSubscriptions();
         card.ResetCardState();
         
-        // FIXED: Reset transform properly
+        // Reset transform properly
         var rectTransform = card.GetComponent<RectTransform>();
         if (rectTransform != null)
         {
@@ -229,11 +213,6 @@ public class CardManager : MonoBehaviour
             card.transform.localRotation = Quaternion.identity;
             card.transform.localScale = Vector3.one;
         }
-    }
-    
-    private int GetCardId(Card card)
-    {
-        return _cardToId.TryGetValue(card, out int id) ? id : -1;
     }
     
     private void HandleCardSelected(Card card)
@@ -277,7 +256,6 @@ public class CardManager : MonoBehaviour
         OnSelectionChanged?.Invoke(new List<Card>(_selectedCards));
     }
     
-    // OPTIMIZED: Delegate to HandLayoutManager instead of duplicate logic
     private void UpdateHandLayout()
     {
         if (_handLayoutManager != null)

@@ -1,15 +1,12 @@
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
-using System;
 using UnityEngine.EventSystems;
 
 public enum CardState
 {
     Idle,
     Selected,
-    Dragging,
-    Playing,
     Disabled
 }
 
@@ -25,27 +22,91 @@ public class Card : MonoBehaviour, IPointerClickHandler, IPointerEnterHandler, I
     [SerializeField] private Color normalColor = Color.white;
     [SerializeField] private Color selectedColor = Color.yellow;
     [SerializeField] private Color hoverColor = Color.gray;
+    [SerializeField] private Color disabledColor = new Color(1f, 1f, 1f, 0.5f);
+    
+    [Header("UI Elements")]
+    [SerializeField] private TextMeshProUGUI cardNameText;
+    [SerializeField] private TextMeshProUGUI descriptionText;
+    [SerializeField] private TextMeshProUGUI letterValuesText;
+    [SerializeField] private TextMeshProUGUI tierText;
+    [SerializeField] private Image cardImage;
     
     // Events
-    public static event System.Action<Card> OnCardSelected;
-    public static event System.Action<Card> OnCardDeselected;
-    public static event System.Action<Card> OnCardHovered;
-    public static event System.Action<Card> OnCardUnhovered;
+    public static System.Action<Card> OnCardSelected;
+    public static System.Action<Card> OnCardDeselected;
+    public static System.Action<Card> OnCardHovered;
+    public static System.Action<Card> OnCardUnhovered;
+    
+    // Cached components for performance
+    private RectTransform rectTransform;
+    private CanvasGroup canvasGroup;
+    
+    // Current state tracking
+    private CardState currentState = CardState.Idle;
+    private bool isHovered = false;
     
     // Properties
     public CardData CardData => cardData;
     public bool IsSelected => isSelected;
     public bool IsInteractable => isInteractable;
+    public CardState CurrentState => currentState;
+    public RectTransform RectTransform => rectTransform;
     
     private void Awake()
     {
+        CacheComponents();
+    }
+    
+    private void CacheComponents()
+    {
+        rectTransform = GetComponent<RectTransform>();
+        
         if (cardBackground == null)
             cardBackground = GetComponent<Image>();
+        
+        // Cache CanvasGroup for alpha control
+        canvasGroup = GetComponent<CanvasGroup>();
+        if (canvasGroup == null)
+            canvasGroup = gameObject.AddComponent<CanvasGroup>();
+            
+        // Auto-find UI components if not assigned
+        cardNameText ??= GetComponentInChildren<TextMeshProUGUI>(true);
+        
+        // Find specific components by name for better organization
+        var textComponents = GetComponentsInChildren<TextMeshProUGUI>(true);
+        foreach (var text in textComponents)
+        {
+            switch (text.name.ToLowerInvariant())
+            {
+                case "cardname" when cardNameText == null:
+                    cardNameText = text;
+                    break;
+                case "description" when descriptionText == null:
+                    descriptionText = text;
+                    break;
+                case "lettervalues" when letterValuesText == null:
+                    letterValuesText = text;
+                    break;
+                case "tier" when tierText == null:
+                    tierText = text;
+                    break;
+            }
+        }
+        
+        cardImage ??= GetComponentInChildren<Image>(true);
+        if (cardImage == cardBackground) cardImage = null; // Avoid using background as card image
     }
     
     private void Start()
     {
         UpdateVisuals();
+    }
+    
+    private void OnDestroy()
+    {
+        // Notify layout manager to clean up references
+        if (HandLayoutManager.HasInstance)
+            HandLayoutManager.Instance.CleanupCardReference(this);
     }
     
     public void SetCardData(CardData data)
@@ -56,12 +117,30 @@ public class Card : MonoBehaviour, IPointerClickHandler, IPointerEnterHandler, I
     
     private void UpdateCardDisplay()
     {
-        // Hier würden Sie die Karteninformationen aktualisieren
-        // z.B. Text, Bilder, etc. basierend auf cardData
-        if (cardData != null)
+        if (cardData == null) return;
+        
+        // Update text fields
+        if (cardNameText != null) cardNameText.text = cardData.cardName;
+        if (descriptionText != null) descriptionText.text = cardData.description;
+        if (letterValuesText != null) letterValuesText.text = cardData.letterValues;
+        if (tierText != null) tierText.text = cardData.tier.ToString();
+        
+        // Update card image
+        if (cardImage != null)
         {
-            // Beispiel: gameObject.name = cardData.cardName;
+            if (cardData.cardImage != null)
+            {
+                cardImage.sprite = cardData.cardImage;
+                cardImage.gameObject.SetActive(true);
+            }
+            else
+            {
+                cardImage.gameObject.SetActive(false);
+            }
         }
+        
+        // Update object name for debugging
+        gameObject.name = $"Card_{cardData.cardName}";
     }
     
     public void OnPointerClick(PointerEventData eventData)
@@ -78,9 +157,8 @@ public class Card : MonoBehaviour, IPointerClickHandler, IPointerEnterHandler, I
     {
         if (!isInteractable) return;
         
-        if (cardBackground != null && !isSelected)
-            cardBackground.color = hoverColor;
-            
+        isHovered = true;
+        UpdateVisuals();
         OnCardHovered?.Invoke(this);
     }
     
@@ -88,6 +166,7 @@ public class Card : MonoBehaviour, IPointerClickHandler, IPointerEnterHandler, I
     {
         if (!isInteractable) return;
         
+        isHovered = false;
         UpdateVisuals();
         OnCardUnhovered?.Invoke(this);
     }
@@ -107,6 +186,7 @@ public class Card : MonoBehaviour, IPointerClickHandler, IPointerEnterHandler, I
         if (!isInteractable || isSelected) return;
         
         isSelected = true;
+        currentState = CardState.Selected;
         UpdateVisuals();
         OnCardSelected?.Invoke(this);
     }
@@ -116,6 +196,7 @@ public class Card : MonoBehaviour, IPointerClickHandler, IPointerEnterHandler, I
         if (!isSelected) return;
         
         isSelected = false;
+        currentState = CardState.Idle;
         UpdateVisuals();
         OnCardDeselected?.Invoke(this);
     }
@@ -123,6 +204,7 @@ public class Card : MonoBehaviour, IPointerClickHandler, IPointerEnterHandler, I
     public void ForceDeselect()
     {
         isSelected = false;
+        currentState = CardState.Idle;
         UpdateVisuals();
     }
     
@@ -130,51 +212,105 @@ public class Card : MonoBehaviour, IPointerClickHandler, IPointerEnterHandler, I
     {
         if (cardBackground == null) return;
         
-        if (isSelected)
-            cardBackground.color = selectedColor;
-        else
-            cardBackground.color = normalColor;
+        // Determine color based on state priority
+        Color targetColor = currentState switch
+        {
+            CardState.Disabled => disabledColor,
+            CardState.Selected => selectedColor,
+            _ when isHovered => hoverColor,
+            _ => normalColor
+        };
+        
+        cardBackground.color = targetColor;
+        
+        // Update canvas group alpha for disabled state
+        if (canvasGroup != null)
+        {
+            canvasGroup.alpha = currentState == CardState.Disabled ? 0.5f : 1f;
+        }
     }
     
     public void SetInteractable(bool interactable)
     {
-        isInteractable = interactable;
+        if (isInteractable == interactable) return;
         
-        // Optional: Visual feedback für nicht-interaktive Karten
-        if (cardBackground != null)
-        {
-            var color = cardBackground.color;
-            color.a = interactable ? 1f : 0.5f;
-            cardBackground.color = color;
-        }
+        isInteractable = interactable;
+        currentState = interactable ? CardState.Idle : CardState.Disabled;
+        UpdateVisuals();
     }
     
-    // Methoden für CardManager Pool-System
+    // Pool system support
     public void ClearEventSubscriptions()
     {
-        // Hier könnten Sie spezifische Event-Subscriptions clearen
-        // falls die Card-Instanz eigene Events abonniert hat
+        OnCardSelected = null;
+        OnCardDeselected = null;
+        OnCardHovered = null;
+        OnCardUnhovered = null;
     }
     
     public void ResetCardState()
     {
         isSelected = false;
         isInteractable = true;
+        isHovered = false;
+        currentState = CardState.Idle;
         cardData = null;
+        
+        // Clear UI elements
+        if (cardNameText != null) cardNameText.text = "";
+        if (descriptionText != null) descriptionText.text = "";
+        if (letterValuesText != null) letterValuesText.text = "";
+        if (tierText != null) tierText.text = "";
+        if (cardImage != null) cardImage.gameObject.SetActive(false);
+        
+        // Reset canvas group
+        if (canvasGroup != null)
+        {
+            canvasGroup.alpha = 1f;
+            canvasGroup.blocksRaycasts = true;
+        }
+        
+        // Reset transform
+        if (rectTransform != null)
+        {
+            rectTransform.localScale = Vector3.one;
+        }
+        
         UpdateVisuals();
-        UpdateCardDisplay();
     }
     
-    // Debug-Methoden
-    [ContextMenu("Select Card")]
-    public void DebugSelect()
+    // Utility methods
+    public bool IsInState(CardState state) => currentState == state;
+    public bool IsInAnyState(params CardState[] states)
     {
-        Select();
+        foreach (var state in states)
+        {
+            if (currentState == state) return true;
+        }
+        return false;
     }
+    
+    // Debug methods
+#if UNITY_EDITOR
+    [ContextMenu("Select Card")]
+    public void DebugSelect() => Select();
     
     [ContextMenu("Deselect Card")]
-    public void DebugDeselect()
+    public void DebugDeselect() => Deselect();
+    
+    [ContextMenu("Update Display")]
+    public void DebugUpdateDisplay() => UpdateCardDisplay();
+    
+    [ContextMenu("Toggle Interactable")]
+    public void DebugToggleInteractable() => SetInteractable(!isInteractable);
+    
+    private void OnValidate()
     {
-        Deselect();
+        if (Application.isPlaying) return;
+        
+        // Validate component references in editor
+        if (cardBackground == null)
+            cardBackground = GetComponent<Image>();
     }
+#endif
 }

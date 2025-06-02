@@ -3,10 +3,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System;
 
-public class SpellcastManager : MonoBehaviour
+public class SpellcastManager : SingletonBehaviour<SpellcastManager>
 {
-    public static SpellcastManager Instance { get; private set; }
-    
     [Header("Spell System")]
     [SerializeField] private List<SpellData> availableSpells = new List<SpellData>();
     [SerializeField] private bool allowPartialMatches = false;
@@ -25,21 +23,9 @@ public class SpellcastManager : MonoBehaviour
     public static event Action OnLetterSequenceCleared;
     public static event Action<SpellData, List<Card>> OnSpellCast;
     
-    private void Awake()
+    protected override void OnAwakeInitialize()
     {
-        if (Instance == null)
-        {
-            Instance = this;
-            DontDestroyOnLoad(gameObject);
-        }
-        else
-        {
-            Destroy(gameObject);
-        }
-    }
-    
-    private void Start()
-    {
+        // Initialization code that was previously in Start()
         RebuildSpellCache();
     }
     
