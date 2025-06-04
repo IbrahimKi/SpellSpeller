@@ -121,6 +121,19 @@ public class CombatManager : SingletonBehaviour<CombatManager>
         StartCoroutine(WaitForManagers());
     }
     
+    // Nach OnAwakeInitialize() hinzufügen:
+    private void Start()
+    {
+        // Auto-start combat nach kurzer Verzögerung
+        StartCoroutine(AutoStartCombat());
+    }
+
+    private IEnumerator AutoStartCombat()
+    {
+        yield return new WaitForSeconds(0.5f);
+        StartCombat();
+    }
+    
     private void OnEnable()
     {
         if (DeckManager.HasInstance)
@@ -234,22 +247,30 @@ public class CombatManager : SingletonBehaviour<CombatManager>
     
     private IEnumerator StartCombatSequence()
     {
-        // Wait for managers with timeout
-        float timeout = managerWaitTimeout;
+        // Warte kurz auf Manager
+        float timeout = 1f;
         while (!_managersReady && timeout > 0)
         {
+            CheckManagersReady();
+            if (_managersReady) break;
             timeout -= Time.deltaTime;
             yield return null;
         }
-        
+    
         IsInCombat = true;
-        
-        if (validateDeckOnCombatStart)
-            yield return ValidateCombatState();
-        
+    
+        // Prüfe Deck
+        if (DeckManager.HasInstance && DeckManager.Instance.DeckSize == 0)
+        {
+            Debug.Log("[CombatManager] Empty deck detected - generating test deck");
+            DeckManager.Instance.GenerateTestDeck();
+            yield return new WaitForSeconds(0.1f);
+        }
+    
+        // Ziehe Starthand
         if (autoDrawOnCombatStart && startingHandSize > 0)
             yield return DrawStartingHand();
-        
+    
         OnCombatStarted?.Invoke();
     }
     

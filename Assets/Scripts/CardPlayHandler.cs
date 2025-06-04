@@ -55,33 +55,38 @@ public class CardPlayHandler : MonoBehaviour
         SetButtonsInteractable(false);
     }
     
+    // Ersetze WaitForManagerInitialization() mit:
     private IEnumerator WaitForManagerInitialization()
     {
-        float elapsed = 0f;
-        
-        while (elapsed < managerTimeout && !_managersInitialized)
+        yield return new WaitForSeconds(0.1f); // Kurze Pause für Awake-Calls
+    
+        // Prüfe Manager-Status
+        _managersInitialized = CheckManagersReady();
+    
+        if (_managersInitialized)
         {
-            if (CheckManagersReady())
-            {
-                _managersInitialized = true;
-                OnManagersInitialized();
-                yield break;
-            }
-            
-            elapsed += Time.deltaTime;
-            yield return null;
+            OnManagersInitialized();
         }
-        
-        if (!_managersInitialized)
+        else
         {
-            Debug.LogWarning($"[CardPlayHandler] Manager initialization timeout after {managerTimeout}s");
+            Debug.LogError("[CardPlayHandler] Managers not ready! Check GameManager setup.");
+            // Trotzdem aktivieren für Debug
+            SetButtonsInteractable(true);
         }
     }
-    
+
+// Ersetze CheckManagersReady() mit:
     private bool CheckManagersReady()
     {
-        return CardManager.HasInstance && CardManager.Instance.IsInitialized &&
-               DeckManager.HasInstance && DeckManager.Instance.IsInitialized;
+        bool cardManagerReady = CardManager.HasInstance && CardManager.Instance.IsInitialized;
+        bool deckManagerReady = DeckManager.HasInstance && DeckManager.Instance.IsInitialized;
+    
+        if (!cardManagerReady)
+            Debug.LogWarning("[CardPlayHandler] CardManager not ready");
+        if (!deckManagerReady)
+            Debug.LogWarning("[CardPlayHandler] DeckManager not ready");
+        
+        return cardManagerReady && deckManagerReady;
     }
     
     private void OnManagersInitialized()

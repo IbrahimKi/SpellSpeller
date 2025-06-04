@@ -18,7 +18,6 @@ public class DeckManager : SingletonBehaviour<DeckManager>
     
     [Header("Debug Settings")]
     [SerializeField] private bool enableDebugLogs = true;
-    [SerializeField] private float managerWaitTimeout = 10f;
     
     private Queue<CardData> _deck = new Queue<CardData>();
     private List<CardData> _discardPile = new List<CardData>();
@@ -45,197 +44,75 @@ public class DeckManager : SingletonBehaviour<DeckManager>
         StartCoroutine(InitializationSequence());
     }
     
-    private void OnEnable()
-    {
-        if (CardManager.HasInstance)
-            CardManager.OnCardManagerInitialized += OnCardManagerReady;
-    }
-    
-    private void OnDisable()
-    {
-        if (CardManager.HasInstance)
-            CardManager.OnCardManagerInitialized -= OnCardManagerReady;
-    }
-    
     private IEnumerator InitializationSequence()
     {
         LogDebug("[DeckManager] Starting initialization sequence...");
         
-        // Längeres Timeout für CardManager
-        float elapsed = 0f;
-        
-        while (elapsed < managerWaitTimeout)
+        // Sofort initialisieren wenn möglich
+        if (startingDeck != null && startingDeck.Count > 0)
         {
-            if (CardManager.HasInstance && CardManager.Instance.IsInitialized)
-            {
-                LogDebug("[DeckManager] CardManager ready, initializing deck...");
-                break;
-            }
-            
-            elapsed += Time.deltaTime;
-            yield return null;
+            InitializeDeck();
+            yield break;
         }
         
-        if (elapsed >= managerWaitTimeout)
+        // Warte max 2 Sekunden auf CardManager
+        float elapsed = 0f;
+        while (elapsed < 2f && !CardManager.HasInstance)
         {
-            Debug.LogWarning("[DeckManager] CardManager timeout, proceeding with fallback...");
+            elapsed += Time.deltaTime;
+            yield return null;
         }
         
         InitializeDeck();
     }
     
-    private void OnCardManagerReady()
-    {
-        if (!IsInitialized)
-        {
-            LogDebug("[DeckManager] CardManager ready event received, initializing...");
-            InitializeDeck();
-        }
-    }
-    
     private void InitializeDeck()
     {
-        if (IsInitialized) 
-        {
-            LogDebug("[DeckManager] Already initialized, skipping...");
-            return;
-        }
+        if (IsInitialized) return;
         
-        LogDebug("[DeckManager] Starting deck initialization...");
+        List<CardData> cardsToUse = new List<CardData>();
         
-        List<CardData> cardsToUse = null;
+        // 1. StartingDeck verwenden
+        if (startingDeck != null && startingDeck.Count > 0)
+            cardsToUse.AddRange(startingDeck.Where(c => c != null));
         
-        // 1. Prüfe startingDeck zuerst
-        if (ValidateDeck(startingDeck))
-        {
-            cardsToUse = new List<CardData>(startingDeck);
-            LogDebug($"[DeckManager] Using predefined starting deck ({cardsToUse.Count} cards)");
-        }
-        // 2. Versuche CardManager Karten zu holen
-        else if (CardManager.HasInstance && CardManager.Instance.IsInitialized)
-        {
-            var availableCards = GetAvailableCards();
-            if (availableCards.Count > 0)
-            {
-                cardsToUse = GenerateDeckFromAvailable(availableCards);
-                LogDebug($"[DeckManager] Generated deck from CardManager ({cardsToUse.Count} cards)");
-            }
-            else
-            {
-                Debug.LogWarning("[DeckManager] CardManager has no available cards!");
-            }
-        }
-        // 3. Fallback Cards verwenden
-        if (cardsToUse == null && ValidateDeck(fallbackCards))
-        {
-            cardsToUse = new List<CardData>(fallbackCards);
-            Debug.LogWarning($"[DeckManager] Using fallback deck ({cardsToUse.Count} cards)");
-        }
+        // 2. Fallback Cards
+        if (cardsToUse.Count == 0 && fallbackCards != null)
+            cardsToUse.AddRange(fallbackCards.Where(c => c != null));
         
-        // 4. Letzte Option: Minimales Test-Deck
-        if (cardsToUse == null || cardsToUse.Count == 0)
-        {
-            Debug.LogError("[DeckManager] No valid cards found anywhere! Creating emergency deck...");
-            cardsToUse = CreateEmergencyDeck();
-        }
-        
+        // 3. Emergency Test Deck
         if (cardsToUse.Count == 0)
         {
-            Debug.LogError("[DeckManager] CRITICAL: No cards available at all! Check your CardData assignments!");
+            Debug.LogError("[DeckManager] No cards available! Check your CardData assignments!");
+            GenerateTestDeck();
             return;
         }
         
-        // Deck aufsetzen
         _originalDeck = cardsToUse;
         ResetDeck();
-        
         IsInitialized = true;
         OnDeckInitialized?.Invoke();
         
         Debug.Log($"[DeckManager] Initialization complete - {DeckSize} cards ready");
     }
     
-    private List<CardData> GetAvailableCards()
-    {
-        if (!CardManager.HasInstance || !CardManager.Instance.IsInitialized) 
-        {
-            LogDebug("[DeckManager] CardManager not available for card retrieval");
-            return new List<CardData>();
-        }
-        
-        // Verwende die neue öffentliche Methode statt Reflection
-        try
-        {
-            return CardManager.Instance.GetAllCardData();
-        }
-        catch (System.Exception ex)
-        {
-            Debug.LogWarning($"[DeckManager] Failed to get cards from CardManager: {ex.Message}");
-            return new List<CardData>();
-        }
-    }
-    
-    private List<CardData> GenerateDeckFromAvailable(List<CardData> availableCards)
-    {
-        var generatedDeck = new List<CardData>();
-        var cardCounts = new Dictionary<CardData, int>();
-        int attempts = 0;
-        int maxAttempts = defaultDeckSize * 3; // Erhöhte Versuche
-        
-        LogDebug($"[DeckManager] Generating deck from {availableCards.Count} available cards");
-        
-        while (generatedDeck.Count < defaultDeckSize && attempts < maxAttempts)
-        {
-            var randomCard = availableCards[Random.Range(0, availableCards.Count)];
-            if (randomCard != null)
-            {
-                int currentCount = cardCounts.GetValueOrDefault(randomCard, 0);
-                if (currentCount < maxDuplicatesPerCard)
-                {
-                    generatedDeck.Add(randomCard);
-                    cardCounts[randomCard] = currentCount + 1;
-                }
-            }
-            attempts++;
-        }
-        
-        LogDebug($"[DeckManager] Generated {generatedDeck.Count} cards from {cardCounts.Count} unique cards");
-        return generatedDeck;
-    }
-    
-    private List<CardData> CreateEmergencyDeck()
-    {
-        Debug.LogWarning("[DeckManager] Creating emergency test deck...");
-        
-        var emergencyDeck = new List<CardData>();
-        
-        // Wenn fallbackCards vorhanden sind, verwende sie
-        if (fallbackCards != null && fallbackCards.Count > 0)
-        {
-            for (int i = 0; i < defaultDeckSize; i++)
-            {
-                var card = fallbackCards[i % fallbackCards.Count];
-                if (card != null) emergencyDeck.Add(card);
-            }
-        }
-        
-        LogDebug($"[DeckManager] Emergency deck created with {emergencyDeck.Count} cards");
-        return emergencyDeck;
-    }
-    
     public void GenerateTestDeck()
     {
         Debug.Log("[DeckManager] Generating test deck...");
         
-        List<CardData> availableCards = GetAvailableCards();
+        List<CardData> availableCards = new List<CardData>();
         
-        // Fallback zu existierenden Karten wenn CardManager nicht verfügbar
+        // Versuche Karten aus CardManager zu holen
+        if (CardManager.HasInstance && CardManager.Instance.IsInitialized)
+        {
+            availableCards = CardManager.Instance.GetAllCardData();
+        }
+        
+        // Fallback zu existierenden Karten
         if (availableCards.Count == 0)
         {
             if (fallbackCards.Count > 0)
                 availableCards = fallbackCards;
-            else if (_originalDeck.Count > 0)
-                availableCards = _originalDeck;
             else
             {
                 Debug.LogError("[DeckManager] No cards available for test deck generation");
@@ -263,33 +140,11 @@ public class DeckManager : SingletonBehaviour<DeckManager>
         
         _originalDeck = testDeck;
         ResetDeck();
+        IsInitialized = true;
         
         OnTestDeckGenerated?.Invoke(testDeckSize);
+        OnDeckInitialized?.Invoke();
         Debug.Log($"[DeckManager] Test deck generated: {testDeckSize} cards ({cardCounts.Count} unique)");
-    }
-    
-    private bool ValidateDeck(List<CardData> deck)
-    {
-        if (deck == null || deck.Count == 0) 
-        {
-            LogDebug("[DeckManager] Deck validation failed: null or empty");
-            return false;
-        }
-        
-        int validCards = deck.Count(card => card != null);
-        if (validCards == 0)
-        {
-            Debug.LogWarning("[DeckManager] Deck validation failed: no valid cards");
-            return false;
-        }
-        
-        if (validCards < deck.Count)
-        {
-            Debug.LogWarning($"[DeckManager] Deck has {deck.Count - validCards} null cards out of {deck.Count}");
-        }
-        
-        LogDebug($"[DeckManager] Deck validation passed: {validCards} valid cards");
-        return true;
     }
     
     public void ResetDeck()
@@ -415,7 +270,6 @@ public class DeckManager : SingletonBehaviour<DeckManager>
             Debug.Log(message);
     }
     
-    // Public utility methods
     public bool HasEnoughCards(int requiredCount)
     {
         return (DeckSize + DiscardSize) >= requiredCount;
@@ -435,61 +289,4 @@ public class DeckManager : SingletonBehaviour<DeckManager>
     {
         return new List<CardData>(_discardPile);
     }
-    
-#if UNITY_EDITOR
-    [ContextMenu("Generate Test Deck")]
-    public void DebugGenerateTestDeck() => GenerateTestDeck();
-    
-    [ContextMenu("Force Initialize")]
-    public void DebugForceInitialize() => ForceInitialization();
-    
-    [ContextMenu("Debug Full Status")]
-    public void DebugFullStatus()
-    {
-        Debug.Log("=== DECKMANAGER DEBUG ===");
-        Debug.Log($"IsInitialized: {IsInitialized}");
-        Debug.Log($"Deck Size: {DeckSize}");
-        Debug.Log($"Discard Size: {DiscardSize}");
-        Debug.Log($"Total Available: {GetTotalAvailableCards()}");
-        Debug.Log($"Starting Deck Count: {startingDeck?.Count ?? 0}");
-        Debug.Log($"Fallback Cards Count: {fallbackCards?.Count ?? 0}");
-        Debug.Log($"Original Deck Count: {_originalDeck?.Count ?? 0}");
-        Debug.Log($"CardManager HasInstance: {CardManager.HasInstance}");
-        
-        if (CardManager.HasInstance)
-        {
-            Debug.Log($"CardManager IsInitialized: {CardManager.Instance.IsInitialized}");
-            try 
-            {
-                Debug.Log($"Available Cards from CM: {CardManager.Instance.GetAvailableCardCount()}");
-            }
-            catch (System.Exception ex)
-            {
-                Debug.Log($"Error getting CardManager cards: {ex.Message}");
-            }
-        }
-        
-        if (DeckSize > 0)
-        {
-            var topCard = PeekTopCard();
-            Debug.Log($"Top Card: {topCard?.cardName ?? "null"}");
-        }
-        
-        Debug.Log("=== END DEBUG ===");
-    }
-    
-    [ContextMenu("Log Deck Contents")]
-    public void LogDeckContents()
-    {
-        Debug.Log($"=== DECK CONTENTS ({DeckSize} cards) ===");
-        var deckArray = _deck.ToArray();
-        for (int i = 0; i < deckArray.Length && i < 10; i++) // Max 10 cards
-        {
-            Debug.Log($"  {i}: {deckArray[i]?.cardName ?? "null"}");
-        }
-        if (deckArray.Length > 10)
-            Debug.Log($"  ... and {deckArray.Length - 10} more cards");
-        Debug.Log("=== END CONTENTS ===");
-    }
-#endif
 }
