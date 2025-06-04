@@ -25,7 +25,6 @@ public class CardPlayHandler : MonoBehaviour
     
     // Manager state tracking
     private bool _managersInitialized = false;
-    private Coroutine _initializationCoroutine;
     
     // Events
     public static event System.Action<List<Card>> OnCardsPlayed;
@@ -42,7 +41,11 @@ public class CardPlayHandler : MonoBehaviour
     private void Awake()
     {
         SetupButtons();
-        _initializationCoroutine = StartCoroutine(WaitForManagerInitialization());
+    }
+    
+    private void Start()
+    {
+        StartCoroutine(WaitForManagerInitialization());
     }
     
     private void SetupButtons()
@@ -55,69 +58,71 @@ public class CardPlayHandler : MonoBehaviour
         SetButtonsInteractable(false);
     }
     
-    // Ersetze WaitForManagerInitialization() mit:
     private IEnumerator WaitForManagerInitialization()
     {
-        yield return new WaitForSeconds(0.1f); // Kurze Pause für Awake-Calls
-    
-        // Prüfe Manager-Status
-        _managersInitialized = CheckManagersReady();
-    
-        if (_managersInitialized)
+        yield return new WaitForSeconds(0.1f);
+        
+        float elapsed = 0f;
+        while (elapsed < managerTimeout)
         {
-            OnManagersInitialized();
+            // Prüfe zuerst SimpleGameManager falls vorhanden
+            if (SimpleGameManager.AllManagersReady)
+            {
+                OnManagersInitialized();
+                yield break;
+            }
+            
+            // Fallback: Direkter Manager-Check
+            if (CheckManagersReady())
+            {
+                OnManagersInitialized();
+                yield break;
+            }
+            
+            elapsed += Time.deltaTime;
+            yield return null;
         }
-        else
-        {
-            Debug.LogError("[CardPlayHandler] Managers not ready! Check GameManager setup.");
-            // Trotzdem aktivieren für Debug
-            SetButtonsInteractable(true);
-        }
+        
+        Debug.LogError("[CardPlayHandler] Managers not ready after timeout! Forcing activation.");
+        _managersInitialized = true;
+        SetButtonsInteractable(true);
     }
 
-// Ersetze CheckManagersReady() mit:
     private bool CheckManagersReady()
     {
         bool cardManagerReady = CardManager.HasInstance && CardManager.Instance.IsInitialized;
         bool deckManagerReady = DeckManager.HasInstance && DeckManager.Instance.IsInitialized;
-    
+        bool combatManagerReady = CombatManager.HasInstance; // CombatManager ist immer ready
+        
         if (!cardManagerReady)
             Debug.LogWarning("[CardPlayHandler] CardManager not ready");
         if (!deckManagerReady)
             Debug.LogWarning("[CardPlayHandler] DeckManager not ready");
+        if (!combatManagerReady)
+            Debug.LogWarning("[CardPlayHandler] CombatManager not ready");
         
-        return cardManagerReady && deckManagerReady;
+        return cardManagerReady && deckManagerReady && combatManagerReady;
     }
     
     private void OnManagersInitialized()
     {
         Debug.Log("[CardPlayHandler] All managers ready, enabling functionality");
         
-        // Enable buttons
+        _managersInitialized = true;
         SetButtonsInteractable(true);
-        
-        // Subscribe to events now that managers are ready
         SubscribeToEvents();
-        
-        // Draw initial hand if in combat or requested
-        if (CombatManager.HasInstance && CombatManager.Instance.IsInCombat)
-        {
-            DrawInitialHand();
-        }
-        
         OnManagersReady?.Invoke();
     }
     
     private void SetButtonsInteractable(bool interactable)
     {
-        if (playButton) playButton.interactable = interactable;
-        if (clearButton) clearButton.interactable = interactable;
-        if (drawButton) drawButton.interactable = interactable;
+        if (playButton) playButton.interactable = interactable && HasSelectedCards;
+        if (clearButton) clearButton.interactable = interactable && HasSelectedCards;
+        if (drawButton) drawButton.interactable = interactable && CanDraw();
     }
     
     private void SubscribeToEvents()
     {
-        // Only subscribe when managers are ready
         if (CardManagerInstance != null)
         {
             CardManager.OnSelectionChanged += OnSelectionChanged;
@@ -137,41 +142,34 @@ public class CardPlayHandler : MonoBehaviour
         }
     }
     
-    private void OnEnable()
-    {
-        // Only subscribe if managers are already ready
-        if (_managersInitialized)
-        {
-            SubscribeToEvents();
-        }
-    }
-    
-    private void OnDisable()
-    {
-        UnsubscribeFromEvents();
-    }
-    
-    private void UnsubscribeFromEvents()
-    {
-        CardManager.OnSelectionChanged -= OnSelectionChanged;
-        CardManager.OnHandUpdated -= OnHandUpdated;
-        SpellcastManager.OnSpellFound -= OnSpellFound;
-        Card.OnCardPlayTriggered -= OnCardPlayTriggered;
-        CombatManager.OnCombatStarted -= OnCombatStarted;
-    }
-    
     private void OnDestroy()
     {
-        if (_initializationCoroutine != null)
-        {
-            StopCoroutine(_initializationCoroutine);
-        }
-        
         playButton?.onClick.RemoveAllListeners();
         clearButton?.onClick.RemoveAllListeners();
         drawButton?.onClick.RemoveAllListeners();
         
         UnsubscribeFromEvents();
+    }
+    
+    private void UnsubscribeFromEvents()
+    {
+        if (CardManager.HasInstance)
+        {
+            CardManager.OnSelectionChanged -= OnSelectionChanged;
+            CardManager.OnHandUpdated -= OnHandUpdated;
+        }
+        
+        if (SpellcastManager.HasInstance)
+        {
+            SpellcastManager.OnSpellFound -= OnSpellFound;
+        }
+        
+        Card.OnCardPlayTriggered -= OnCardPlayTriggered;
+        
+        if (CombatManager.HasInstance)
+        {
+            CombatManager.OnCombatStarted -= OnCombatStarted;
+        }
     }
     
     // Event Handlers
@@ -187,41 +185,19 @@ public class CardPlayHandler : MonoBehaviour
     {
         _selectedCards.Clear();
         if (selectedCards != null) _selectedCards.AddRange(selectedCards);
+        
+        // Update button states
+        if (playButton) playButton.interactable = _managersInitialized && HasSelectedCards;
+        if (clearButton) clearButton.interactable = _managersInitialized && HasSelectedCards;
     }
     
     private void OnHandUpdated(List<Card> handCards) 
     {
         if (autoUpdateLayout && _managersInitialized) 
             HandLayoutManagerInstance?.UpdateLayout();
-    }
-    
-    private void DrawInitialHand()
-    {
-        if (!CanPerformAction()) return;
-        
-        StartCoroutine(DrawInitialHandCoroutine());
-    }
-    
-    private IEnumerator DrawInitialHandCoroutine()
-    {
-        int cardsDrawn = 0;
-        for (int i = 0; i < initialHandSize && CanDraw(); i++)
-        {
-            var drawnCard = DeckManagerInstance.DrawCard();
-            if (drawnCard != null)
-            {
-                CardManagerInstance.SpawnCard(drawnCard, null, true);
-                cardsDrawn++;
-                yield return null; // Spread over multiple frames
-            }
-            else break;
-        }
-        
-        if (cardsDrawn > 0)
-        {
-            OnCardsDrawn?.Invoke(cardsDrawn);
-            if (autoUpdateLayout) HandLayoutManagerInstance?.UpdateLayout();
-        }
+            
+        // Update draw button state
+        if (drawButton) drawButton.interactable = _managersInitialized && CanDraw();
     }
     
     // Core Actions
@@ -252,7 +228,10 @@ public class CardPlayHandler : MonoBehaviour
                 CardManagerInstance?.RemoveCardFromHand(card);
                 HandLayoutManagerInstance?.CleanupCardReference(card);
                 
-                if (card.gameObject != null) Destroy(card.gameObject);
+                if (card.gameObject != null) 
+                {
+                    CardManagerInstance?.DestroyCard(card);
+                }
             }
         }
     
@@ -375,6 +354,8 @@ public class CardPlayHandler : MonoBehaviour
                   $"{(CardManager.HasInstance && CardManager.Instance.IsInitialized ? "(Initialized)" : "(Not Initialized)")}");
         Debug.Log($"  DeckManager: {(DeckManager.HasInstance ? "Available" : "Missing")} " +
                   $"{(DeckManager.HasInstance && DeckManager.Instance.IsInitialized ? "(Initialized)" : "(Not Initialized)")}");
+        Debug.Log($"  CombatManager: {(CombatManager.HasInstance ? "Available" : "Missing")} " +
+                  $"{(CombatManager.HasInstance && CombatManager.Instance.ManagersReady ? "(Ready)" : "(Not Ready)")}");
         Debug.Log($"  Managers Ready: {_managersInitialized}");
         Debug.Log($"  Can Draw: {CanDraw()}");
     }

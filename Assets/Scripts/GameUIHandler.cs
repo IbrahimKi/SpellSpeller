@@ -24,7 +24,31 @@ public class GameUIHandler : MonoBehaviour
     [SerializeField] private Color healthNormalColor = Color.white;
     [SerializeField] private float healthLowThreshold = 0.25f;
     
-    private void OnEnable()
+    private void Start()
+    {
+        // Warte auf Manager-Initialisierung
+        StartCoroutine(WaitForManagersAndSetup());
+    }
+    
+    private System.Collections.IEnumerator WaitForManagersAndSetup()
+    {
+        // Warte bis alle Manager bereit sind
+        while (!CombatManager.HasInstance || !CardManager.HasInstance || !DeckManager.HasInstance)
+        {
+            yield return new WaitForSeconds(0.1f);
+        }
+        
+        // Zusätzlich warten bis sie initialisiert sind
+        while (!CombatManager.Instance.ManagersReady || !CardManager.Instance.IsInitialized || !DeckManager.Instance.IsInitialized)
+        {
+            yield return new WaitForSeconds(0.1f);
+        }
+        
+        SetupEventListeners();
+        RefreshAllDisplays();
+    }
+    
+    private void SetupEventListeners()
     {
         // Combat Manager Events
         CombatManager.OnLifeChanged += UpdateLifeDisplay;
@@ -35,22 +59,35 @@ public class GameUIHandler : MonoBehaviour
         CardManager.OnSelectionChanged += UpdateCardPlayUI;
         
         // Spellcast Events
-        SpellcastManager.OnSpellFound += OnSpellFound;
-        SpellcastManager.OnSpellNotFound += OnSpellNotFound;
-        SpellcastManager.OnComboUpdated += UpdateComboDisplay;
-        
-        RefreshAllDisplays();
+        if (SpellcastManager.HasInstance)
+        {
+            SpellcastManager.OnSpellFound += OnSpellFound;
+            SpellcastManager.OnSpellNotFound += OnSpellNotFound;
+            SpellcastManager.OnComboUpdated += UpdateComboDisplay;
+        }
     }
     
-    private void OnDisable()
+    private void OnDestroy()
     {
-        CombatManager.OnLifeChanged -= UpdateLifeDisplay;
-        CombatManager.OnCreativityChanged -= UpdateCreativityDisplay;
-        CombatManager.OnDeckSizeChanged -= UpdateDeckDisplay;
-        CardManager.OnSelectionChanged -= UpdateCardPlayUI;
-        SpellcastManager.OnSpellFound -= OnSpellFound;
-        SpellcastManager.OnSpellNotFound -= OnSpellNotFound;
-        SpellcastManager.OnComboUpdated -= UpdateComboDisplay;
+        // Unsubscribe from events
+        if (CombatManager.HasInstance)
+        {
+            CombatManager.OnLifeChanged -= UpdateLifeDisplay;
+            CombatManager.OnCreativityChanged -= UpdateCreativityDisplay;
+            CombatManager.OnDeckSizeChanged -= UpdateDeckDisplay;
+        }
+        
+        if (CardManager.HasInstance)
+        {
+            CardManager.OnSelectionChanged -= UpdateCardPlayUI;
+        }
+        
+        if (SpellcastManager.HasInstance)
+        {
+            SpellcastManager.OnSpellFound -= OnSpellFound;
+            SpellcastManager.OnSpellNotFound -= OnSpellNotFound;
+            SpellcastManager.OnComboUpdated -= UpdateComboDisplay;
+        }
     }
     
     private void RefreshAllDisplays()
@@ -120,7 +157,6 @@ public class GameUIHandler : MonoBehaviour
         
         if (selectedCards?.Count > 0)
         {
-            // VERWENDET zentrale Methode statt Dopplung
             string letters = CardManager.GetLetterSequenceFromCards(selectedCards);
             statusText.text = $"Letters: {letters}";
             statusText.color = Color.white;
@@ -153,7 +189,7 @@ public class GameUIHandler : MonoBehaviour
         if (drawButton != null)
         {
             bool canDraw = CardManager.HasInstance && !CardManager.Instance.IsHandFull &&
-                          CombatManager.HasInstance && CombatManager.Instance.DeckSize > 0;
+                          DeckManager.HasInstance && !DeckManager.Instance.IsDeckEmpty;
             drawButton.interactable = canDraw;
         }
     }

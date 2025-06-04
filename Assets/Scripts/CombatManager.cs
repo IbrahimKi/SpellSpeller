@@ -81,8 +81,6 @@ public class CombatManager : SingletonBehaviour<CombatManager>
     
     // Manager state tracking
     private bool _managersReady = false;
-    private bool _cardManagerReady = false;
-    private bool _deckManagerReady = false;
     
     // Events - Resources
     public static event Action<Resource> OnLifeChanged;
@@ -118,10 +116,12 @@ public class CombatManager : SingletonBehaviour<CombatManager>
     protected override void OnAwakeInitialize()
     {
         InitializeResources();
-        StartCoroutine(WaitForManagers());
+        
+        // Setze ready status sofort - andere Manager sind unabhängig
+        _managersReady = true;
+        Debug.Log("[CombatManager] Initialized immediately");
     }
     
-    // Nach OnAwakeInitialize() hinzufügen:
     private void Start()
     {
         // Auto-start combat nach kurzer Verzögerung
@@ -130,22 +130,18 @@ public class CombatManager : SingletonBehaviour<CombatManager>
 
     private IEnumerator AutoStartCombat()
     {
-        yield return new WaitForSeconds(0.5f);
+        yield return new WaitForSeconds(0.2f);
         StartCombat();
     }
     
     private void OnEnable()
     {
+        // Subscribe direkt - Manager sind bereits initialisiert
         if (DeckManager.HasInstance)
         {
             DeckManager.OnDeckSizeChanged += OnDeckManagerSizeChanged;
-            DeckManager.OnDeckInitialized += OnDeckManagerReady;
+            DeckManager.OnDeckInitialized += () => OnDeckSizeChanged?.Invoke(DeckSize);
             DeckManager.OnDeckEmpty += HandleDeckEmpty;
-        }
-        
-        if (CardManager.HasInstance)
-        {
-            CardManager.OnCardManagerInitialized += OnCardManagerReady;
         }
     }
     
@@ -154,13 +150,7 @@ public class CombatManager : SingletonBehaviour<CombatManager>
         if (DeckManager.HasInstance)
         {
             DeckManager.OnDeckSizeChanged -= OnDeckManagerSizeChanged;
-            DeckManager.OnDeckInitialized -= OnDeckManagerReady;
             DeckManager.OnDeckEmpty -= HandleDeckEmpty;
-        }
-        
-        if (CardManager.HasInstance)
-        {
-            CardManager.OnCardManagerInitialized -= OnCardManagerReady;
         }
     }
     
@@ -176,10 +166,9 @@ public class CombatManager : SingletonBehaviour<CombatManager>
         
         while (elapsed < managerWaitTimeout)
         {
-            CheckManagersReady();
-            
-            if (_managersReady)
+            if (CheckManagersReady())
             {
+                _managersReady = true;
                 Debug.Log("[CombatManager] All managers ready");
                 yield break;
             }
@@ -188,77 +177,31 @@ public class CombatManager : SingletonBehaviour<CombatManager>
             yield return null;
         }
         
-        // Fallback: Force ready state after timeout
+        // Fallback: Force ready state nach timeout
         Debug.LogWarning($"[CombatManager] Manager timeout after {managerWaitTimeout}s - forcing ready state");
         _managersReady = true;
-        
-        // Try to initialize deck if it failed
-        if (DeckManager.HasInstance && !DeckManager.Instance.IsInitialized)
-        {
-            DeckManager.Instance.ForceInitialization();
-        }
     }
     
-    private void OnCardManagerReady()
+    private bool CheckManagersReady()
     {
-        _cardManagerReady = true;
-        CheckManagersReady();
-    }
-    
-    private void OnDeckManagerReady()
-    {
-        _deckManagerReady = true;
-        CheckManagersReady();
-    }
-    
-    private void CheckManagersReady()
-    {
-        if (_managersReady) return;
+        bool cardManagerReady = CardManager.HasInstance && CardManager.Instance.IsInitialized;
+        bool deckManagerReady = DeckManager.HasInstance && DeckManager.Instance.IsInitialized;
         
-        // Check CardManager
-        if (!_cardManagerReady && CardManager.HasInstance && CardManager.Instance.IsInitialized)
-        {
-            _cardManagerReady = true;
-            CardManager.OnCardManagerInitialized += OnCardManagerReady;
-        }
-        
-        // Check DeckManager
-        if (!_deckManagerReady && DeckManager.HasInstance && DeckManager.Instance.IsInitialized)
-        {
-            _deckManagerReady = true;
-            DeckManager.OnDeckInitialized += OnDeckManagerReady;
-            DeckManager.OnDeckSizeChanged += OnDeckManagerSizeChanged;
-            DeckManager.OnDeckEmpty += HandleDeckEmpty;
-        }
-        
-        // Set ready if both managers are available
-        if (_cardManagerReady && _deckManagerReady)
-        {
-            _managersReady = true;
-            Debug.Log("[CombatManager] Managers ready");
-        }
+        return cardManagerReady && deckManagerReady;
     }
     
     // Combat State Management
     public void StartCombat()
     {
-        if (!IsInCombat) StartCoroutine(StartCombatSequence());
+        if (IsInCombat) return;
+        StartCoroutine(StartCombatSequence());
     }
     
     private IEnumerator StartCombatSequence()
     {
-        // Warte kurz auf Manager
-        float timeout = 1f;
-        while (!_managersReady && timeout > 0)
-        {
-            CheckManagersReady();
-            if (_managersReady) break;
-            timeout -= Time.deltaTime;
-            yield return null;
-        }
-    
         IsInCombat = true;
-    
+        Debug.Log("[CombatManager] Starting combat sequence");
+        
         // Prüfe Deck
         if (DeckManager.HasInstance && DeckManager.Instance.DeckSize == 0)
         {
@@ -266,36 +209,18 @@ public class CombatManager : SingletonBehaviour<CombatManager>
             DeckManager.Instance.GenerateTestDeck();
             yield return new WaitForSeconds(0.1f);
         }
-    
+        
         // Ziehe Starthand
         if (autoDrawOnCombatStart && startingHandSize > 0)
             yield return DrawStartingHand();
-    
+        
+        // Trigger initial UI updates
+        OnLifeChanged?.Invoke(_life);
+        OnCreativityChanged?.Invoke(_creativity);
+        OnDeckSizeChanged?.Invoke(DeckSize);
+        
         OnCombatStarted?.Invoke();
-    }
-    
-    private IEnumerator ValidateCombatState()
-    {
-        if (!DeckManager.HasInstance)
-        {
-            Debug.LogError("[CombatManager] DeckManager not available for validation");
-            yield break;
-        }
-        
-        if (DeckManager.Instance.DeckSize == 0)
-        {
-            Debug.Log("[CombatManager] Empty deck detected - generating test deck");
-            DeckManager.Instance.GenerateTestDeck();
-            
-            float timeout = 2f;
-            while (DeckManager.Instance.DeckSize == 0 && timeout > 0)
-            {
-                timeout -= Time.deltaTime;
-                yield return null;
-            }
-        }
-        
-        OnCombatValidated?.Invoke();
+        Debug.Log("[CombatManager] Combat started successfully");
     }
     
     private IEnumerator DrawStartingHand()
@@ -306,14 +231,20 @@ public class CombatManager : SingletonBehaviour<CombatManager>
             yield break;
         }
         
-        var drawnCards = DeckManager.Instance.DrawCards(startingHandSize);
+        Debug.Log($"[CombatManager] Drawing {startingHandSize} cards for starting hand");
         
-        foreach (var cardData in drawnCards)
+        for (int i = 0; i < startingHandSize; i++)
         {
+            var cardData = DeckManager.Instance.DrawCard();
             if (cardData != null)
             {
                 CardManager.Instance.SpawnCard(cardData, null, true);
-                yield return null;
+                yield return null; // Spread over frames
+            }
+            else
+            {
+                Debug.LogWarning($"[CombatManager] Could not draw card {i+1}/{startingHandSize}");
+                break;
             }
         }
         

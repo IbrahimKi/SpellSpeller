@@ -50,9 +50,12 @@ public class CardManager : SingletonBehaviour<CardManager>
     
     protected override void OnAwakeInitialize()
     {
+        // Sofort als initialisiert markieren - keine Abhängigkeiten
         InitializePool();
         InitializeHandLayout();
         IsInitialized = true;
+        
+        Debug.Log("[CardManager] Initialized immediately");
         OnCardManagerInitialized?.Invoke();
     }
     
@@ -285,6 +288,7 @@ public class CardManager : SingletonBehaviour<CardManager>
         OnHandUpdated?.Invoke(new List<Card>(_handCards));
         return true;
     }
+    
     public List<CardData> GetAllCardData()
     {
         return new List<CardData>(allCardData.Where(card => card != null));
