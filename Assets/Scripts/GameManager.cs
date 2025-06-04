@@ -42,14 +42,6 @@ public class GameManager : SingletonBehaviour<GameManager>
     
     private void Start()
     {
-        // Force create all singletons first
-        InputManager.EnsureInstance();
-        CardManager.EnsureInstance();
-        DeckManager.EnsureInstance();
-        HandLayoutManager.EnsureInstance();
-        SpellcastManager.EnsureInstance();
-        CombatManager.EnsureInstance();
-    
         StartCoroutine(InitializationSequence());
     }
     
@@ -89,8 +81,6 @@ public class GameManager : SingletonBehaviour<GameManager>
         }
     }
     
-    
-    
     private void DiscoverManagers()
     {
         // Find all manager instances - use HasInstance check
@@ -121,6 +111,7 @@ public class GameManager : SingletonBehaviour<GameManager>
     
     private IEnumerator InitializeManager(ManagerType type)
     {
+        Debug.Log($"[GameManager] Starting initialization of {type} manager");
         // Try to find manager if not registered yet
         if (!_managers.ContainsKey(type))
         {
@@ -160,13 +151,37 @@ public class GameManager : SingletonBehaviour<GameManager>
     {
         var criticalTypes = new[] { ManagerType.Card, ManagerType.Deck, ManagerType.Combat };
         
+        Debug.Log("[GameManager] Verifying critical managers...");
+        
         foreach (var type in criticalTypes)
         {
-            if (!_managers.TryGetValue(type, out var manager) || !manager.IsReady)
+            if (!_managers.TryGetValue(type, out var manager))
             {
-                Debug.LogError($"[GameManager] Critical manager {type} not ready!");
+                Debug.LogError($"[GameManager] Critical manager {type} not found in registry!");
                 return false;
             }
+            
+            if (manager == null)
+            {
+                Debug.LogError($"[GameManager] Critical manager {type} is null!");
+                return false;
+            }
+            
+            if (!manager.IsReady)
+            {
+                Debug.LogError($"[GameManager] Critical manager {type} not ready! (Instance exists: {manager != null})");
+                
+                // Spezial-Check für CombatManager
+                if (type == ManagerType.Combat && manager is CombatManager cm)
+                {
+                    Debug.LogError($"  CombatManager._isReady = {cm.IsReady}");
+                    Debug.LogError($"  CombatManager instance = {cm.GetInstanceID()}");
+                }
+                
+                return false;
+            }
+            
+            Debug.Log($"[GameManager] {type} manager verified ✓");
         }
         
         return true;

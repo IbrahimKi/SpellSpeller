@@ -1,3 +1,5 @@
+// Ersetze die ersten ~100 Zeilen von CombatManager.cs mit diesem Code:
+
 using UnityEngine;
 using System.Collections.Generic;
 using System;
@@ -69,11 +71,6 @@ public class CombatManager : SingletonBehaviour<CombatManager>, IGameManager
     [SerializeField] private bool validateDeckOnCombatStart = true;
     [SerializeField] private float managerWaitTimeout = 3f;
     
-    private bool _isReady = false;
-    
-    public bool IsReady => _isReady;  
-    
-    
     // Resources
     private Resource _life;
     private Resource _creativity;
@@ -85,9 +82,10 @@ public class CombatManager : SingletonBehaviour<CombatManager>, IGameManager
     private int _nextEntityId = 0;
     
     // Manager state tracking
+    private bool _isReady = false;
     private bool _managersReady = false;
     
-    // Events - Resources
+    // Events
     public static event Action<Resource> OnLifeChanged;
     public static event Action<int> OnDeckSizeChanged;
     public static event Action<Resource> OnCreativityChanged;
@@ -107,6 +105,7 @@ public class CombatManager : SingletonBehaviour<CombatManager>, IGameManager
     public static event Action OnDeckEmpty;
     
     // Properties
+    public bool IsReady => _isReady;  // For IGameManager interface
     public Resource Life => _life;
     public int DeckSize => DeckManager.HasInstance ? DeckManager.Instance.DeckSize : 0;
     public int DiscardSize => DeckManager.HasInstance ? DeckManager.Instance.DiscardSize : 0;
@@ -120,11 +119,20 @@ public class CombatManager : SingletonBehaviour<CombatManager>, IGameManager
     
     protected override void OnAwakeInitialize()
     {
+        Debug.Log("[CombatManager] OnAwakeInitialize called");
         InitializeResources();
-        _isReady = true;
+        _isReady = true;  // Mark as ready immediately
         _managersReady = true;
+        Debug.Log($"[CombatManager] Initialized - IsReady: {_isReady}");
     }
-
+    
+    private void Start()
+    {
+        // GameManager will call StartCombat when ready
+        Debug.Log("[CombatManager] Start called - waiting for GameManager to start combat");
+    }
+    
+    
     private IEnumerator AutoStartCombat()
     {
         yield return new WaitForSeconds(0.2f);
