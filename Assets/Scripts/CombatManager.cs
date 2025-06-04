@@ -116,16 +116,12 @@ public class CombatManager : SingletonBehaviour<CombatManager>
     protected override void OnAwakeInitialize()
     {
         InitializeResources();
-        
-        // Setze ready status sofort - andere Manager sind unabhängig
         _managersReady = true;
-        Debug.Log("[CombatManager] Initialized immediately");
     }
-    
     private void Start()
     {
-        // Auto-start combat nach kurzer Verzögerung
-        StartCoroutine(AutoStartCombat());
+        // Direkter Start ohne Verzögerung
+        StartCombat();
     }
 
     private IEnumerator AutoStartCombat()

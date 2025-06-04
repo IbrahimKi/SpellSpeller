@@ -64,6 +64,11 @@ public class GameUIHandler : MonoBehaviour
             SpellcastManager.OnSpellFound += OnSpellFound;
             SpellcastManager.OnSpellNotFound += OnSpellNotFound;
             SpellcastManager.OnComboUpdated += UpdateComboDisplay;
+            
+            if (playButton) playButton.onClick.AddListener(() => SpellcastManager.Instance?.PlaySelectedCards());
+            if (clearButton) clearButton.onClick.AddListener(() => SpellcastManager.Instance?.ClearSelection());
+            if (drawButton) drawButton.onClick.AddListener(() => SpellcastManager.Instance?.DrawCard());
+
         }
     }
     

@@ -12,7 +12,7 @@ public abstract class SingletonBehaviour<T> : MonoBehaviour where T : MonoBehavi
         {
             if (_applicationIsQuitting)
             {
-                Debug.LogWarning($"[Singleton] Instance '{typeof(T)}' already destroyed on application quit. Won't create again.");
+                Debug.LogWarning($"[Singleton] Instance '{typeof(T)}' already destroyed on application quit.");
                 return null;
             }
 
@@ -21,14 +21,12 @@ public abstract class SingletonBehaviour<T> : MonoBehaviour where T : MonoBehavi
                 if (_instance == null)
                 {
                     _instance = FindFirstObjectByType<T>();
-
                     if (_instance == null)
                     {
-                        Debug.LogError($"[Singleton] An instance of {typeof(T)} is needed in the scene, but there is none.");
+                        Debug.LogError($"[Singleton] An instance of {typeof(T)} is needed in the scene.");
                         return null;
                     }
                 }
-
                 return _instance;
             }
         }
@@ -39,19 +37,11 @@ public abstract class SingletonBehaviour<T> : MonoBehaviour where T : MonoBehavi
         if (_instance == null)
         {
             _instance = this as T;
-            
-            // Persist root GameObject
-            if (transform.root.parent == null)
-            {
-                DontDestroyOnLoad(transform.root.gameObject);
-            }
-            
-            Debug.Log($"[Singleton] {typeof(T).Name} initialized");
             OnAwakeInitialize();
         }
         else if (_instance != this)
         {
-            Debug.LogWarning($"[Singleton] Multiple instances of {typeof(T)} detected. Destroying duplicate.");
+            Debug.LogWarning($"[Singleton] Destroying duplicate {typeof(T)}");
             Destroy(gameObject);
         }
     }
@@ -70,7 +60,5 @@ public abstract class SingletonBehaviour<T> : MonoBehaviour where T : MonoBehavi
     }
 
     protected abstract void OnAwakeInitialize();
-
-    // Property for checking if instance exists and is ready
     public static bool HasInstance => _instance != null && !_applicationIsQuitting;
 }

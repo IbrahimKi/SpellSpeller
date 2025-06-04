@@ -68,6 +68,41 @@ public class SpellcastManager : SingletonBehaviour<SpellcastManager>
         Debug.Log($"[SpellcastManager] Initialized {_spellCache.Count} spells");
     }
     
+    public void PlaySelectedCards()
+    {
+        if (!CardManager.HasInstance) return;
+        var selectedCards = CardManager.Instance.SelectedCards;
+        if (selectedCards.Count > 0)
+        {
+            TryPlayCards(selectedCards);
+        }
+    }
+
+    public void DrawCard()
+    {
+        if (!CanDraw()) return;
+    
+        var drawnCard = DeckManager.Instance.DrawCard();
+        if (drawnCard != null)
+        {
+            CardManager.Instance.SpawnCard(drawnCard, null, true);
+        }
+    }
+
+    public void ClearSelection()
+    {
+        if (CardManager.HasInstance)
+        {
+            CardManager.Instance.ClearSelection();
+        }
+    }
+
+    private bool CanDraw()
+    {
+        return CardManager.HasInstance && !CardManager.Instance.IsHandFull && 
+               DeckManager.HasInstance && !DeckManager.Instance.IsDeckEmpty;
+    }
+    
     private void OnCardSelectionChanged(List<Card> selectedCards)
     {
         if (selectedCards?.Count > 0)

@@ -41,21 +41,12 @@ public class DeckManager : SingletonBehaviour<DeckManager>
     
     protected override void OnAwakeInitialize()
     {
-        LogDebug("[DeckManager] Starting initialization...");
-        
-        // Sofortige Initialisierung - ohne Abhängigkeiten
         InitializeDeck();
-        
-        // Falls kein Deck vorhanden, generiere Test-Deck
         if (_deck.Count == 0)
         {
-            LogDebug("[DeckManager] No starting deck found, generating test deck");
             GenerateTestDeck();
         }
-        
         IsInitialized = true;
-        Debug.Log($"[DeckManager] Initialization complete - {DeckSize} cards ready");
-        
         OnDeckInitialized?.Invoke();
         OnDeckSizeChanged?.Invoke(DeckSize);
     }

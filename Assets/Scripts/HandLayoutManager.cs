@@ -213,6 +213,16 @@ public class HandLayoutManager : SingletonBehaviour<HandLayoutManager>
     
     public void CleanupCardReference(Card card)
     {
-        cardRectTransforms.Remove(card);
+        if (card != null)
+        {
+            cardRectTransforms.Remove(card);
+            cachedHandCards.Remove(card);
+        }
+    }
+    
+    private void OnDestroy()
+    {
+        cardRectTransforms.Clear();
+        cachedHandCards.Clear();
     }
 }

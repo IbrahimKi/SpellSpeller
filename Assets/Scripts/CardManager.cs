@@ -50,14 +50,12 @@ public class CardManager : SingletonBehaviour<CardManager>
     
     protected override void OnAwakeInitialize()
     {
-        // Sofort als initialisiert markieren - keine Abhängigkeiten
         InitializePool();
         InitializeHandLayout();
         IsInitialized = true;
-        
-        Debug.Log("[CardManager] Initialized immediately");
         OnCardManagerInitialized?.Invoke();
     }
+    
     
     private void OnEnable()
     {
@@ -269,7 +267,7 @@ public class CardManager : SingletonBehaviour<CardManager>
     public static string GetLetterSequenceFromCards(List<Card> cards)
     {
         if (cards == null || cards.Count == 0) return "";
-        
+    
         var letterBuilder = new StringBuilder(cards.Count * 2);
         foreach (var card in cards)
         {
