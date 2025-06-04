@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 
-public class DeckManager : SingletonBehaviour<DeckManager>
+public class DeckManager : SingletonBehaviour<DeckManager>, IGameManager
 {
     [Header("Deck Configuration")]
     [SerializeField] private List<CardData> startingDeck = new List<CardData>();
@@ -23,6 +23,7 @@ public class DeckManager : SingletonBehaviour<DeckManager>
     private List<CardData> _discardPile = new List<CardData>();
     private List<CardData> _originalDeck = new List<CardData>();
     
+    public bool IsReady => IsInitialized;
     // Events
     public static event System.Action<int> OnDeckSizeChanged;
     public static event System.Action<CardData> OnCardDrawn;

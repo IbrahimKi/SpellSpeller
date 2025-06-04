@@ -4,7 +4,7 @@ using System.Linq;
 using System;
 using System.Text;
 
-public class SpellcastManager : SingletonBehaviour<SpellcastManager>
+public class SpellcastManager : SingletonBehaviour<SpellcastManager>, IGameManager
 {
     [Header("Spell Configuration")]
     [SerializeField] private List<SpellAsset> availableSpells = new List<SpellAsset>();
@@ -13,6 +13,9 @@ public class SpellcastManager : SingletonBehaviour<SpellcastManager>
     
     private string _currentCombo = "";
     private Dictionary<string, SpellAsset> _spellCache = new Dictionary<string, SpellAsset>();
+    
+    private bool _isReady = false;
+    public bool IsReady => _isReady;
     
     // Cached Manager References
     private CardManager _cardManager;
@@ -37,8 +40,8 @@ public class SpellcastManager : SingletonBehaviour<SpellcastManager>
         _cardManager = CardManager.Instance;
         _deckManager = DeckManager.Instance;
         _combatManager = CombatManager.Instance;
-        
         InitializeSpellCache();
+        _isReady = true;
     }
     
     private void OnEnable()

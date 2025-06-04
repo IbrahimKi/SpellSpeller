@@ -60,32 +60,19 @@ public class CardPlayHandler : MonoBehaviour
     
     private IEnumerator WaitForManagerInitialization()
     {
-        yield return new WaitForSeconds(0.1f);
-        
-        float elapsed = 0f;
-        while (elapsed < managerTimeout)
+        // Warte auf GameManager
+        while (!GameManager.HasInstance)
         {
-            // Prüfe zuerst SimpleGameManager falls vorhanden
-            if (SimpleGameManager.AllManagersReady)
-            {
-                OnManagersInitialized();
-                yield break;
-            }
-            
-            // Fallback: Direkter Manager-Check
-            if (CheckManagersReady())
-            {
-                OnManagersInitialized();
-                yield break;
-            }
-            
-            elapsed += Time.deltaTime;
             yield return null;
         }
-        
-        Debug.LogError("[CardPlayHandler] Managers not ready after timeout! Forcing activation.");
-        _managersInitialized = true;
-        SetButtonsInteractable(true);
+    
+        // Warte auf Initialisierung
+        while (!GameManager.Instance.IsInitialized)
+        {
+            yield return null;
+        }
+    
+        OnManagersInitialized();
     }
 
     private bool CheckManagersReady()

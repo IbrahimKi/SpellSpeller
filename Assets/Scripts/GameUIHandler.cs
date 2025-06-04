@@ -32,18 +32,12 @@ public class GameUIHandler : MonoBehaviour
     
     private System.Collections.IEnumerator WaitForManagersAndSetup()
     {
-        // Warte bis alle Manager bereit sind
-        while (!CombatManager.HasInstance || !CardManager.HasInstance || !DeckManager.HasInstance)
+        // Warte auf GameManager
+        while (!GameManager.HasInstance || !GameManager.Instance.IsInitialized)
         {
             yield return new WaitForSeconds(0.1f);
         }
-        
-        // Zusätzlich warten bis sie initialisiert sind
-        while (!CombatManager.Instance.ManagersReady || !CardManager.Instance.IsInitialized || !DeckManager.Instance.IsInitialized)
-        {
-            yield return new WaitForSeconds(0.1f);
-        }
-        
+    
         SetupEventListeners();
         RefreshAllDisplays();
     }

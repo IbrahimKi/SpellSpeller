@@ -1,7 +1,7 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
 
-public class InputManager : SingletonBehaviour<InputManager>
+public class InputManager : SingletonBehaviour<InputManager>, IGameManager
 {
     private PlayerControls _controls;
     private bool _isMousePressed = false;
@@ -11,6 +11,9 @@ public class InputManager : SingletonBehaviour<InputManager>
     public event MouseAction OnMousePressed;
     public event MouseAction OnMouseReleased;
     
+    private bool _isReady = false;
+    public bool IsReady => _isReady;
+    
     // PERFORMANCE: Cache mouse position
     private Vector2 _cachedMousePosition;
     private float _lastMousePositionUpdate;
@@ -19,6 +22,7 @@ public class InputManager : SingletonBehaviour<InputManager>
     protected override void OnAwakeInitialize()
     {
         InitializeControls();
+        _isReady = true;
     }
 
     private void InitializeControls()

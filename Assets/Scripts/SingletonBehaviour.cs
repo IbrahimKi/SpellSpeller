@@ -45,7 +45,22 @@ public abstract class SingletonBehaviour<T> : MonoBehaviour where T : MonoBehavi
             Destroy(gameObject);
         }
     }
-
+    
+    public static T EnsureInstance()
+    {
+        if (_instance == null && !_applicationIsQuitting)
+        {
+            _instance = FindFirstObjectByType<T>();
+            if (_instance == null)
+            {
+                GameObject go = new GameObject($"{typeof(T).Name} (Singleton)");
+                _instance = go.AddComponent<T>();
+                Debug.Log($"[Singleton] Created new instance of {typeof(T)}");
+            }
+        }
+        return _instance;
+    }
+    
     protected virtual void OnDestroy()
     {
         if (_instance == this)

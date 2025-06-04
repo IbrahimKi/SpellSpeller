@@ -108,12 +108,46 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 73b97129f191d6c48afe118f61f0d0b2, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  startingDeck: []
+  startingDeck:
+  - {fileID: 11400000, guid: 618d617a769eee1448dfdcd900ab18b0, type: 2}
+  - {fileID: 11400000, guid: 618d617a769eee1448dfdcd900ab18b0, type: 2}
+  - {fileID: 11400000, guid: 7bf28af1962ff3c4699839cab9ce4cd6, type: 2}
+  - {fileID: 11400000, guid: 7bf28af1962ff3c4699839cab9ce4cd6, type: 2}
+  - {fileID: 11400000, guid: 298a3b5ca8bfbbd4b86f024b5acfb55c, type: 2}
+  - {fileID: 11400000, guid: 298a3b5ca8bfbbd4b86f024b5acfb55c, type: 2}
+  - {fileID: 11400000, guid: 1564cd2b393ad8149bf56154e3fa5e8b, type: 2}
+  - {fileID: 11400000, guid: 1564cd2b393ad8149bf56154e3fa5e8b, type: 2}
+  - {fileID: 11400000, guid: 779d0685831921142934bf15d6e4d0e6, type: 2}
+  - {fileID: 11400000, guid: 7d7f3066e76ead940a7c9d779aa12708, type: 2}
+  - {fileID: 11400000, guid: 7d7f3066e76ead940a7c9d779aa12708, type: 2}
+  - {fileID: 11400000, guid: 23de81d7d26a58f469ea56017ac628b6, type: 2}
+  - {fileID: 11400000, guid: 23de81d7d26a58f469ea56017ac628b6, type: 2}
+  - {fileID: 11400000, guid: 9be0b35cf7bf3794e9b61d06d708f830, type: 2}
+  - {fileID: 11400000, guid: eaccdf877a7afac4b9277e7d17b432f5, type: 2}
+  - {fileID: 11400000, guid: 1fbe65f187789ff4d9b0c4226f796806, type: 2}
+  - {fileID: 11400000, guid: 1fbe65f187789ff4d9b0c4226f796806, type: 2}
+  - {fileID: 11400000, guid: a932cb074942bc84191393d40792f63e, type: 2}
+  - {fileID: 11400000, guid: a932cb074942bc84191393d40792f63e, type: 2}
+  - {fileID: 11400000, guid: a367ace559e7cea408392f6530ad6cca, type: 2}
+  - {fileID: 11400000, guid: a367ace559e7cea408392f6530ad6cca, type: 2}
+  fallbackCards:
+  - {fileID: 11400000, guid: 618d617a769eee1448dfdcd900ab18b0, type: 2}
+  - {fileID: 11400000, guid: 7bf28af1962ff3c4699839cab9ce4cd6, type: 2}
+  - {fileID: 11400000, guid: 298a3b5ca8bfbbd4b86f024b5acfb55c, type: 2}
+  - {fileID: 11400000, guid: 1564cd2b393ad8149bf56154e3fa5e8b, type: 2}
+  - {fileID: 11400000, guid: 779d0685831921142934bf15d6e4d0e6, type: 2}
+  - {fileID: 11400000, guid: 7d7f3066e76ead940a7c9d779aa12708, type: 2}
+  - {fileID: 11400000, guid: 23de81d7d26a58f469ea56017ac628b6, type: 2}
+  - {fileID: 11400000, guid: 9be0b35cf7bf3794e9b61d06d708f830, type: 2}
+  - {fileID: 11400000, guid: eaccdf877a7afac4b9277e7d17b432f5, type: 2}
+  - {fileID: 11400000, guid: 1fbe65f187789ff4d9b0c4226f796806, type: 2}
+  - {fileID: 11400000, guid: a932cb074942bc84191393d40792f63e, type: 2}
   shuffleOnStart: 1
   defaultDeckSize: 30
   testDeckSize: 20
   allowDuplicatesInTestDeck: 1
   maxDuplicatesPerCard: 3
+  enableDebugLogs: 1
 --- !u!1 &5072637882637055249
 GameObject:
   m_ObjectHideFlags: 0
@@ -123,6 +157,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 7308546259657053959}
+  - component: {fileID: 5242847096659800578}
   m_Layer: 0
   m_Name: GameManager
   m_TagString: Untagged
@@ -150,6 +185,40 @@ Transform:
   - {fileID: 4332417519562294035}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &5242847096659800578
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5072637882637055249}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1107ef3c8e7d3c942bde89f7aa294088, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  managerInitOrder:
+  - managerType: 0
+    priority: 0
+    enabled: 1
+  - managerType: 1
+    priority: 1
+    enabled: 1
+  - managerType: 2
+    priority: 2
+    enabled: 1
+  - managerType: 3
+    priority: 3
+    enabled: 1
+  - managerType: 4
+    priority: 4
+    enabled: 1
+  - managerType: 5
+    priority: 5
+    enabled: 1
+  initStepDelay: 0.05
+  timeoutPerManager: 2
+  autoStartCombat: 1
 --- !u!1 &6962830850928090346
 GameObject:
   m_ObjectHideFlags: 0
@@ -252,6 +321,7 @@ MonoBehaviour:
   - {fileID: 11400000, guid: b715d3fc35397ad4bbe5e06cce303d60, type: 2}
   - {fileID: 11400000, guid: 61a326255c2fb4643b3c289ef544fbbc, type: 2}
   caseSensitive: 0
+  consumeCardsOnCast: 1
 --- !u!1 &8790267260798922403
 GameObject:
   m_ObjectHideFlags: 0
@@ -302,3 +372,4 @@ MonoBehaviour:
   startingHandSize: 5
   autoDrawOnCombatStart: 1
   validateDeckOnCombatStart: 1
+  managerWaitTimeout: 3

@@ -56,7 +56,7 @@ public class CombatEntity
     }
 }
 
-public class CombatManager : SingletonBehaviour<CombatManager>
+public class CombatManager : SingletonBehaviour<CombatManager>, IGameManager
 {
     [Header("Player Resources")]
     [SerializeField] private int startLife = 100;
@@ -68,6 +68,11 @@ public class CombatManager : SingletonBehaviour<CombatManager>
     [SerializeField] private bool autoDrawOnCombatStart = true;
     [SerializeField] private bool validateDeckOnCombatStart = true;
     [SerializeField] private float managerWaitTimeout = 3f;
+    
+    private bool _isReady = false;
+    
+    public bool IsReady => _isReady;  
+    
     
     // Resources
     private Resource _life;
@@ -116,12 +121,8 @@ public class CombatManager : SingletonBehaviour<CombatManager>
     protected override void OnAwakeInitialize()
     {
         InitializeResources();
+        _isReady = true;
         _managersReady = true;
-    }
-    private void Start()
-    {
-        // Direkter Start ohne Verzögerung
-        StartCombat();
     }
 
     private IEnumerator AutoStartCombat()
@@ -198,15 +199,15 @@ public class CombatManager : SingletonBehaviour<CombatManager>
         IsInCombat = true;
         Debug.Log("[CombatManager] Starting combat sequence");
         
-        // Prüfe Deck
-        if (DeckManager.HasInstance && DeckManager.Instance.DeckSize == 0)
+        // Check für Deck direkt über GameManager
+        if (GameManager.HasInstance && GameManager.Instance.DeckManager?.DeckSize == 0)
         {
             Debug.Log("[CombatManager] Empty deck detected - generating test deck");
-            DeckManager.Instance.GenerateTestDeck();
+            GameManager.Instance.DeckManager.GenerateTestDeck();
             yield return new WaitForSeconds(0.1f);
         }
         
-        // Ziehe Starthand
+        // Draw starting hand
         if (autoDrawOnCombatStart && startingHandSize > 0)
             yield return DrawStartingHand();
         
@@ -221,7 +222,10 @@ public class CombatManager : SingletonBehaviour<CombatManager>
     
     private IEnumerator DrawStartingHand()
     {
-        if (!DeckManager.HasInstance || !CardManager.HasInstance) 
+        var cardManager = GameManager.Instance?.CardManager;
+        var deckManager = GameManager.Instance?.DeckManager;
+        
+        if (cardManager == null || deckManager == null)
         {
             Debug.LogWarning("[CombatManager] Managers not available for drawing starting hand");
             yield break;
@@ -231,11 +235,11 @@ public class CombatManager : SingletonBehaviour<CombatManager>
         
         for (int i = 0; i < startingHandSize; i++)
         {
-            var cardData = DeckManager.Instance.DrawCard();
+            var cardData = deckManager.DrawCard();
             if (cardData != null)
             {
-                CardManager.Instance.SpawnCard(cardData, null, true);
-                yield return null; // Spread over frames
+                cardManager.SpawnCard(cardData, null, true);
+                yield return null;
             }
             else
             {

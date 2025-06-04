@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using UnityEngine;
 
-public class CardManager : SingletonBehaviour<CardManager>
+public class CardManager : SingletonBehaviour<CardManager>, IGameManager
 {
     [Header("Card Database")]
     [SerializeField] private List<CardData> allCardData = new List<CardData>();
@@ -22,6 +22,8 @@ public class CardManager : SingletonBehaviour<CardManager>
     [Header("Selection")]
     [SerializeField] private int maxSelectedCards = 1;
     [SerializeField] private bool allowMultiSelect = false;
+    
+    public bool IsReady => IsInitialized;
     
     // Data structures
     private Dictionary<int, Card> _allCards = new Dictionary<int, Card>();

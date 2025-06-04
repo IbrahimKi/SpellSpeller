@@ -2,7 +2,7 @@ using UnityEngine;
 using System.Collections.Generic;
 using System.Collections;
 
-public class HandLayoutManager : SingletonBehaviour<HandLayoutManager>
+public class HandLayoutManager : SingletonBehaviour<HandLayoutManager>, IGameManager
 {
     [Header("Layout Settings")]
     [SerializeField] private float cardSpacing = 120f;
@@ -14,6 +14,9 @@ public class HandLayoutManager : SingletonBehaviour<HandLayoutManager>
     [Header("Animation")]
     [SerializeField] private float animationDuration = 0.3f;
     [SerializeField] private AnimationCurve animationCurve = AnimationCurve.EaseInOut(0, 0, 1, 1);
+    
+    private bool _isReady = false;
+    public bool IsReady => _isReady;
     
     private RectTransform rectTransform;
     private bool isAnimating = false;
@@ -27,6 +30,7 @@ public class HandLayoutManager : SingletonBehaviour<HandLayoutManager>
     protected override void OnAwakeInitialize()
     {
         rectTransform = GetComponent<RectTransform>();
+        _isReady = true;
     }
     
     private void OnEnable()
