@@ -64,6 +64,56 @@ MonoBehaviour:
   maxHandSize: 7
   maxSelectedCards: 1
   allowMultiSelect: 0
+--- !u!1 &4116882216863921596
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 4332417519562294035}
+  - component: {fileID: 139605127612864907}
+  m_Layer: 0
+  m_Name: DeckManager
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &4332417519562294035
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4116882216863921596}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 7308546259657053959}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &139605127612864907
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4116882216863921596}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 73b97129f191d6c48afe118f61f0d0b2, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  startingDeck: []
+  shuffleOnStart: 1
+  defaultDeckSize: 30
+  testDeckSize: 20
+  allowDuplicatesInTestDeck: 1
+  maxDuplicatesPerCard: 3
 --- !u!1 &5072637882637055249
 GameObject:
   m_ObjectHideFlags: 0
@@ -96,61 +146,10 @@ Transform:
   - {fileID: 4549132381759102272}
   - {fileID: 5782291187925454484}
   - {fileID: 473311279198881270}
-  - {fileID: 2285381653683929970}
+  - {fileID: 7835769595142106838}
+  - {fileID: 4332417519562294035}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!1 &5629923853929514127
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 2285381653683929970}
-  - component: {fileID: 3344610782244789111}
-  m_Layer: 0
-  m_Name: TestRunner
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!4 &2285381653683929970
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 5629923853929514127}
-  serializedVersion: 2
-  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 7308546259657053959}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &3344610782244789111
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 5629923853929514127}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: f4af35f269206fe49a0270e643594b56, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  cardManager: {fileID: 8291265475034265126}
-  cardPlayHandler: {fileID: 0}
-  drawPoolSize: 20
-  useRandomSelection: 1
-  allowDuplicates: 1
-  runOnStart: 1
-  showDebugLogs: 1
-  debugDisplay: {fileID: 0}
 --- !u!1 &6962830850928090346
 GameObject:
   m_ObjectHideFlags: 0
@@ -253,3 +252,53 @@ MonoBehaviour:
   - {fileID: 11400000, guid: b715d3fc35397ad4bbe5e06cce303d60, type: 2}
   - {fileID: 11400000, guid: 61a326255c2fb4643b3c289ef544fbbc, type: 2}
   caseSensitive: 0
+--- !u!1 &8790267260798922403
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 7835769595142106838}
+  - component: {fileID: 5747360116101224894}
+  m_Layer: 0
+  m_Name: CombatManager
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &7835769595142106838
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8790267260798922403}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 7308546259657053959}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &5747360116101224894
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8790267260798922403}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4026a5535817d5d4f880fa0687813ff9, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  startLife: 10
+  startCreativity: 5
+  maxCreativity: 100
+  startingHandSize: 5
+  autoDrawOnCombatStart: 1
+  validateDeckOnCombatStart: 1

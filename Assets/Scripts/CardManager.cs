@@ -1,5 +1,7 @@
+// ========== CardManager.cs ==========
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 using UnityEngine;
 
 public class CardManager : SingletonBehaviour<CardManager>
@@ -21,7 +23,7 @@ public class CardManager : SingletonBehaviour<CardManager>
     [SerializeField] private int maxSelectedCards = 1;
     [SerializeField] private bool allowMultiSelect = false;
     
-    // Simplified data structures
+    // Data structures
     private Dictionary<int, Card> _allCards = new Dictionary<int, Card>();
     private Dictionary<Card, int> _cardToId = new Dictionary<Card, int>();
     private List<Card> _handCards = new List<Card>();
@@ -37,23 +39,35 @@ public class CardManager : SingletonBehaviour<CardManager>
     public static event System.Action<Card> OnCardDestroyed;
     public static event System.Action<List<Card>> OnHandUpdated;
     public static event System.Action<List<Card>> OnSelectionChanged;
+    public static event System.Action OnCardManagerInitialized;
+    
+    // Properties
+    public bool IsInitialized { get; private set; }
+    public List<Card> SelectedCards => new List<Card>(_selectedCards);
+    public List<Card> GetHandCards() => new List<Card>(_handCards);
+    public bool IsHandFull => _handCards.Count >= maxHandSize;
+    public int HandSize => _handCards.Count;
     
     protected override void OnAwakeInitialize()
     {
         InitializePool();
         InitializeHandLayout();
+        IsInitialized = true;
+        OnCardManagerInitialized?.Invoke();
     }
     
     private void OnEnable()
     {
         Card.OnCardSelected += HandleCardSelected;
         Card.OnCardDeselected += HandleCardDeselected;
+        Card.OnCardPlayTriggered += HandleCardPlayTriggered;
     }
     
     private void OnDisable()
     {
         Card.OnCardSelected -= HandleCardSelected;
         Card.OnCardDeselected -= HandleCardDeselected;
+        Card.OnCardPlayTriggered -= HandleCardPlayTriggered;
     }
     
     private void InitializePool()
@@ -77,9 +91,7 @@ public class CardManager : SingletonBehaviour<CardManager>
         {
             _handLayoutManager = handContainer.GetComponent<HandLayoutManager>();
             if (_handLayoutManager == null)
-            {
                 _handLayoutManager = handContainer.gameObject.AddComponent<HandLayoutManager>();
-            }
         }
     }
     
@@ -93,27 +105,12 @@ public class CardManager : SingletonBehaviour<CardManager>
         // Setup transform
         Transform targetParent = parent ?? defaultSpawnParent ?? transform;
         cardObject.transform.SetParent(targetParent, false);
-        
-        // Reset transform properly
-        var rectTransform = cardObject.GetComponent<RectTransform>();
-        if (rectTransform != null)
-        {
-            rectTransform.localPosition = Vector3.zero;
-            rectTransform.localRotation = Quaternion.identity;
-            rectTransform.localScale = Vector3.one;
-        }
-        else
-        {
-            cardObject.transform.localPosition = Vector3.zero;
-            cardObject.transform.localRotation = Quaternion.identity;
-            cardObject.transform.localScale = Vector3.one;
-        }
+        ResetCardTransform(cardObject);
         
         // Setup card component
         Card cardComponent = cardObject.GetComponent<Card>();
         if (cardComponent == null)
         {
-            Debug.LogError("[CardManager] Card prefab missing Card component!");
             ReturnToPool(cardObject);
             return null;
         }
@@ -127,21 +124,36 @@ public class CardManager : SingletonBehaviour<CardManager>
         _cardToId[cardComponent] = cardId;
         
         if (addToHand && _handCards.Count < maxHandSize)
-        {
             AddCardToHandInternal(cardComponent);
-        }
         
         OnCardSpawned?.Invoke(cardComponent);
         return cardComponent;
     }
     
+    private void HandleCardPlayTriggered(Card card)
+    {
+        if (card == null || !_selectedCards.Contains(card)) return;
+        
+        if (SpellcastManager.HasInstance)
+            SpellcastManager.Instance.TryPlayCards(_selectedCards);
+    }
+    
     private GameObject GetCardObject()
     {
         if (useObjectPooling && _cardPool.Count > 0)
-        {
             return _cardPool.Dequeue();
-        }
         return cardPrefab != null ? Instantiate(cardPrefab) : null;
+    }
+    
+    private void ResetCardTransform(GameObject cardObject)
+    {
+        var rectTransform = cardObject.GetComponent<RectTransform>();
+        if (rectTransform != null)
+        {
+            rectTransform.localPosition = Vector3.zero;
+            rectTransform.localRotation = Quaternion.identity;
+            rectTransform.localScale = Vector3.one;
+        }
     }
     
     private void AddCardToHandInternal(Card card)
@@ -195,24 +207,8 @@ public class CardManager : SingletonBehaviour<CardManager>
     private void CleanupCardForPool(Card card)
     {
         if (card == null) return;
-        
-        card.ClearEventSubscriptions();
         card.ResetCardState();
-        
-        // Reset transform properly
-        var rectTransform = card.GetComponent<RectTransform>();
-        if (rectTransform != null)
-        {
-            rectTransform.localPosition = Vector3.zero;
-            rectTransform.localRotation = Quaternion.identity;
-            rectTransform.localScale = Vector3.one;
-        }
-        else
-        {
-            card.transform.localPosition = Vector3.zero;
-            card.transform.localRotation = Quaternion.identity;
-            card.transform.localScale = Vector3.one;
-        }
+        ResetCardTransform(card.gameObject);
     }
     
     private void HandleCardSelected(Card card)
@@ -223,9 +219,7 @@ public class CardManager : SingletonBehaviour<CardManager>
         {
             var cardsToDeselect = _selectedCards.ToList();
             foreach (var selectedCard in cardsToDeselect)
-            {
                 selectedCard.ForceDeselect();
-            }
             _selectedCards.Clear();
         }
         else if (_selectedCards.Count >= maxSelectedCards)
@@ -249,34 +243,14 @@ public class CardManager : SingletonBehaviour<CardManager>
     {
         var cardsToDeselect = _selectedCards.ToList();
         foreach (var card in cardsToDeselect)
-        {
             card.ForceDeselect();
-        }
         _selectedCards.Clear();
         OnSelectionChanged?.Invoke(new List<Card>(_selectedCards));
     }
     
     private void UpdateHandLayout()
     {
-        if (_handLayoutManager != null)
-        {
-            _handLayoutManager.UpdateLayout();
-        }
-    }
-    
-    public void CleanupAllCards()
-    {
-        var allCardsCopy = _allCards.Values.ToList();
-        foreach (var card in allCardsCopy)
-        {
-            if (card != null)
-                DestroyCard(card);
-        }
-        
-        _allCards.Clear();
-        _cardToId.Clear();
-        _handCards.Clear();
-        _selectedCards.Clear();
+        _handLayoutManager?.UpdateLayout();
     }
     
     public bool AddCardToHand(Card card)
@@ -288,6 +262,20 @@ public class CardManager : SingletonBehaviour<CardManager>
         return true;
     }
     
+    // ZENTRALISIERTE Methode für Letter-Extraktion (eliminiert Dopplung)
+    public static string GetLetterSequenceFromCards(List<Card> cards)
+    {
+        if (cards == null || cards.Count == 0) return "";
+        
+        var letterBuilder = new StringBuilder(cards.Count * 2);
+        foreach (var card in cards)
+        {
+            if (card?.CardData?.letterValues != null)
+                letterBuilder.Append(card.CardData.letterValues);
+        }
+        return letterBuilder.ToString();
+    }
+    
     public bool RemoveCardFromHand(Card card)
     {
         if (card == null || !_handCards.Remove(card))
@@ -297,31 +285,13 @@ public class CardManager : SingletonBehaviour<CardManager>
         OnHandUpdated?.Invoke(new List<Card>(_handCards));
         return true;
     }
-    
-    // Public accessors
-    public List<Card> GetSelectedCards() => _selectedCards != null ? new List<Card>(_selectedCards) : new List<Card>();
-    public List<Card> GetHandCards() => _handCards != null ? new List<Card>(_handCards) : new List<Card>();
-    public List<Card> GetAllCards() => _allCards != null ? new List<Card>(_allCards.Values) : new List<Card>();
-    public int ActiveCardCount => _allCards?.Count ?? 0;
-    public int HandSize => _handCards?.Count ?? 0;
-    public int SelectedCount => _selectedCards?.Count ?? 0;
-    public bool IsHandFull => _handCards != null && _handCards.Count >= maxHandSize;
-    
-    public bool IsValidCard(Card card)
+    public List<CardData> GetAllCardData()
     {
-        return card != null && _cardToId.ContainsKey(card);
-    }
-    
-    [ContextMenu("Spawn Test Card")]
-    public void SpawnTestCard()
-    {
-        if (allCardData.Count > 0)
-            SpawnCard(allCardData[0], null, true);
+        return new List<CardData>(allCardData.Where(card => card != null));
     }
 
-    [ContextMenu("Clear All Cards")]
-    public void ClearAllCards()
+    public int GetAvailableCardCount()
     {
-        CleanupAllCards();
+        return allCardData?.Count(card => card != null) ?? 0;
     }
 }

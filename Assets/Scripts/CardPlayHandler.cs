@@ -1,58 +1,144 @@
 using UnityEngine;
 using UnityEngine.UI;
+using System.Collections;
 using System.Collections.Generic;
-using System.Text;
 
 public class CardPlayHandler : MonoBehaviour
 {
-    [Header("UI References")]
+    [Header("Button References")]
     [SerializeField] private Button playButton;
     [SerializeField] private Button clearButton;
     [SerializeField] private Button drawButton;
-    [SerializeField] private TMPro.TextMeshProUGUI statusDisplay;
-    [SerializeField] private TMPro.TextMeshProUGUI comboDisplay;
-    [SerializeField] private TMPro.TextMeshProUGUI historyDisplay;
     
-    [Header("History Settings")]
+    [Header("Settings")]
     [SerializeField] private int maxHistoryEntries = 10;
-    
-    [Header("Draw Settings")]
-    [SerializeField] private List<CardData> drawPool = new List<CardData>();
     [SerializeField] private int cardsPerDraw = 1;
+    [SerializeField] private bool autoUpdateLayout = true;
+    [SerializeField] private int initialHandSize = 5;
+    [SerializeField] private float managerTimeout = 5f;
     
     private List<Card> _selectedCards = new List<Card>();
-    private string _cachedLetterSequence = "";
-    private bool _isDirty = true;
-    private bool _isDestroyed = false;
     
     // History tracking
     private Queue<string> _playHistory = new Queue<string>();
     private Queue<string> _spellHistory = new Queue<string>();
     
+    // Manager state tracking
+    private bool _managersInitialized = false;
+    private Coroutine _initializationCoroutine;
+    
+    // Events
+    public static event System.Action<List<Card>> OnCardsPlayed;
+    public static event System.Action<int> OnCardsDrawn;
+    public static event System.Action<Queue<string>, Queue<string>> OnHistoryUpdated;
+    public static event System.Action OnManagersReady;
+    
+    // Properties for safe manager access
+    private CardManager CardManagerInstance => CardManager.HasInstance ? CardManager.Instance : null;
+    private DeckManager DeckManagerInstance => DeckManager.HasInstance ? DeckManager.Instance : null;
+    private HandLayoutManager HandLayoutManagerInstance => HandLayoutManager.HasInstance ? HandLayoutManager.Instance : null;
+    private SpellcastManager SpellcastManagerInstance => SpellcastManager.HasInstance ? SpellcastManager.Instance : null;
+    
     private void Awake()
     {
-        if (playButton != null)
-            playButton.onClick.AddListener(PlaySelectedCards);
-        if (clearButton != null)
-            clearButton.onClick.AddListener(ClearSelection);
-        if (drawButton != null)
-            drawButton.onClick.AddListener(DrawCards);
+        SetupButtons();
+        _initializationCoroutine = StartCoroutine(WaitForManagerInitialization());
+    }
+    
+    private void SetupButtons()
+    {
+        playButton?.onClick.AddListener(PlaySelectedCards);
+        clearButton?.onClick.AddListener(ClearSelection);
+        drawButton?.onClick.AddListener(DrawCardsFromDeck);
+        
+        // Initially disable buttons until managers are ready
+        SetButtonsInteractable(false);
+    }
+    
+    private IEnumerator WaitForManagerInitialization()
+    {
+        float elapsed = 0f;
+        
+        while (elapsed < managerTimeout && !_managersInitialized)
+        {
+            if (CheckManagersReady())
+            {
+                _managersInitialized = true;
+                OnManagersInitialized();
+                yield break;
+            }
+            
+            elapsed += Time.deltaTime;
+            yield return null;
+        }
+        
+        if (!_managersInitialized)
+        {
+            Debug.LogWarning($"[CardPlayHandler] Manager initialization timeout after {managerTimeout}s");
+        }
+    }
+    
+    private bool CheckManagersReady()
+    {
+        return CardManager.HasInstance && CardManager.Instance.IsInitialized &&
+               DeckManager.HasInstance && DeckManager.Instance.IsInitialized;
+    }
+    
+    private void OnManagersInitialized()
+    {
+        Debug.Log("[CardPlayHandler] All managers ready, enabling functionality");
+        
+        // Enable buttons
+        SetButtonsInteractable(true);
+        
+        // Subscribe to events now that managers are ready
+        SubscribeToEvents();
+        
+        // Draw initial hand if in combat or requested
+        if (CombatManager.HasInstance && CombatManager.Instance.IsInCombat)
+        {
+            DrawInitialHand();
+        }
+        
+        OnManagersReady?.Invoke();
+    }
+    
+    private void SetButtonsInteractable(bool interactable)
+    {
+        if (playButton) playButton.interactable = interactable;
+        if (clearButton) clearButton.interactable = interactable;
+        if (drawButton) drawButton.interactable = interactable;
+    }
+    
+    private void SubscribeToEvents()
+    {
+        // Only subscribe when managers are ready
+        if (CardManagerInstance != null)
+        {
+            CardManager.OnSelectionChanged += OnSelectionChanged;
+            CardManager.OnHandUpdated += OnHandUpdated;
+        }
+        
+        if (SpellcastManagerInstance != null)
+        {
+            SpellcastManager.OnSpellFound += OnSpellFound;
+        }
+        
+        Card.OnCardPlayTriggered += OnCardPlayTriggered;
+        
+        if (CombatManager.HasInstance)
+        {
+            CombatManager.OnCombatStarted += OnCombatStarted;
+        }
     }
     
     private void OnEnable()
     {
-        if (_isDestroyed) return;
-        
-        CardManager.OnSelectionChanged += OnSelectionChanged;
-        CardManager.OnHandUpdated += OnHandUpdated;
-        SpellcastManager.OnSpellFound += OnSpellFound;
-        SpellcastManager.OnSpellNotFound += OnSpellNotFound;
-        SpellcastManager.OnSpellCast += OnSpellCast;
-        SpellcastManager.OnSpellEffectTriggered += OnSpellEffectTriggered;
-        SpellcastManager.OnComboUpdated += OnComboUpdated;
-        
-        // NEW: Subscribe to direct card play events
-        Card.OnCardPlayTriggered += OnCardPlayTriggered;
+        // Only subscribe if managers are already ready
+        if (_managersInitialized)
+        {
+            SubscribeToEvents();
+        }
     }
     
     private void OnDisable()
@@ -65,318 +151,226 @@ public class CardPlayHandler : MonoBehaviour
         CardManager.OnSelectionChanged -= OnSelectionChanged;
         CardManager.OnHandUpdated -= OnHandUpdated;
         SpellcastManager.OnSpellFound -= OnSpellFound;
-        SpellcastManager.OnSpellNotFound -= OnSpellNotFound;
-        SpellcastManager.OnSpellCast -= OnSpellCast;
-        SpellcastManager.OnSpellEffectTriggered -= OnSpellEffectTriggered;
-        SpellcastManager.OnComboUpdated -= OnComboUpdated;
         Card.OnCardPlayTriggered -= OnCardPlayTriggered;
+        CombatManager.OnCombatStarted -= OnCombatStarted;
     }
     
     private void OnDestroy()
     {
-        _isDestroyed = true;
-        UnsubscribeFromEvents();
+        if (_initializationCoroutine != null)
+        {
+            StopCoroutine(_initializationCoroutine);
+        }
         
-        if (playButton != null)
-            playButton.onClick.RemoveListener(PlaySelectedCards);
-        if (clearButton != null)
-            clearButton.onClick.RemoveListener(ClearSelection);
-        if (drawButton != null)
-            drawButton.onClick.RemoveListener(DrawCards);
+        playButton?.onClick.RemoveAllListeners();
+        clearButton?.onClick.RemoveAllListeners();
+        drawButton?.onClick.RemoveAllListeners();
+        
+        UnsubscribeFromEvents();
     }
     
-    // NEW: Handle direct card play (double-click, hold, modifier key)
+    // Event Handlers
+    private void OnCombatStarted() => ClearSelection();
+    
     private void OnCardPlayTriggered(Card card)
     {
-        if (_isDestroyed || card == null) return;
-        
-        var singleCardList = new List<Card> { card };
-        PlayCards(singleCardList);
-    }
-    
-    public void DrawCards()
-    {
-        if (_isDestroyed || CardManager.Instance == null || drawPool.Count == 0) return;
-        if (CardManager.Instance.IsHandFull) return;
-        
-        for (int i = 0; i < cardsPerDraw && !CardManager.Instance.IsHandFull; i++)
-        {
-            CardData randomCard = drawPool[Random.Range(0, drawPool.Count)];
-            CardManager.Instance.SpawnCard(randomCard, null, true);
-        }
-    }
-    
-    private void OnHandUpdated(List<Card> handCards)
-    {
-        if (_isDestroyed || drawButton == null) return;
-        drawButton.interactable = !CardManager.Instance.IsHandFull && drawPool.Count > 0;
+        if (card != null && _managersInitialized) 
+            PlayCards(new List<Card> { card });
     }
     
     private void OnSelectionChanged(List<Card> selectedCards)
     {
-        if (_isDestroyed) return;
-        
         _selectedCards.Clear();
-        if (selectedCards != null)
-            _selectedCards.AddRange(selectedCards);
-        _isDirty = true;
-        UpdateUI();
+        if (selectedCards != null) _selectedCards.AddRange(selectedCards);
     }
     
+    private void OnHandUpdated(List<Card> handCards) 
+    {
+        if (autoUpdateLayout && _managersInitialized) 
+            HandLayoutManagerInstance?.UpdateLayout();
+    }
+    
+    private void DrawInitialHand()
+    {
+        if (!CanPerformAction()) return;
+        
+        StartCoroutine(DrawInitialHandCoroutine());
+    }
+    
+    private IEnumerator DrawInitialHandCoroutine()
+    {
+        int cardsDrawn = 0;
+        for (int i = 0; i < initialHandSize && CanDraw(); i++)
+        {
+            var drawnCard = DeckManagerInstance.DrawCard();
+            if (drawnCard != null)
+            {
+                CardManagerInstance.SpawnCard(drawnCard, null, true);
+                cardsDrawn++;
+                yield return null; // Spread over multiple frames
+            }
+            else break;
+        }
+        
+        if (cardsDrawn > 0)
+        {
+            OnCardsDrawn?.Invoke(cardsDrawn);
+            if (autoUpdateLayout) HandLayoutManagerInstance?.UpdateLayout();
+        }
+    }
+    
+    // Core Actions
     public void PlaySelectedCards()
     {
-        if (_isDestroyed || _selectedCards.Count == 0) return;
+        if (!CanPerformAction() || _selectedCards.Count == 0) return;
         PlayCards(_selectedCards);
     }
     
-    // REFACTORED: Common play logic for both selected cards and direct play
     private void PlayCards(List<Card> cardsToPlay)
     {
-        if (_isDestroyed || cardsToPlay.Count == 0) return;
-        
-        string letterSequence = ExtractLetterSequence(cardsToPlay);
+        if (!CanPerformAction() || cardsToPlay.Count == 0) return;
+    
+        string letterSequence = CardManager.GetLetterSequenceFromCards(cardsToPlay);
         if (string.IsNullOrEmpty(letterSequence)) return;
-        
-        // Process spell first
-        if (SpellcastManager.Instance != null)
-            SpellcastManager.Instance.ProcessCardPlay(cardsToPlay, letterSequence);
-        
-        // Add to play history
+    
+        OnCardsPlayed?.Invoke(cardsToPlay);
+        SpellcastManagerInstance?.ProcessCardPlay(cardsToPlay, letterSequence);
         AddToPlayHistory(letterSequence);
-        
-        // Destroy card objects immediately
-        foreach (var card in cardsToPlay)
+    
+        // Remove cards efficiently
+        var cardsToRemove = new List<Card>(cardsToPlay);
+        foreach (var card in cardsToRemove)
         {
-            if (card != null)
+            if (card?.CardData != null)
             {
-                // Remove from hand first
-                CardManager.Instance?.RemoveCardFromHand(card);
+                DeckManagerInstance?.DiscardCard(card.CardData);
+                CardManagerInstance?.RemoveCardFromHand(card);
+                HandLayoutManagerInstance?.CleanupCardReference(card);
                 
-                // Clean up layout references
-                HandLayoutManager.Instance?.CleanupCardReference(card);
-                
-                // Destroy the GameObject
-                Destroy(card.gameObject);
+                if (card.gameObject != null) Destroy(card.gameObject);
+            }
+        }
+    
+        if (cardsToPlay == _selectedCards) _selectedCards.Clear();
+        if (autoUpdateLayout) HandLayoutManagerInstance?.UpdateLayout();
+    }
+    
+    public void DrawCardsFromDeck()
+    {
+        if (!CanPerformAction() || !CanDraw()) 
+        {
+            Debug.LogWarning("[CardPlayHandler] Cannot draw cards - conditions not met");
+            return;
+        }
+        
+        StartCoroutine(DrawCardsCoroutine());
+    }
+    
+    private IEnumerator DrawCardsCoroutine()
+    {
+        int cardsDrawn = 0;
+        for (int i = 0; i < cardsPerDraw && CanDraw(); i++)
+        {
+            var drawnCard = DeckManagerInstance.DrawCard();
+            if (drawnCard != null)
+            {
+                CardManagerInstance.SpawnCard(drawnCard, null, true);
+                cardsDrawn++;
+                yield return null; // Spread drawing over frames for better performance
+            }
+            else 
+            {
+                Debug.LogWarning($"[CardPlayHandler] Failed to draw card {i+1}/{cardsPerDraw}");
+                break;
             }
         }
         
-        // Clear selection if playing selected cards
-        if (cardsToPlay == _selectedCards)
+        if (cardsDrawn > 0)
         {
-            _selectedCards.Clear();
-            _cachedLetterSequence = "";
-            _isDirty = true;
-            UpdateUI();
+            OnCardsDrawn?.Invoke(cardsDrawn);
+            if (autoUpdateLayout) HandLayoutManagerInstance?.UpdateLayout();
+            Debug.Log($"[CardPlayHandler] Drew {cardsDrawn} cards");
         }
     }
     
     public void ClearSelection()
     {
-        if (_isDestroyed) return;
+        if (!CanPerformAction()) return;
         
-        if (CardManager.Instance != null)
-            CardManager.Instance.ClearSelection();
+        CardManagerInstance?.ClearSelection();
         _selectedCards.Clear();
-        _cachedLetterSequence = "";
-        _isDirty = true;
-        UpdateUI();
     }
     
-    private string ExtractLetterSequence(List<Card> cards)
-    {
-        if (cards == null || cards.Count == 0) return "";
-        
-        var letterBuilder = new StringBuilder();
-        foreach (var card in cards)
-        {
-            if (card?.CardData?.letterValues != null)
-                letterBuilder.Append(card.CardData.letterValues);
-        }
-        return letterBuilder.ToString();
-    }
-    
-    private void UpdateUI()
-    {
-        if (_isDestroyed) return;
-        
-        bool hasCards = _selectedCards.Count > 0;
-        
-        if (playButton != null)
-            playButton.interactable = hasCards;
-        
-        if (clearButton != null)
-            clearButton.interactable = hasCards;
-        
-        if (drawButton != null)
-            drawButton.interactable = !CardManager.Instance.IsHandFull && drawPool.Count > 0;
-        
-        if (statusDisplay != null)
-        {
-            if (hasCards)
-            {
-                if (_isDirty)
-                {
-                    _cachedLetterSequence = ExtractLetterSequence(_selectedCards);
-                    _isDirty = false;
-                }
-                statusDisplay.text = $"Letters: {_cachedLetterSequence}";
-            }
-            else
-            {
-                statusDisplay.text = "Select cards to play\nTip: Double-click, hold, or Ctrl+click to play instantly";
-            }
-        }
-    }
-    
-    private void OnComboUpdated(string currentCombo)
-    {
-        if (_isDestroyed || comboDisplay == null) return;
-        
-        if (string.IsNullOrEmpty(currentCombo))
-        {
-            comboDisplay.text = "Combo: -";
-            comboDisplay.color = Color.gray;
-        }
-        else
-        {
-            comboDisplay.text = $"Combo: {currentCombo}";
-            comboDisplay.color = Color.yellow;
-        }
-    }
-    
+    // Spell Event Handlers
     private void OnSpellFound(SpellAsset spell, string usedLetters)
     {
-        if (_isDestroyed || statusDisplay == null) return;
-        
-        statusDisplay.text = $"Spell: {spell.SpellName}!";
-        statusDisplay.color = Color.green;
-        
-        // Add to spell history
         AddToSpellHistory(spell.SpellName, usedLetters);
-        
-        CancelInvoke(nameof(ResetStatusDisplay));
-        Invoke(nameof(ResetStatusDisplay), 2f);
     }
     
-    private void OnSpellCast(SpellAsset spell, List<Card> sourceCards)
-    {
-        if (_isDestroyed) return;
-        
-        Debug.Log($"[CardPlayHandler] Spell '{spell.SpellName}' cast with {sourceCards.Count} cards");
-    }
-    
-    private void OnSpellEffectTriggered(SpellEffect effect)
-    {
-        if (_isDestroyed) return;
-        
-        Debug.Log($"[CardPlayHandler] Spell effect triggered: {effect.effectName} ({effect.effectType})");
-        
-        if (statusDisplay != null)
-        {
-            statusDisplay.text = $"Effect: {effect.effectName}";
-            statusDisplay.color = GetEffectColor(effect.effectType);
-            
-            CancelInvoke(nameof(ResetStatusDisplay));
-            Invoke(nameof(ResetStatusDisplay), 1f);
-        }
-    }
-    
-    private Color GetEffectColor(SpellEffectType effectType)
-    {
-        return effectType switch
-        {
-            SpellEffectType.Damage => Color.red,
-            SpellEffectType.Heal => Color.green,
-            SpellEffectType.Buff => Color.blue,
-            SpellEffectType.Debuff => Color.magenta,
-            SpellEffectType.Shield => Color.cyan,
-            _ => Color.white
-        };
-    }
-    
-    private void OnSpellNotFound(string attemptedLetters)
-    {
-        if (_isDestroyed || statusDisplay == null) return;
-        
-        statusDisplay.text = $"No spell found";
-        statusDisplay.color = Color.red;
-        
-        CancelInvoke(nameof(ResetStatusDisplay));
-        Invoke(nameof(ResetStatusDisplay), 1.5f);
-    }
-    
+    // History Management
     private void AddToPlayHistory(string letters)
     {
-        string timestamp = System.DateTime.Now.ToString("HH:mm:ss");
-        string entry = $"[{timestamp}] Played: {letters}";
-        
+        var entry = $"[{System.DateTime.Now:HH:mm:ss}] Played: {letters}";
         _playHistory.Enqueue(entry);
-        if (_playHistory.Count > maxHistoryEntries)
-            _playHistory.Dequeue();
-            
-        UpdateHistoryDisplay();
+        if (_playHistory.Count > maxHistoryEntries) _playHistory.Dequeue();
+        OnHistoryUpdated?.Invoke(_playHistory, _spellHistory);
     }
     
     private void AddToSpellHistory(string spellName, string letters)
     {
-        string timestamp = System.DateTime.Now.ToString("HH:mm:ss");
-        string entry = $"[{timestamp}] Cast: {spellName} ({letters})";
-        
+        var entry = $"[{System.DateTime.Now:HH:mm:ss}] Cast: {spellName} ({letters})";
         _spellHistory.Enqueue(entry);
-        if (_spellHistory.Count > maxHistoryEntries)
-            _spellHistory.Dequeue();
-            
-        UpdateHistoryDisplay();
+        if (_spellHistory.Count > maxHistoryEntries) _spellHistory.Dequeue();
+        OnHistoryUpdated?.Invoke(_playHistory, _spellHistory);
     }
     
-    private void UpdateHistoryDisplay()
+    private bool CanPerformAction()
     {
-        if (_isDestroyed || historyDisplay == null) return;
-        
-        var history = new System.Text.StringBuilder();
-        
-        // Add spell history (most recent first)
-        if (_spellHistory.Count > 0)
-        {
-            history.AppendLine("SPELLS CAST:");
-            var spells = _spellHistory.ToArray();
-            for (int i = spells.Length - 1; i >= 0; i--)
-            {
-                history.AppendLine(spells[i]);
-            }
-            history.AppendLine();
-        }
-        
-        // Add play history (most recent first)
-        if (_playHistory.Count > 0)
-        {
-            history.AppendLine("CARDS PLAYED:");
-            var plays = _playHistory.ToArray();
-            for (int i = plays.Length - 1; i >= 0; i--)
-            {
-                history.AppendLine(plays[i]);
-            }
-        }
-        
-        historyDisplay.text = history.Length > 0 ? history.ToString().TrimEnd() : "No history yet";
+        return _managersInitialized && CardManagerInstance != null && DeckManagerInstance != null;
     }
     
-    private void ResetStatusDisplay()
+    private bool CanDraw()
     {
-        if (_isDestroyed || statusDisplay == null) return;
-        
-        statusDisplay.color = Color.white;
-        UpdateUI();
+        return CanPerformAction() && 
+               !CardManagerInstance.IsHandFull && 
+               !DeckManagerInstance.IsDeckEmpty;
     }
     
+    // Properties
     public bool HasSelectedCards => _selectedCards.Count > 0;
     public int SelectedCardCount => _selectedCards.Count;
+    public IReadOnlyCollection<string> PlayHistory => _playHistory;
+    public IReadOnlyCollection<string> SpellHistory => _spellHistory;
+    public bool ManagersInitialized => _managersInitialized;
     
-    // History access
+    // Public Methods
     public void ClearHistory()
     {
         _playHistory.Clear();
         _spellHistory.Clear();
-        UpdateHistoryDisplay();
+        OnHistoryUpdated?.Invoke(_playHistory, _spellHistory);
+    }
+    
+    public void ForceDrawCards(int count)
+    {
+        if (!CanPerformAction()) return;
+        
+        int originalCardsPerDraw = cardsPerDraw;
+        cardsPerDraw = count;
+        DrawCardsFromDeck();
+        cardsPerDraw = originalCardsPerDraw;
+    }
+    
+    // Debug Methods
+    [ContextMenu("Force Manager Check")]
+    public void DebugCheckManagers()
+    {
+        Debug.Log($"[CardPlayHandler] Manager Status:");
+        Debug.Log($"  CardManager: {(CardManager.HasInstance ? "Available" : "Missing")} " +
+                  $"{(CardManager.HasInstance && CardManager.Instance.IsInitialized ? "(Initialized)" : "(Not Initialized)")}");
+        Debug.Log($"  DeckManager: {(DeckManager.HasInstance ? "Available" : "Missing")} " +
+                  $"{(DeckManager.HasInstance && DeckManager.Instance.IsInitialized ? "(Initialized)" : "(Not Initialized)")}");
+        Debug.Log($"  Managers Ready: {_managersInitialized}");
+        Debug.Log($"  Can Draw: {CanDraw()}");
     }
 }

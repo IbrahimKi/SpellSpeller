@@ -236,8 +236,6 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   cardSpacing: 120
-  arcHeight: 20
-  maxRotationAngle: 15
   handScaleMultiplier: 0.75
   enableDynamicScaling: 0
   minScaleReduction: 0.8
@@ -1481,10 +1479,10 @@ MonoBehaviour:
   statusDisplay: {fileID: 7820994314788873640}
   comboDisplay: {fileID: 3494016875707437309}
   historyDisplay: {fileID: 1099408689139781633}
-  maxHistoryEntries: 10
-  drawPool:
-  - {fileID: 0}
+  maxHistoryEntries: 5
   cardsPerDraw: 1
+  autoUpdateLayout: 1
+  initialHandSize: 5
 --- !u!1 &8821163011549396463
 GameObject:
   m_ObjectHideFlags: 0

@@ -23,29 +23,12 @@ public class SpellAsset : ScriptableObject
     public IReadOnlyList<SpellSubtype> Subtypes => spellSubtypes.AsReadOnly();
     public IReadOnlyList<SpellEffect> Effects => effects.AsReadOnly();
     
-    /// <summary>
-    /// Normalisierter Letter Code für Vergleiche
-    /// </summary>
     public string NormalizedCode => letterCode.ToUpper();
-    
-    /// <summary>
-    /// Überprüft ob der Spell gültig konfiguriert ist
-    /// </summary>
     public bool IsValid => !string.IsNullOrEmpty(spellName) && !string.IsNullOrEmpty(letterCode);
     
-    /// <summary>
-    /// Überprüft ob der Spell einen bestimmten Subtyp hat
-    /// </summary>
     public bool HasSubtype(SpellSubtype subtype) => spellSubtypes.Contains(subtype);
-    
-    /// <summary>
-    /// Überprüft ob der Spell einen der gegebenen Subtypen hat
-    /// </summary>
     public bool HasAnySubtype(params SpellSubtype[] subtypes) => subtypes.Any(HasSubtype);
     
-    /// <summary>
-    /// Führt alle Spell-Effekte aus
-    /// </summary>
     public void ExecuteEffects()
     {
         foreach (var effect in effects)

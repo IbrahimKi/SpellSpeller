@@ -6,10 +6,6 @@ public class HandLayoutManager : SingletonBehaviour<HandLayoutManager>
 {
     [Header("Layout Settings")]
     [SerializeField] private float cardSpacing = 120f;
-    [SerializeField] private float arcHeight = 50f;
-    [SerializeField] private float maxRotationAngle = 15f;
-    
-    [Header("Scale Settings")]
     [SerializeField] private float handScaleMultiplier = 0.75f;
     [SerializeField] private bool enableDynamicScaling = true;
     [SerializeField] private float minScaleReduction = 0.8f;
@@ -22,21 +18,50 @@ public class HandLayoutManager : SingletonBehaviour<HandLayoutManager>
     private RectTransform rectTransform;
     private bool isAnimating = false;
     private List<Card> cachedHandCards = new();
-    private readonly Dictionary<Card, Vector3> targetPositions = new();
-    
-    // Cached component references for performance
     private readonly Dictionary<Card, RectTransform> cardRectTransforms = new();
+    
+    // Properties matching GameUIHandler expectations
+    public bool IsAnimating => isAnimating;
+    public int HandSize => cachedHandCards.Count;
     
     protected override void OnAwakeInitialize()
     {
         rectTransform = GetComponent<RectTransform>();
     }
     
+    private void OnEnable()
+    {
+        // Listen to CardManager events
+        if (CardManager.HasInstance)
+        {
+            CardManager.OnHandUpdated += OnHandUpdated;
+        }
+        else
+        {
+            CardManager.OnCardManagerInitialized += () => {
+                CardManager.OnHandUpdated += OnHandUpdated;
+            };
+        }
+    }
+    
+    private void OnDisable()
+    {
+        if (CardManager.HasInstance)
+        {
+            CardManager.OnHandUpdated -= OnHandUpdated;
+        }
+    }
+    
+    private void OnHandUpdated(List<Card> handCards)
+    {
+        UpdateLayout();
+    }
+    
     public void UpdateLayout()
     {
         if (isAnimating) return;
         
-        var handCards = CardManager.Instance?.GetHandCards() ?? new List<Card>();
+        var handCards = CardManager.HasInstance ? CardManager.Instance.GetHandCards() : new List<Card>();
         
         if (HasHandChanged(handCards))
         {
@@ -65,7 +90,7 @@ public class HandLayoutManager : SingletonBehaviour<HandLayoutManager>
         
         isAnimating = true;
         
-        var layoutData = CalculateLayout();
+        var layouts = CalculateLayout();
         float elapsed = 0f;
         
         while (elapsed < animationDuration)
@@ -73,11 +98,11 @@ public class HandLayoutManager : SingletonBehaviour<HandLayoutManager>
             elapsed += Time.deltaTime;
             float progress = animationCurve.Evaluate(elapsed / animationDuration);
             
-            ApplyLayoutProgress(layoutData, progress);
+            ApplyLayoutProgress(layouts, progress);
             yield return null;
         }
         
-        ApplyFinalLayout(layoutData);
+        ApplyFinalLayout(layouts);
         isAnimating = false;
     }
     
@@ -85,20 +110,16 @@ public class HandLayoutManager : SingletonBehaviour<HandLayoutManager>
     {
         public RectTransform rectTransform;
         public Vector3 startPos;
-        public Quaternion startRot;
         public Vector3 startScale;
         public Vector3 targetPos;
-        public Quaternion targetRot;
         public Vector3 targetScale;
         
-        public CardLayout(RectTransform rt, Vector3 tPos, Quaternion tRot, Vector3 tScale)
+        public CardLayout(RectTransform rt, Vector3 tPos, Vector3 tScale)
         {
             rectTransform = rt;
             startPos = rt.localPosition;
-            startRot = rt.localRotation;
             startScale = rt.localScale;
             targetPos = tPos;
-            targetRot = tRot;
             targetScale = tScale;
         }
     }
@@ -112,8 +133,6 @@ public class HandLayoutManager : SingletonBehaviour<HandLayoutManager>
         float totalWidth = (cardCount - 1) * cardSpacing;
         float startX = -totalWidth * 0.5f;
         
-        targetPositions.Clear();
-        
         for (int i = 0; i < cardCount; i++)
         {
             var card = cachedHandCards[i];
@@ -122,21 +141,11 @@ public class HandLayoutManager : SingletonBehaviour<HandLayoutManager>
             var rectTransform = GetCachedRectTransform(card);
             if (rectTransform == null || rectTransform.parent != this.rectTransform) continue;
             
-            // Calculate arc position
-            float normalizedPos = cardCount > 1 ? (float)i / (cardCount - 1) : 0.5f;
             float xPos = startX + (i * cardSpacing);
-            float yPos = Mathf.Sin(normalizedPos * Mathf.PI) * arcHeight;
-            var targetPos = new Vector3(xPos, yPos, 0);
+            var targetPos = new Vector3(xPos, 0, 0);
+            var targetScale = Vector3.one * handScale;
             
-            // Calculate rotation
-            float rotationAngle = (normalizedPos - 0.5f) * maxRotationAngle * 2f;
-            var targetRot = Quaternion.Euler(0, 0, rotationAngle);
-            
-            // Calculate scale
-            Vector3 targetScale = Vector3.one * handScale;
-            
-            layouts.Add(new CardLayout(rectTransform, targetPos, targetRot, targetScale));
-            targetPositions[card] = targetPos;
+            layouts.Add(new CardLayout(rectTransform, targetPos, targetScale));
         }
         
         return layouts;
@@ -171,7 +180,6 @@ public class HandLayoutManager : SingletonBehaviour<HandLayoutManager>
             if (layout.rectTransform == null) continue;
             
             layout.rectTransform.localPosition = Vector3.Lerp(layout.startPos, layout.targetPos, progress);
-            layout.rectTransform.localRotation = Quaternion.Lerp(layout.startRot, layout.targetRot, progress);
             layout.rectTransform.localScale = Vector3.Lerp(layout.startScale, layout.targetScale, progress);
         }
     }
@@ -183,7 +191,6 @@ public class HandLayoutManager : SingletonBehaviour<HandLayoutManager>
             if (layout.rectTransform == null) continue;
             
             layout.rectTransform.localPosition = layout.targetPos;
-            layout.rectTransform.localRotation = layout.targetRot;
             layout.rectTransform.localScale = layout.targetScale;
         }
     }
@@ -196,7 +203,7 @@ public class HandLayoutManager : SingletonBehaviour<HandLayoutManager>
             isAnimating = false;
         }
         
-        var handCards = CardManager.Instance?.GetHandCards() ?? new List<Card>();
+        var handCards = CardManager.HasInstance ? CardManager.Instance.GetHandCards() : new List<Card>();
         cachedHandCards.Clear();
         cachedHandCards.AddRange(handCards);
         
@@ -204,31 +211,8 @@ public class HandLayoutManager : SingletonBehaviour<HandLayoutManager>
         ApplyFinalLayout(layouts);
     }
     
-    public Vector3 GetTargetPositionForCard(Card card)
-    {
-        return targetPositions.TryGetValue(card, out var pos) ? pos : Vector3.zero;
-    }
-    
-    // Cleanup cached references when cards are removed
     public void CleanupCardReference(Card card)
     {
         cardRectTransforms.Remove(card);
-        targetPositions.Remove(card);
     }
-    
-    // Properties
-    public float CardSpacing 
-    { 
-        get => cardSpacing; 
-        set { cardSpacing = value; UpdateLayout(); }
-    }
-    
-    public float HandScaleMultiplier 
-    { 
-        get => handScaleMultiplier; 
-        set { handScaleMultiplier = value; UpdateLayout(); }
-    }
-    
-    public bool IsAnimating => isAnimating;
-    public int HandSize => cachedHandCards.Count;
 }

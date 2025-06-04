@@ -31,22 +31,22 @@ public class Card : MonoBehaviour, IPointerClickHandler, IPointerEnterHandler, I
     [SerializeField] private TextMeshProUGUI tierText;
     [SerializeField] private Image cardImage;
     
-    // Events
+    // Events - streamlined for performance
     public static System.Action<Card> OnCardSelected;
     public static System.Action<Card> OnCardDeselected;
     public static System.Action<Card> OnCardHovered;
     public static System.Action<Card> OnCardUnhovered;
-    public static System.Action<Card> OnCardPlayTriggered; // NEW: Direct play event
+    public static System.Action<Card> OnCardPlayTriggered;
     
-    // Cached components for performance
+    // Cached components
     private RectTransform rectTransform;
     private CanvasGroup canvasGroup;
     
-    // Current state tracking
+    // State tracking
     private CardState currentState = CardState.Idle;
     private bool isHovered = false;
     
-    // NEW: Play interaction tracking
+    // Play interaction tracking
     private float lastClickTime = 0f;
     private const float DOUBLE_CLICK_TIME = 0.3f;
     private bool isMouseDown = false;
@@ -72,15 +72,11 @@ public class Card : MonoBehaviour, IPointerClickHandler, IPointerEnterHandler, I
         if (cardBackground == null)
             cardBackground = GetComponent<Image>();
         
-        // Cache CanvasGroup for alpha control
         canvasGroup = GetComponent<CanvasGroup>();
         if (canvasGroup == null)
             canvasGroup = gameObject.AddComponent<CanvasGroup>();
             
-        // Auto-find UI components if not assigned
-        cardNameText ??= GetComponentInChildren<TextMeshProUGUI>(true);
-        
-        // Find specific components by name for better organization
+        // Auto-find UI components by name for better organization
         var textComponents = GetComponentsInChildren<TextMeshProUGUI>(true);
         foreach (var text in textComponents)
         {
@@ -102,7 +98,7 @@ public class Card : MonoBehaviour, IPointerClickHandler, IPointerEnterHandler, I
         }
         
         cardImage ??= GetComponentInChildren<Image>(true);
-        if (cardImage == cardBackground) cardImage = null; // Avoid using background as card image
+        if (cardImage == cardBackground) cardImage = null;
     }
     
     private void Start()
@@ -115,14 +111,13 @@ public class Card : MonoBehaviour, IPointerClickHandler, IPointerEnterHandler, I
         // Check for hold-to-play
         if (isMouseDown && Time.time - mouseDownTime >= HOLD_THRESHOLD)
         {
-            isMouseDown = false; // Prevent multiple triggers
+            isMouseDown = false;
             TriggerCardPlay();
         }
     }
     
     private void OnDestroy()
     {
-        // Notify layout manager to clean up references
         if (HandLayoutManager.HasInstance)
             HandLayoutManager.Instance.CleanupCardReference(this);
     }
@@ -137,13 +132,11 @@ public class Card : MonoBehaviour, IPointerClickHandler, IPointerEnterHandler, I
     {
         if (cardData == null) return;
         
-        // Update text fields
         if (cardNameText != null) cardNameText.text = cardData.cardName;
         if (descriptionText != null) descriptionText.text = cardData.description;
         if (letterValuesText != null) letterValuesText.text = cardData.letterValues;
         if (tierText != null) tierText.text = cardData.tier.ToString();
         
-        // Update card image
         if (cardImage != null)
         {
             if (cardData.cardImage != null)
@@ -157,7 +150,6 @@ public class Card : MonoBehaviour, IPointerClickHandler, IPointerEnterHandler, I
             }
         }
         
-        // Update object name for debugging
         gameObject.name = $"Card_{cardData.cardName}";
     }
     
@@ -217,7 +209,7 @@ public class Card : MonoBehaviour, IPointerClickHandler, IPointerEnterHandler, I
         if (!isInteractable) return;
         
         isHovered = false;
-        isMouseDown = false; // Cancel hold if mouse leaves
+        isMouseDown = false;
         UpdateVisuals();
         OnCardUnhovered?.Invoke(this);
     }
@@ -225,6 +217,12 @@ public class Card : MonoBehaviour, IPointerClickHandler, IPointerEnterHandler, I
     private void TriggerCardPlay()
     {
         if (!isInteractable) return;
+        
+        // Ensure card is selected before playing
+        if (!isSelected)
+        {
+            Select();
+        }
         
         OnCardPlayTriggered?.Invoke(this);
     }
@@ -270,7 +268,6 @@ public class Card : MonoBehaviour, IPointerClickHandler, IPointerEnterHandler, I
     {
         if (cardBackground == null) return;
         
-        // Determine color based on state priority
         Color targetColor = currentState switch
         {
             CardState.Disabled => disabledColor,
@@ -281,7 +278,6 @@ public class Card : MonoBehaviour, IPointerClickHandler, IPointerEnterHandler, I
         
         cardBackground.color = targetColor;
         
-        // Update canvas group alpha for disabled state
         if (canvasGroup != null)
         {
             canvasGroup.alpha = currentState == CardState.Disabled ? 0.5f : 1f;
@@ -295,16 +291,6 @@ public class Card : MonoBehaviour, IPointerClickHandler, IPointerEnterHandler, I
         isInteractable = interactable;
         currentState = interactable ? CardState.Idle : CardState.Disabled;
         UpdateVisuals();
-    }
-    
-    // Pool system support
-    public void ClearEventSubscriptions()
-    {
-        OnCardSelected = null;
-        OnCardDeselected = null;
-        OnCardHovered = null;
-        OnCardUnhovered = null;
-        OnCardPlayTriggered = null;
     }
     
     public void ResetCardState()
@@ -325,14 +311,12 @@ public class Card : MonoBehaviour, IPointerClickHandler, IPointerEnterHandler, I
         if (tierText != null) tierText.text = "";
         if (cardImage != null) cardImage.gameObject.SetActive(false);
         
-        // Reset canvas group
         if (canvasGroup != null)
         {
             canvasGroup.alpha = 1f;
             canvasGroup.blocksRaycasts = true;
         }
         
-        // Reset transform
         if (rectTransform != null)
         {
             rectTransform.localScale = Vector3.one;
@@ -341,30 +325,11 @@ public class Card : MonoBehaviour, IPointerClickHandler, IPointerEnterHandler, I
         UpdateVisuals();
     }
     
-    // Utility methods
     public bool IsInState(CardState state) => currentState == state;
-    public bool IsInAnyState(params CardState[] states)
-    {
-        foreach (var state in states)
-        {
-            if (currentState == state) return true;
-        }
-        return false;
-    }
-    
-    // Debug methods
+
 #if UNITY_EDITOR
     [ContextMenu("Select Card")]
     public void DebugSelect() => Select();
-    
-    [ContextMenu("Deselect Card")]
-    public void DebugDeselect() => Deselect();
-    
-    [ContextMenu("Update Display")]
-    public void DebugUpdateDisplay() => UpdateCardDisplay();
-    
-    [ContextMenu("Toggle Interactable")]
-    public void DebugToggleInteractable() => SetInteractable(!isInteractable);
     
     [ContextMenu("Trigger Play")]
     public void DebugTriggerPlay() => TriggerCardPlay();
@@ -373,7 +338,6 @@ public class Card : MonoBehaviour, IPointerClickHandler, IPointerEnterHandler, I
     {
         if (Application.isPlaying) return;
         
-        // Validate component references in editor
         if (cardBackground == null)
             cardBackground = GetComponent<Image>();
     }
