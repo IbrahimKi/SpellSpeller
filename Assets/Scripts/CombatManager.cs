@@ -71,6 +71,7 @@ public class CombatManager : SingletonBehaviour<CombatManager>, IGameManager
     // Turn tracking - IMPROVED
     private int _currentTurn = 1;
     private TurnPhase _currentPhase = TurnPhase.PlayerTurn;
+    private TurnPhase _previousPhase;
     private bool _isProcessingTurn = false;
     
     // Targeting
@@ -222,6 +223,7 @@ public class CombatManager : SingletonBehaviour<CombatManager>, IGameManager
         _isInCombat = true;
         _currentTurn = 1;
         _currentPhase = TurnPhase.PlayerTurn;
+        _previousPhase = TurnPhase.EnemyTurn; 
         _isProcessingTurn = false;
         
         Debug.Log("[CombatManager] Starting combat sequence");
@@ -302,6 +304,7 @@ public class CombatManager : SingletonBehaviour<CombatManager>, IGameManager
     
     private void EndEnemyTurn()
     {
+        _previousPhase = TurnPhase.EnemyTurn;  // DIESE ZEILE FEHLT!
         OnEnemyTurnEnded?.Invoke(_currentTurn);
         StartTurnTransition();
     }
@@ -314,8 +317,9 @@ public class CombatManager : SingletonBehaviour<CombatManager>, IGameManager
             Debug.LogWarning($"[CombatManager] Cannot end turn - CanEndTurn: {CanEndTurn}, Phase: {_currentPhase}, Processing: {_isProcessingTurn}");
             return;
         }
-        
+    
         Debug.Log($"[CombatManager] Player ending turn {_currentTurn}");
+        _previousPhase = TurnPhase.PlayerTurn;  // DIESE ZEILE FEHLT!
         OnPlayerTurnEnded?.Invoke(_currentTurn);
         StartTurnTransition();
     }
@@ -334,7 +338,7 @@ public class CombatManager : SingletonBehaviour<CombatManager>, IGameManager
     
     private IEnumerator ProcessTurnTransition()
     {
-        Debug.Log($"[CombatManager] Starting turn transition from turn {_currentTurn}");
+        Debug.Log($"[CombatManager] Starting turn transition from turn {_currentTurn} (previous phase: {_previousPhase})");
         
         // 1. Shuffle discard pile and played cards back into deck
         if (shuffleDiscardOnTurnEnd)
@@ -364,11 +368,14 @@ public class CombatManager : SingletonBehaviour<CombatManager>, IGameManager
         
         OnTurnTransitionCompleted?.Invoke();
         
-        // 6. Start next phase based on current logic
-        // For now, alternate between player and enemy
-        if (_currentPhase == TurnPhase.TurnTransition)
+        // 6. Alternate between player and enemy turns based on who just went
+        if (_previousPhase == TurnPhase.PlayerTurn)
         {
             StartEnemyTurn();
+        }
+        else
+        {
+            StartPlayerTurn();
         }
         
         Debug.Log($"[CombatManager] Turn transition completed. Now on turn {_currentTurn}");
