@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
@@ -224,4 +226,40 @@ public class GameUIHandler : MonoBehaviour
                 UpdateCardPlayUI(CardManager.Instance.SelectedCards);
         }
     }
+    
+    private void SetupEntityEventListeners()
+    {
+        if (CombatManager.HasInstance)
+        {
+            CombatManager.OnTargetsChanged += UpdateTargetingDisplay;
+            CombatManager.OnTargetingModeChanged += UpdateTargetingModeDisplay;
+        }
+    }
+
+    private void UpdateTargetingDisplay(List<EntityBehaviour> targets)
+    {
+        // Update UI to show current targets
+        if (statusText != null)
+        {
+            if (targets.Count > 0)
+            {
+                string targetNames = string.Join(", ", targets.Select(t => t.EntityName));
+                statusText.text = $"Targets: {targetNames}";
+            }
+            else
+            {
+                statusText.text = "No targets selected";
+            }
+        }
+    }
+
+    private void UpdateTargetingModeDisplay(TargetingMode mode)
+    {
+        // Update UI to show targeting mode
+        if (statusText != null)
+        {
+            statusText.text = $"Targeting: {mode}";
+        }
+    }
+    
 }

@@ -349,6 +349,46 @@ PrefabInstance:
       propertyPath: m_Name
       value: GameManager
       objectReference: {fileID: 0}
+    - target: {fileID: 5242847096659800578, guid: 341c1f5da92f4a74eb7d7e7e9ffe1ecf, type: 3}
+      propertyPath: managerInitOrder.Array.size
+      value: 8
+      objectReference: {fileID: 0}
+    - target: {fileID: 5242847096659800578, guid: 341c1f5da92f4a74eb7d7e7e9ffe1ecf, type: 3}
+      propertyPath: managerInitOrder.Array.data[6].enabled
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 5242847096659800578, guid: 341c1f5da92f4a74eb7d7e7e9ffe1ecf, type: 3}
+      propertyPath: managerInitOrder.Array.data[7].enabled
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 5242847096659800578, guid: 341c1f5da92f4a74eb7d7e7e9ffe1ecf, type: 3}
+      propertyPath: managerInitOrder.Array.data[8].enabled
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 5242847096659800578, guid: 341c1f5da92f4a74eb7d7e7e9ffe1ecf, type: 3}
+      propertyPath: managerInitOrder.Array.data[6].priority
+      value: 6
+      objectReference: {fileID: 0}
+    - target: {fileID: 5242847096659800578, guid: 341c1f5da92f4a74eb7d7e7e9ffe1ecf, type: 3}
+      propertyPath: managerInitOrder.Array.data[7].priority
+      value: 7
+      objectReference: {fileID: 0}
+    - target: {fileID: 5242847096659800578, guid: 341c1f5da92f4a74eb7d7e7e9ffe1ecf, type: 3}
+      propertyPath: managerInitOrder.Array.data[8].priority
+      value: 5
+      objectReference: {fileID: 0}
+    - target: {fileID: 5242847096659800578, guid: 341c1f5da92f4a74eb7d7e7e9ffe1ecf, type: 3}
+      propertyPath: managerInitOrder.Array.data[6].managerType
+      value: 6
+      objectReference: {fileID: 0}
+    - target: {fileID: 5242847096659800578, guid: 341c1f5da92f4a74eb7d7e7e9ffe1ecf, type: 3}
+      propertyPath: managerInitOrder.Array.data[7].managerType
+      value: 7
+      objectReference: {fileID: 0}
+    - target: {fileID: 5242847096659800578, guid: 341c1f5da92f4a74eb7d7e7e9ffe1ecf, type: 3}
+      propertyPath: managerInitOrder.Array.data[8].managerType
+      value: 5
+      objectReference: {fileID: 0}
     - target: {fileID: 7308546259657053959, guid: 341c1f5da92f4a74eb7d7e7e9ffe1ecf, type: 3}
       propertyPath: m_LocalPosition.x
       value: 0

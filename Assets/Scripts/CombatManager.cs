@@ -1,9 +1,8 @@
-// Ersetze die ersten ~100 Zeilen von CombatManager.cs mit diesem Code:
-
 using UnityEngine;
 using System.Collections.Generic;
 using System;
 using System.Collections;
+using System.Linq;
 
 [System.Serializable]
 public class Resource
@@ -35,29 +34,6 @@ public class Resource
     }
 }
 
-public enum EntityType { Enemy, SummonedUnit }
-
-[System.Serializable]
-public class CombatEntity
-{
-    public int id;
-    public EntityType type;
-    public string name;
-    public GameObject gameObject;
-    public Resource health;
-    public bool isActive;
-    
-    public CombatEntity(int id, EntityType type, string name, GameObject gameObject, int health)
-    {
-        this.id = id;
-        this.type = type;
-        this.name = name;
-        this.gameObject = gameObject;
-        this.health = new Resource(health);
-        this.isActive = true;
-    }
-}
-
 public class CombatManager : SingletonBehaviour<CombatManager>, IGameManager
 {
     [Header("Player Resources")]
@@ -68,18 +44,19 @@ public class CombatManager : SingletonBehaviour<CombatManager>, IGameManager
     [Header("Combat Start Settings")]
     [SerializeField] private int startingHandSize = 5;
     [SerializeField] private bool autoDrawOnCombatStart = true;
-    [SerializeField] private bool validateDeckOnCombatStart = true;
     [SerializeField] private float managerWaitTimeout = 3f;
+    
+    [Header("Entity Settings")]
+    [SerializeField] private bool autoTargetFirstEnemy = true;
+    [SerializeField] private TargetingMode defaultTargetingMode = TargetingMode.Single;
     
     // Resources
     private Resource _life;
     private Resource _creativity;
     
-    // Entities
-    private Dictionary<int, CombatEntity> _entities = new Dictionary<int, CombatEntity>();
-    private List<CombatEntity> _enemies = new List<CombatEntity>();
-    private List<CombatEntity> _summonedUnits = new List<CombatEntity>();
-    private int _nextEntityId = 0;
+    // Targeting
+    private List<EntityBehaviour> _currentTargets = new List<EntityBehaviour>();
+    private TargetingMode _currentTargetingMode = TargetingMode.Single;
     
     // Manager state tracking
     private bool _isReady = false;
@@ -90,72 +67,98 @@ public class CombatManager : SingletonBehaviour<CombatManager>, IGameManager
     public static event Action<int> OnDeckSizeChanged;
     public static event Action<Resource> OnCreativityChanged;
     
-    // Events - Entities
-    public static event Action<CombatEntity> OnEntityAdded;
-    public static event Action<CombatEntity> OnEntityRemoved;
-    public static event Action<CombatEntity> OnEntityHealthChanged;
-    public static event Action<CombatEntity> OnEntityDestroyed;
-    
     // Events - Combat
     public static event Action OnCombatStarted;
     public static event Action OnCombatEnded;
     public static event Action OnPlayerDeath;
-    public static event Action OnCombatValidated;
     public static event Action OnHandDrawn;
     public static event Action OnDeckEmpty;
     
+    // Events - Targeting
+    public static event Action<List<EntityBehaviour>> OnTargetsChanged;
+    public static event Action<TargetingMode> OnTargetingModeChanged;
+    
     // Properties
-    public bool IsReady => _isReady;  // For IGameManager interface
-    public Resource Life => _life;
-    public int DeckSize => DeckManager.HasInstance ? DeckManager.Instance.DeckSize : 0;
-    public int DiscardSize => DeckManager.HasInstance ? DeckManager.Instance.DiscardSize : 0;
-    public Resource Creativity => _creativity;
-    public IReadOnlyList<CombatEntity> Enemies => _enemies.AsReadOnly();
-    public IReadOnlyList<CombatEntity> SummonedUnits => _summonedUnits.AsReadOnly();
-    public IReadOnlyCollection<CombatEntity> AllEntities => _entities.Values;
-    public int EntityCount => _entities.Count;
+    public bool IsReady => _isReady;
     public bool IsInCombat { get; private set; }
     public bool ManagersReady => _managersReady;
+    public Resource Life => _life;
+    public Resource Creativity => _creativity;
+    public int DeckSize => DeckManager.HasInstance ? DeckManager.Instance.DeckSize : 0;
+    public int DiscardSize => DeckManager.HasInstance ? DeckManager.Instance.DiscardSize : 0;
+    public IReadOnlyList<EntityBehaviour> CurrentTargets => _currentTargets.AsReadOnly();
+    public TargetingMode CurrentTargetingMode => _currentTargetingMode;
     
     protected override void OnAwakeInitialize()
     {
         Debug.Log("[CombatManager] OnAwakeInitialize called");
         InitializeResources();
-        _isReady = true;  // Mark as ready immediately
+        _currentTargetingMode = defaultTargetingMode;
+        _isReady = true;
         _managersReady = true;
         Debug.Log($"[CombatManager] Initialized - IsReady: {_isReady}");
     }
     
     private void Start()
     {
-        // GameManager will call StartCombat when ready
         Debug.Log("[CombatManager] Start called - waiting for GameManager to start combat");
-    }
-    
-    
-    private IEnumerator AutoStartCombat()
-    {
-        yield return new WaitForSeconds(0.2f);
-        StartCombat();
     }
     
     private void OnEnable()
     {
-        // Subscribe direkt - Manager sind bereits initialisiert
+        // Subscribe to Entity Events
+        if (EnemyManager.HasInstance)
+        {
+            EnemyManager.OnEnemyKilled += HandleEnemyKilled;
+            EnemyManager.OnAllEnemiesDefeated += HandleAllEnemiesDefeated;
+            EnemyManager.OnTargetsChanged += HandleEnemyTargetsChanged;
+        }
+        
+        if (UnitManager.HasInstance)
+        {
+            UnitManager.OnUnitKilled += HandleUnitKilled;
+            UnitManager.OnAllUnitsDefeated += HandleAllUnitsDefeated;
+        }
+        
+        // Subscribe to Deck Events
         if (DeckManager.HasInstance)
         {
             DeckManager.OnDeckSizeChanged += OnDeckManagerSizeChanged;
             DeckManager.OnDeckInitialized += () => OnDeckSizeChanged?.Invoke(DeckSize);
             DeckManager.OnDeckEmpty += HandleDeckEmpty;
         }
+        
+        // Subscribe to Spell Events
+        if (SpellcastManager.HasInstance)
+        {
+            SpellcastManager.OnSpellEffectTriggered += HandleSpellEffect;
+        }
     }
     
     private void OnDisable()
     {
+        if (EnemyManager.HasInstance)
+        {
+            EnemyManager.OnEnemyKilled -= HandleEnemyKilled;
+            EnemyManager.OnAllEnemiesDefeated -= HandleAllEnemiesDefeated;
+            EnemyManager.OnTargetsChanged -= HandleEnemyTargetsChanged;
+        }
+        
+        if (UnitManager.HasInstance)
+        {
+            UnitManager.OnUnitKilled -= HandleUnitKilled;
+            UnitManager.OnAllUnitsDefeated -= HandleAllUnitsDefeated;
+        }
+        
         if (DeckManager.HasInstance)
         {
             DeckManager.OnDeckSizeChanged -= OnDeckManagerSizeChanged;
             DeckManager.OnDeckEmpty -= HandleDeckEmpty;
+        }
+        
+        if (SpellcastManager.HasInstance)
+        {
+            SpellcastManager.OnSpellEffectTriggered -= HandleSpellEffect;
         }
     }
     
@@ -163,36 +166,6 @@ public class CombatManager : SingletonBehaviour<CombatManager>, IGameManager
     {
         _life = new Resource(startLife);
         _creativity = new Resource(startCreativity, maxCreativity);
-    }
-    
-    private IEnumerator WaitForManagers()
-    {
-        float elapsed = 0f;
-        
-        while (elapsed < managerWaitTimeout)
-        {
-            if (CheckManagersReady())
-            {
-                _managersReady = true;
-                Debug.Log("[CombatManager] All managers ready");
-                yield break;
-            }
-            
-            elapsed += Time.deltaTime;
-            yield return null;
-        }
-        
-        // Fallback: Force ready state nach timeout
-        Debug.LogWarning($"[CombatManager] Manager timeout after {managerWaitTimeout}s - forcing ready state");
-        _managersReady = true;
-    }
-    
-    private bool CheckManagersReady()
-    {
-        bool cardManagerReady = CardManager.HasInstance && CardManager.Instance.IsInitialized;
-        bool deckManagerReady = DeckManager.HasInstance && DeckManager.Instance.IsInitialized;
-        
-        return cardManagerReady && deckManagerReady;
     }
     
     // Combat State Management
@@ -218,6 +191,16 @@ public class CombatManager : SingletonBehaviour<CombatManager>, IGameManager
         // Draw starting hand
         if (autoDrawOnCombatStart && startingHandSize > 0)
             yield return DrawStartingHand();
+        
+        // Auto-target first enemy
+        if (autoTargetFirstEnemy && EnemyManager.HasInstance)
+        {
+            var firstEnemy = EnemyManager.Instance.AliveEnemies.FirstOrDefault();
+            if (firstEnemy != null)
+            {
+                SetTargets(new List<EntityBehaviour> { firstEnemy });
+            }
+        }
         
         // Trigger initial UI updates
         OnLifeChanged?.Invoke(_life);
@@ -264,16 +247,20 @@ public class CombatManager : SingletonBehaviour<CombatManager>, IGameManager
         if (IsInCombat)
         {
             IsInCombat = false;
+            _currentTargets.Clear();
             OnCombatEnded?.Invoke();
         }
     }
     
     public void ResetCombat()
     {
-        var entitiesToRemove = new List<CombatEntity>(_entities.Values);
-        foreach (var entity in entitiesToRemove)
-            RemoveEntity(entity);
+        // Clear all entities
+        if (EnemyManager.HasInstance)
+            EnemyManager.Instance.DespawnAllEnemies();
+        if (UnitManager.HasInstance)
+            UnitManager.Instance.DespawnAllUnits();
         
+        _currentTargets.Clear();
         _life.Reset();
         _creativity.Reset();
         IsInCombat = false;
@@ -315,79 +302,191 @@ public class CombatManager : SingletonBehaviour<CombatManager>, IGameManager
         return true;
     }
     
-    private void OnDeckManagerSizeChanged(int deckSize) => OnDeckSizeChanged?.Invoke(deckSize);
-    private void HandleDeckEmpty() => OnDeckEmpty?.Invoke();
-    
-    // Entity Management
-    public CombatEntity AddEntity(EntityType type, string name, GameObject gameObject, int health)
+    // Targeting System
+    public void SetTargetingMode(TargetingMode mode)
     {
-        if (gameObject == null) return null;
-        
-        var entity = new CombatEntity(_nextEntityId++, type, name, gameObject, health);
-        _entities[entity.id] = entity;
-        
-        (type == EntityType.Enemy ? _enemies : _summonedUnits).Add(entity);
-        
-        OnEntityAdded?.Invoke(entity);
-        return entity;
-    }
-    
-    public bool RemoveEntity(int entityId) =>
-        _entities.TryGetValue(entityId, out CombatEntity entity) && RemoveEntity(entity);
-    
-    public bool RemoveEntity(CombatEntity entity)
-    {
-        if (entity == null || !_entities.Remove(entity.id)) return false;
-        
-        var targetList = entity.type == EntityType.Enemy ? _enemies : _summonedUnits;
-        targetList.RemoveAll(e => e.id == entity.id);
-        
-        entity.isActive = false;
-        OnEntityRemoved?.Invoke(entity);
-        return true;
-    }
-    
-    public void ModifyEntityHealth(int entityId, int delta)
-    {
-        if (_entities.TryGetValue(entityId, out CombatEntity entity))
-            ModifyEntityHealth(entity, delta);
-    }
-    
-    public void ModifyEntityHealth(CombatEntity entity, int delta)
-    {
-        if (entity == null || !entity.isActive) return;
-        
-        int oldHealth = entity.health.CurrentValue;
-        entity.health.ModifyBy(delta);
-        
-        if (entity.health.CurrentValue != oldHealth)
+        if (_currentTargetingMode != mode)
         {
-            OnEntityHealthChanged?.Invoke(entity);
+            _currentTargetingMode = mode;
+            OnTargetingModeChanged?.Invoke(mode);
             
-            if (entity.health.CurrentValue <= 0)
+            // Clear targets if switching from multi to single
+            if (mode == TargetingMode.Single && _currentTargets.Count > 1)
             {
-                OnEntityDestroyed?.Invoke(entity);
-                RemoveEntity(entity);
+                var firstTarget = _currentTargets[0];
+                _currentTargets.Clear();
+                _currentTargets.Add(firstTarget);
+                OnTargetsChanged?.Invoke(_currentTargets);
             }
         }
     }
     
-    public CombatEntity GetEntity(int entityId) =>
-        _entities.TryGetValue(entityId, out CombatEntity entity) ? entity : null;
-    
-    // Utility
-    public void ClearAllEnemies()
+    public void SetTargets(List<EntityBehaviour> targets)
     {
-        var enemiesToRemove = new List<CombatEntity>(_enemies);
-        foreach (var enemy in enemiesToRemove)
-            RemoveEntity(enemy);
+        _currentTargets.Clear();
+        if (targets != null)
+        {
+            _currentTargets.AddRange(targets.Where(t => t != null && t.IsAlive));
+        }
+        OnTargetsChanged?.Invoke(_currentTargets);
     }
     
-    public void ClearAllSummonedUnits()
+    public void AddTarget(EntityBehaviour target)
     {
-        var unitsToRemove = new List<CombatEntity>(_summonedUnits);
-        foreach (var unit in unitsToRemove)
-            RemoveEntity(unit);
+        if (target == null || !target.IsAlive) return;
+        
+        if (_currentTargetingMode == TargetingMode.Single)
+        {
+            _currentTargets.Clear();
+        }
+        
+        if (!_currentTargets.Contains(target))
+        {
+            _currentTargets.Add(target);
+            OnTargetsChanged?.Invoke(_currentTargets);
+        }
     }
     
+    public void RemoveTarget(EntityBehaviour target)
+    {
+        if (_currentTargets.Remove(target))
+        {
+            OnTargetsChanged?.Invoke(_currentTargets);
+        }
+    }
+    
+    public void ClearTargets()
+    {
+        _currentTargets.Clear();
+        OnTargetsChanged?.Invoke(_currentTargets);
+    }
+    
+    // Combat Actions
+    public void DealDamageToTargets(int damage, DamageType damageType = DamageType.Normal)
+    {
+        foreach (var target in _currentTargets.ToList())
+        {
+            if (target != null && target.IsAlive)
+            {
+                target.Damage(damage);
+            }
+        }
+    }
+    
+    public void DealDamageToAllEnemies(int damage, DamageType damageType = DamageType.Normal)
+    {
+        if (EnemyManager.HasInstance)
+        {
+            foreach (var enemy in EnemyManager.Instance.AliveEnemies)
+            {
+                enemy.Damage(damage);
+            }
+        }
+    }
+    
+    public void HealAllUnits(int amount)
+    {
+        if (UnitManager.HasInstance)
+        {
+            foreach (var unit in UnitManager.Instance.AliveUnits)
+            {
+                unit.Heal(amount);
+            }
+        }
+    }
+    
+    // Event Handlers
+    private void HandleEnemyTargetsChanged(List<EntityBehaviour> targets)
+    {
+        SetTargets(targets);
+    }
+    
+    private void HandleEnemyKilled(EntityBehaviour enemy)
+    {
+        RemoveTarget(enemy);
+        
+        // Auto-target next enemy if no targets remain
+        if (_currentTargets.Count == 0 && autoTargetFirstEnemy && EnemyManager.HasInstance)
+        {
+            var nextEnemy = EnemyManager.Instance.AliveEnemies.FirstOrDefault();
+            if (nextEnemy != null)
+            {
+                AddTarget(nextEnemy);
+            }
+        }
+    }
+    
+    private void HandleUnitKilled(EntityBehaviour unit)
+    {
+        RemoveTarget(unit);
+    }
+    
+    private void HandleAllEnemiesDefeated()
+    {
+        ClearTargets();
+        Debug.Log("[CombatManager] All enemies defeated - Victory!");
+        // TODO: Victory handling
+    }
+    
+    private void HandleAllUnitsDefeated()
+    {
+        Debug.Log("[CombatManager] All units defeated!");
+        // TODO: Handle all units lost
+    }
+    
+    private void HandleSpellEffect(SpellEffect effect)
+    {
+        switch (effect.effectType)
+        {
+            case SpellEffectType.Damage:
+                if (_currentTargetingMode == TargetingMode.All)
+                    DealDamageToAllEnemies(Mathf.RoundToInt(effect.value));
+                else
+                    DealDamageToTargets(Mathf.RoundToInt(effect.value));
+                break;
+                
+            case SpellEffectType.Heal:
+                ModifyLife(Mathf.RoundToInt(effect.value));
+                break;
+                
+            case SpellEffectType.Buff:
+                if (effect.effectName.ToLower().Contains("creativity"))
+                    ModifyCreativity(Mathf.RoundToInt(effect.value));
+                break;
+        }
+    }
+    
+    private void OnDeckManagerSizeChanged(int deckSize) => OnDeckSizeChanged?.Invoke(deckSize);
+    private void HandleDeckEmpty() => OnDeckEmpty?.Invoke();
+    
+#if UNITY_EDITOR
+    [ContextMenu("Log Combat Status")]
+    public void LogCombatStatus()
+    {
+        Debug.Log($"[CombatManager] Combat Status:");
+        Debug.Log($"  In Combat: {IsInCombat}");
+        Debug.Log($"  Life: {_life.CurrentValue}/{_life.MaxValue}");
+        Debug.Log($"  Creativity: {_creativity.CurrentValue}/{_creativity.MaxValue}");
+        Debug.Log($"  Targets: {_currentTargets.Count}");
+        Debug.Log($"  Targeting Mode: {_currentTargetingMode}");
+    }
+#endif
+}
+
+public enum TargetingMode
+{
+    Single,
+    Multiple,
+    All,
+    Random
+}
+
+public enum DamageType
+{
+    Normal,
+    Fire,
+    Ice,
+    Lightning,
+    Poison,
+    True
 }

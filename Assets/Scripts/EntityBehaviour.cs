@@ -173,6 +173,12 @@ public class EntityBehaviour : MonoBehaviour, IPointerClickHandler, IPointerEnte
         Destroy(gameObject, 0.1f);
     }
     
+    public void TakeDamage(int amount, DamageType damageType = DamageType.Normal)
+    {
+        // Future: Apply damage resistances based on type
+        Damage(amount);
+    }
+    
     // Targeting
     public void SetTargeted(bool targeted)
     {

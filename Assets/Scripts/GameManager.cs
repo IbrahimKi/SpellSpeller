@@ -207,6 +207,7 @@ public class GameManager : SingletonBehaviour<GameManager>
         }
     }
     
+    
     public T GetManager<T>(ManagerType type) where T : class, IGameManager
     {
         return _managers.TryGetValue(type, out var manager) ? manager as T : null;

@@ -306,15 +306,28 @@ public class SpellcastManager : SingletonBehaviour<SpellcastManager>, IGameManag
     
     private void ApplyDamageEffect(SpellEffect effect)
     {
-        foreach (var enemy in _combatManager.Enemies)
+        if (_combatManager != null)
         {
-            if (enemy.isActive)
+            // Use combat manager's targeting system
+            _combatManager.DealDamageToTargets(Mathf.RoundToInt(effect.value));
+        }
+        Debug.Log($"[SpellcastManager] Applied {effect.value} damage to targets");
+    }
+
+    private void ApplyDebuffEffect(SpellEffect effect)
+    {
+        if (_combatManager != null)
+        {
+            // Apply debuff to current targets
+            foreach (var target in _combatManager.CurrentTargets)
             {
-                _combatManager.ModifyEntityHealth(enemy, Mathf.RoundToInt(-effect.value));
+                if (target != null && target.IsAlive)
+                {
+                    Debug.Log($"[SpellcastManager] Applied debuff {effect.effectName} to {target.EntityName}");
+                    // TODO: Implement actual debuff system
+                }
             }
         }
-        
-        Debug.Log($"[SpellcastManager] Applied {effect.value} damage to all enemies");
     }
     
     private void ApplyHealEffect(SpellEffect effect)
@@ -331,17 +344,6 @@ public class SpellcastManager : SingletonBehaviour<SpellcastManager>, IGameManag
         }
         
         Debug.Log($"[SpellcastManager] Applied buff: {effect.effectName}");
-    }
-    
-    private void ApplyDebuffEffect(SpellEffect effect)
-    {
-        foreach (var enemy in _combatManager.Enemies)
-        {
-            if (enemy.isActive)
-            {
-                Debug.Log($"[SpellcastManager] Applied debuff {effect.effectName} to {enemy.name}");
-            }
-        }
     }
     
     public void ClearCombo()
