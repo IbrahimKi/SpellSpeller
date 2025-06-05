@@ -389,4 +389,5 @@ public class CombatManager : SingletonBehaviour<CombatManager>, IGameManager
         foreach (var unit in unitsToRemove)
             RemoveEntity(unit);
     }
+    
 }

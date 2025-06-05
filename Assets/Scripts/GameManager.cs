@@ -13,7 +13,9 @@ public class GameManager : SingletonBehaviour<GameManager>
         new ManagerInitConfig { managerType = ManagerType.Deck, priority = 2 },
         new ManagerInitConfig { managerType = ManagerType.HandLayout, priority = 3 },
         new ManagerInitConfig { managerType = ManagerType.Spellcast, priority = 4 },
-        new ManagerInitConfig { managerType = ManagerType.Combat, priority = 5 }
+        new ManagerInitConfig { managerType = ManagerType.Combat, priority = 5 },
+        new ManagerInitConfig { managerType = ManagerType.Enemy, priority = 6 },
+        new ManagerInitConfig { managerType = ManagerType.Unit, priority = 7 }
     };
     
     [Header("Settings")]
@@ -96,6 +98,10 @@ public class GameManager : SingletonBehaviour<GameManager>
             RegisterManager(ManagerType.Spellcast, SpellcastManager.Instance);
         if (CombatManager.HasInstance)
             RegisterManager(ManagerType.Combat, CombatManager.Instance);
+        if (EnemyManager.HasInstance)
+            RegisterManager(ManagerType.Enemy, EnemyManager.Instance);
+        if (UnitManager.HasInstance)
+            RegisterManager(ManagerType.Unit, UnitManager.Instance);
             
         Debug.Log($"[GameManager] Discovered {_managers.Count} managers");
     }
@@ -249,7 +255,9 @@ public enum ManagerType
     Deck,
     HandLayout,
     Spellcast,
-    Combat
+    Combat,
+    Enemy,
+    Unit
 }
 
 // Interface für alle Manager
