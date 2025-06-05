@@ -23,6 +23,10 @@ public class HandLayoutManager : SingletonBehaviour<HandLayoutManager>, IGameMan
     private List<Card> cachedHandCards = new();
     private readonly Dictionary<Card, RectTransform> cardRectTransforms = new();
     
+    // Animation queueing to prevent conflicts
+    private bool _pendingUpdate = false;
+    private Coroutine _currentAnimation = null;
+    
     // Properties matching GameUIHandler expectations
     public bool IsAnimating => isAnimating;
     public int HandSize => cachedHandCards.Count;
@@ -63,7 +67,7 @@ public class HandLayoutManager : SingletonBehaviour<HandLayoutManager>, IGameMan
     
     public void UpdateLayout()
     {
-        if (isAnimating) return;
+        if (!_isReady) return;
         
         var handCards = CardManager.HasInstance ? CardManager.Instance.GetHandCards() : new List<Card>();
         
@@ -71,8 +75,38 @@ public class HandLayoutManager : SingletonBehaviour<HandLayoutManager>, IGameMan
         {
             cachedHandCards.Clear();
             cachedHandCards.AddRange(handCards);
-            StartCoroutine(AnimateLayout());
+            
+            if (isAnimating)
+            {
+                // Queue update for after current animation
+                _pendingUpdate = true;
+            }
+            else
+            {
+                _currentAnimation = StartCoroutine(AnimateLayout());
+            }
         }
+    }
+    
+    public void SetLayoutImmediate()
+    {
+        if (!_isReady) return;
+        
+        // Stop any ongoing animation
+        if (_currentAnimation != null)
+        {
+            StopCoroutine(_currentAnimation);
+            _currentAnimation = null;
+        }
+        isAnimating = false;
+        _pendingUpdate = false;
+        
+        var handCards = CardManager.HasInstance ? CardManager.Instance.GetHandCards() : new List<Card>();
+        cachedHandCards.Clear();
+        cachedHandCards.AddRange(handCards);
+        
+        var layouts = CalculateLayout();
+        ApplyFinalLayout(layouts);
     }
     
     private bool HasHandChanged(List<Card> newHandCards)
@@ -90,7 +124,11 @@ public class HandLayoutManager : SingletonBehaviour<HandLayoutManager>, IGameMan
     
     private IEnumerator AnimateLayout()
     {
-        if (cachedHandCards.Count == 0) yield break;
+        if (cachedHandCards.Count == 0)
+        {
+            isAnimating = false;
+            yield break;
+        }
         
         isAnimating = true;
         
@@ -108,6 +146,14 @@ public class HandLayoutManager : SingletonBehaviour<HandLayoutManager>, IGameMan
         
         ApplyFinalLayout(layouts);
         isAnimating = false;
+        _currentAnimation = null;
+        
+        // Process pending update if one was queued
+        if (_pendingUpdate)
+        {
+            _pendingUpdate = false;
+            UpdateLayout();
+        }
     }
     
     private struct CardLayout
@@ -134,6 +180,8 @@ public class HandLayoutManager : SingletonBehaviour<HandLayoutManager>, IGameMan
         int cardCount = cachedHandCards.Count;
         float handScale = GetHandScale();
         
+        if (cardCount == 0) return layouts;
+        
         float totalWidth = (cardCount - 1) * cardSpacing;
         float startX = -totalWidth * 0.5f;
         
@@ -143,7 +191,17 @@ public class HandLayoutManager : SingletonBehaviour<HandLayoutManager>, IGameMan
             if (card == null) continue;
             
             var rectTransform = GetCachedRectTransform(card);
-            if (rectTransform == null || rectTransform.parent != this.rectTransform) continue;
+            if (rectTransform == null) continue;
+            
+            // Ensure card is properly parented before calculating layout
+            if (rectTransform.parent != this.rectTransform)
+            {
+                rectTransform.SetParent(this.rectTransform, false);
+                // Reset transform when reparenting
+                rectTransform.localPosition = Vector3.zero;
+                rectTransform.localRotation = Quaternion.identity;
+                rectTransform.anchoredPosition = Vector2.zero;
+            }
             
             float xPos = startX + (i * cardSpacing);
             var targetPos = new Vector3(xPos, 0, 0);
@@ -199,22 +257,6 @@ public class HandLayoutManager : SingletonBehaviour<HandLayoutManager>, IGameMan
         }
     }
     
-    public void SetLayoutImmediate()
-    {
-        if (isAnimating)
-        {
-            StopAllCoroutines();
-            isAnimating = false;
-        }
-        
-        var handCards = CardManager.HasInstance ? CardManager.Instance.GetHandCards() : new List<Card>();
-        cachedHandCards.Clear();
-        cachedHandCards.AddRange(handCards);
-        
-        var layouts = CalculateLayout();
-        ApplyFinalLayout(layouts);
-    }
-    
     public void CleanupCardReference(Card card)
     {
         if (card != null)
@@ -226,6 +268,10 @@ public class HandLayoutManager : SingletonBehaviour<HandLayoutManager>, IGameMan
     
     private void OnDestroy()
     {
+        if (_currentAnimation != null)
+        {
+            StopCoroutine(_currentAnimation);
+        }
         cardRectTransforms.Clear();
         cachedHandCards.Clear();
     }

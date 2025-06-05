@@ -19,12 +19,14 @@ public class GameUIHandler : MonoBehaviour
     [SerializeField] private Button playButton;
     [SerializeField] private Button clearButton;
     [SerializeField] private Button drawButton;
+    [SerializeField] private Button discardButton;
     
     [Header("Settings")]
     [SerializeField] private bool showPercentages = true;
     [SerializeField] private Color healthLowColor = Color.red;
     [SerializeField] private Color healthNormalColor = Color.white;
     [SerializeField] private float healthLowThreshold = 0.25f;
+    [SerializeField] private int discardCost = 1;
     
     private void Start()
     {
@@ -64,8 +66,10 @@ public class GameUIHandler : MonoBehaviour
             if (playButton) playButton.onClick.AddListener(() => SpellcastManager.Instance?.PlaySelectedCards());
             if (clearButton) clearButton.onClick.AddListener(() => SpellcastManager.Instance?.ClearSelection());
             if (drawButton) drawButton.onClick.AddListener(() => SpellcastManager.Instance?.DrawCard());
-
         }
+        
+        // Discard Button
+        if (discardButton) discardButton.onClick.AddListener(DiscardSelectedCard);
     }
     
     private void OnDestroy()
@@ -105,6 +109,7 @@ public class GameUIHandler : MonoBehaviour
             UpdateCardPlayUI(CardManager.Instance.SelectedCards);
         
         UpdateDrawButton();
+        UpdateDiscardButton();
     }
     
     private void UpdateLifeDisplay(Resource life)
@@ -128,6 +133,8 @@ public class GameUIHandler : MonoBehaviour
         
         if (creativitySlider != null)
             creativitySlider.value = creativity.Percentage;
+            
+        UpdateDiscardButton();
     }
     
     private void UpdateDeckDisplay(int deckSize)
@@ -139,6 +146,7 @@ public class GameUIHandler : MonoBehaviour
         }
         
         UpdateDrawButton();
+        UpdateDiscardButton();
     }
     
     private void UpdateCardPlayUI(System.Collections.Generic.List<Card> selectedCards)
@@ -150,6 +158,7 @@ public class GameUIHandler : MonoBehaviour
         
         UpdateStatusDisplay(selectedCards);
         UpdateDrawButton();
+        UpdateDiscardButton();
     }
     
     private void UpdateStatusDisplay(System.Collections.Generic.List<Card> selectedCards)
@@ -192,6 +201,50 @@ public class GameUIHandler : MonoBehaviour
             bool canDraw = CardManager.HasInstance && !CardManager.Instance.IsHandFull &&
                           DeckManager.HasInstance && !DeckManager.Instance.IsDeckEmpty;
             drawButton.interactable = canDraw;
+        }
+    }
+    
+    private void UpdateDiscardButton()
+    {
+        if (discardButton != null)
+        {
+            bool hasSelectedCard = CardManager.HasInstance && CardManager.Instance.SelectedCards?.Count == 1;
+            bool hasCreativity = CombatManager.HasInstance && CombatManager.Instance.CanSpendCreativity(discardCost);
+            bool canDrawNew = DeckManager.HasInstance && DeckManager.Instance.GetTotalAvailableCards() > 0;
+            
+            discardButton.interactable = hasSelectedCard && hasCreativity && canDrawNew;
+        }
+    }
+    
+    private void DiscardSelectedCard()
+    {
+        if (!CardManager.HasInstance || !CombatManager.HasInstance || !DeckManager.HasInstance)
+            return;
+            
+        var selectedCards = CardManager.Instance.SelectedCards;
+        if (selectedCards?.Count != 1)
+            return;
+            
+        if (!CombatManager.Instance.CanSpendCreativity(discardCost))
+            return;
+            
+        var cardToDiscard = selectedCards[0];
+        
+        // Spend creativity
+        CombatManager.Instance.SpendCreativity(discardCost);
+        
+        // Add to discard pile
+        DeckManager.Instance.DiscardCard(cardToDiscard.CardData);
+        
+        // FIXED: Use DiscardCard instead of RemoveCardFromHand
+        // This properly destroys/hides the card instead of just removing it from hand
+        CardManager.Instance.DiscardCard(cardToDiscard);
+        
+        // Draw new card
+        var newCardData = DeckManager.Instance.DrawCard();
+        if (newCardData != null)
+        {
+            CardManager.Instance.SpawnCard(newCardData, null, true);
         }
     }
     
@@ -261,5 +314,4 @@ public class GameUIHandler : MonoBehaviour
             statusText.text = $"Targeting: {mode}";
         }
     }
-    
 }

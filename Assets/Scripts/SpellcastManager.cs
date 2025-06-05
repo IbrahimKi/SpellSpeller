@@ -9,7 +9,7 @@ public class SpellcastManager : SingletonBehaviour<SpellcastManager>, IGameManag
     [Header("Spell Configuration")]
     [SerializeField] private List<SpellAsset> availableSpells = new List<SpellAsset>();
     [SerializeField] private bool caseSensitive = false;
-    [SerializeField] private bool consumeCardsOnCast = false; // CHANGED: Cards are NOT consumed on cast
+    [SerializeField] private bool consumeCardsOnCast = false;
     
     private string _currentCombo = "";
     private Dictionary<string, SpellAsset> _spellCache = new Dictionary<string, SpellAsset>();
@@ -89,10 +89,8 @@ public class SpellcastManager : SingletonBehaviour<SpellcastManager>, IGameManag
         var selectedCards = CardManager.Instance.SelectedCards;
         if (selectedCards.Count == 0) return;
         
-        // Spend creativity for discard
         if (_combatManager.SpendCreativity(1))
         {
-            // Discard cards
             foreach (var card in selectedCards.ToList())
             {
                 if (card != null)
@@ -104,10 +102,7 @@ public class SpellcastManager : SingletonBehaviour<SpellcastManager>, IGameManag
             }
             
             OnCardsDiscarded?.Invoke(selectedCards);
-            
-            // Draw new card
             DrawCard();
-            
             _cardManager.ClearSelection();
         }
     }
@@ -115,7 +110,6 @@ public class SpellcastManager : SingletonBehaviour<SpellcastManager>, IGameManag
     public void DrawCard()
     {
         if (!CanDraw()) return;
-    
         var drawnCard = DeckManager.Instance.DrawCard();
         if (drawnCard != null)
         {
@@ -152,26 +146,22 @@ public class SpellcastManager : SingletonBehaviour<SpellcastManager>, IGameManag
         }
         else
         {
-            ClearCombo();
+            UpdateComboDisplay(_currentCombo);
         }
     }
     
     private void UpdateComboFromSelection(List<Card> selectedCards)
     {
         string letterSequence = ExtractLettersFromCards(selectedCards);
-        if (string.IsNullOrEmpty(letterSequence))
-        {
-            ClearCombo();
-            return;
-        }
+        if (string.IsNullOrEmpty(letterSequence)) return;
         
         string normalizedLetters = caseSensitive ? letterSequence : letterSequence.ToUpper();
-        
-        if (_currentCombo != normalizedLetters)
-        {
-            _currentCombo = normalizedLetters;
-            FireEvent(OnComboUpdated, _currentCombo);
-        }
+        UpdateComboDisplay(normalizedLetters);
+    }
+    
+    private void UpdateComboDisplay(string combo)
+    {
+        FireEvent(OnComboUpdated, combo);
     }
     
     public void TryPlayCards(List<Card> selectedCards)
@@ -183,8 +173,6 @@ public class SpellcastManager : SingletonBehaviour<SpellcastManager>, IGameManag
         }
         
         string letterSequence = ExtractLettersFromCards(selectedCards);
-        
-        
         if (string.IsNullOrEmpty(letterSequence))
         {
             Debug.LogWarning("[SpellcastManager] No letters found in selected cards");
@@ -210,29 +198,54 @@ public class SpellcastManager : SingletonBehaviour<SpellcastManager>, IGameManag
     public void ProcessCardPlay(List<Card> playedCards, string letterSequence)
     {
         string normalizedLetters = caseSensitive ? letterSequence : letterSequence.ToUpper();
-    
         FireEvent(OnCardsPlayed, playedCards, normalizedLetters);
     
-        // Try exact match first
-        if (TryMatchSpell(normalizedLetters, playedCards))
+        // Update persistent combo
+        string testCombo = _currentCombo + normalizedLetters;
+        
+        // Try exact match with new combo
+        if (TryMatchSpell(testCombo, playedCards))
         {
+            ClearCombo();
             return;
         }
     
-        // Try partial matches
-        var partialMatches = FindPartialMatches(normalizedLetters);
-        Debug.Log($"[SpellcastManager] Gefundener Value: {normalizedLetters}");
+        // Try partial matches with new combo
+        var partialMatches = FindPartialMatches(testCombo);
         if (partialMatches.Count > 0)
         {
             var bestMatch = partialMatches.OrderByDescending(s => s.LetterCode.Length).First();
             ExecuteSpell(bestMatch, playedCards, bestMatch.LetterCode);
+            ClearCombo();
             return;
         }
-    
         
-        FireEvent(OnSpellNotFound, normalizedLetters);
-        Debug.Log($"[SpellcastManager] No spell found for: {normalizedLetters}");
-        
+        // Check if new combo has potential future matches
+        if (HasPotentialMatch(testCombo))
+        {
+            // Store the combo and continue building
+            _currentCombo = testCombo;
+            UpdateComboDisplay(_currentCombo);
+            Debug.Log($"[SpellcastManager] Building combo: {_currentCombo}");
+        }
+        else
+        {
+            // No potential - clear combo and start fresh with current letters
+            ClearCombo();
+            
+            // Check if just the current letters have potential
+            if (HasPotentialMatch(normalizedLetters))
+            {
+                _currentCombo = normalizedLetters;
+                UpdateComboDisplay(_currentCombo);
+                Debug.Log($"[SpellcastManager] Started new combo: {_currentCombo}");
+            }
+            else
+            {
+                FireEvent(OnSpellNotFound, normalizedLetters);
+                Debug.Log($"[SpellcastManager] No spell found for: {normalizedLetters}");
+            }
+        }
     }
     
     private bool TryMatchSpell(string letterSequence, List<Card> sourceCards)
@@ -277,12 +290,10 @@ public class SpellcastManager : SingletonBehaviour<SpellcastManager>, IGameManag
         
         ExecuteSpellEffects(spell);
         
-        // Clear selection after spell cast (cards remain in hand)
         if (_cardManager != null)
         {
             _cardManager.ClearSelection();
         }
-        ClearCombo();
     }
     
     private void ExecuteSpellEffects(SpellAsset spell)
@@ -328,25 +339,32 @@ public class SpellcastManager : SingletonBehaviour<SpellcastManager>, IGameManag
     
     private void ApplyDamageEffect(SpellEffect effect)
     {
-        if (_combatManager != null)
+        // Auto-target falls keine Targets gesetzt sind
+        if (_combatManager?.CurrentTargets?.Count == 0)
         {
-            // Use combat manager's targeting system
-            _combatManager.DealDamageToTargets(Mathf.RoundToInt(effect.value));
+            AutoTargetFirstEnemy();
         }
-        Debug.Log($"[SpellcastManager] Applied {effect.value} damage to targets");
+    
+        if (_combatManager?.CurrentTargets?.Count > 0)
+        {
+            _combatManager.DealDamageToTargets(Mathf.RoundToInt(effect.value));
+            Debug.Log($"[SpellcastManager] Applied {effect.value} damage to {_combatManager.CurrentTargets.Count} target(s)");
+        }
+        else
+        {
+            Debug.LogWarning("[SpellcastManager] No enemies available for damage spell");
+        }
     }
 
     private void ApplyDebuffEffect(SpellEffect effect)
     {
         if (_combatManager != null)
         {
-            // Apply debuff to current targets
             foreach (var target in _combatManager.CurrentTargets)
             {
                 if (target != null && target.IsAlive)
                 {
                     Debug.Log($"[SpellcastManager] Applied debuff {effect.effectName} to {target.EntityName}");
-                    // TODO: Implement actual debuff system
                 }
             }
         }
@@ -374,7 +392,7 @@ public class SpellcastManager : SingletonBehaviour<SpellcastManager>, IGameManag
         {
             _currentCombo = "";
             FireEvent(OnComboCleared);
-            FireEvent(OnComboUpdated, _currentCombo);
+            UpdateComboDisplay(_currentCombo);
         }
     }
     
@@ -403,6 +421,19 @@ public class SpellcastManager : SingletonBehaviour<SpellcastManager>, IGameManag
         }
         
         return false;
+    }
+    
+    private void AutoTargetFirstEnemy()
+    {
+        if (EnemyManager.HasInstance && _combatManager != null)
+        {
+            var firstEnemy = EnemyManager.Instance.AliveEnemies.FirstOrDefault();
+            if (firstEnemy != null)
+            {
+                _combatManager.AddTarget(firstEnemy);
+                Debug.Log($"[SpellcastManager] Auto-targeted: {firstEnemy.EntityName}");
+            }
+        }
     }
     
     private void FireEvent<T>(System.Action<T> eventAction, T parameter)

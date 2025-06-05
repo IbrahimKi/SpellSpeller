@@ -439,16 +439,21 @@ public class CombatManager : SingletonBehaviour<CombatManager>, IGameManager
         switch (effect.effectType)
         {
             case SpellEffectType.Damage:
-                if (_currentTargetingMode == TargetingMode.All)
-                    DealDamageToAllEnemies(Mathf.RoundToInt(effect.value));
-                else
+                if (_currentTargets.Count > 0)
+                {
                     DealDamageToTargets(Mathf.RoundToInt(effect.value));
+                    Debug.Log($"[CombatManager] Spell damage {effect.value} applied to {_currentTargets.Count} target(s)");
+                }
+                else
+                {
+                    Debug.LogWarning("[CombatManager] No targets for damage spell");
+                }
                 break;
-                
+            
             case SpellEffectType.Heal:
                 ModifyLife(Mathf.RoundToInt(effect.value));
                 break;
-                
+            
             case SpellEffectType.Buff:
                 if (effect.effectName.ToLower().Contains("creativity"))
                     ModifyCreativity(Mathf.RoundToInt(effect.value));

@@ -16,4 +16,7 @@ MonoBehaviour:
   letterCode: ZI
   spellType: 1
   spellSubtypes: 02000000
-  effects: []
+  effects:
+  - effectName: Single Damage
+    effectType: 0
+    value: 7

@@ -16,4 +16,7 @@ MonoBehaviour:
   letterCode: FA
   spellType: 1
   spellSubtypes: 01000000
-  effects: []
+  effects:
+  - effectName: Fire Damage
+    effectType: 0
+    value: 3

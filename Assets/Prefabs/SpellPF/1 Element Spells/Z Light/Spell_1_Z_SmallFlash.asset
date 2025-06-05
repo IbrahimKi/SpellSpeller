@@ -16,4 +16,7 @@ MonoBehaviour:
   letterCode: ZA
   spellType: 1
   spellSubtypes: 02000000
-  effects: []
+  effects:
+  - effectName: AreaDamage
+    effectType: 0
+    value: 2

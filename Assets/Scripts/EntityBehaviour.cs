@@ -18,6 +18,7 @@ public class EntityBehaviour : MonoBehaviour, IPointerClickHandler, IPointerEnte
     // Cached components
     private Collider targetCollider;
     private Canvas worldCanvas;
+    private Material[] originalMaterials; // Store originals for cleanup
     
     // Events
     public static event System.Action<EntityBehaviour> OnEntityTargeted;
@@ -57,19 +58,28 @@ public class EntityBehaviour : MonoBehaviour, IPointerClickHandler, IPointerEnte
             targetCollider = boxCollider;
         }
         
-        // Find or create world canvas for UI elements
+        // Find existing world canvas (don't create one automatically)
         worldCanvas = GetComponentInChildren<Canvas>();
-        if (worldCanvas == null)
+        
+        // Only setup if canvas already exists in prefab
+        if (worldCanvas != null && worldCanvas.renderMode == RenderMode.WorldSpace)
         {
-            GameObject canvasObject = new GameObject("WorldCanvas");
-            canvasObject.transform.SetParent(transform, false);
-            worldCanvas = canvasObject.AddComponent<Canvas>();
-            worldCanvas.renderMode = RenderMode.WorldSpace;
             worldCanvas.transform.localScale = Vector3.one * 0.01f;
+            worldCanvas.sortingOrder = 10; // Ensure proper sorting
         }
         
         // Cache renderers
         renderers = GetComponentsInChildren<Renderer>();
+        
+        // Store original materials for cleanup
+        if (renderers.Length > 0)
+        {
+            originalMaterials = new Material[renderers.Length];
+            for (int i = 0; i < renderers.Length; i++)
+            {
+                originalMaterials[i] = renderers[i].sharedMaterial;
+            }
+        }
     }
     
     public void Initialize(EntityAsset asset)
@@ -117,6 +127,9 @@ public class EntityBehaviour : MonoBehaviour, IPointerClickHandler, IPointerEnte
     
     private void OnDestroy()
     {
+        // Clean up instanced materials
+        CleanupMaterials();
+        
         // Unregister from manager
         switch (Type)
         {
@@ -142,7 +155,7 @@ public class EntityBehaviour : MonoBehaviour, IPointerClickHandler, IPointerEnte
         if (oldHealth != currentHealth)
         {
             OnEntityHealthChanged?.Invoke(this, oldHealth, currentHealth);
-            
+            Debug.Log($"[Entity Behaviour] Entity is now at {currentHealth}) life!");
             if (currentHealth <= 0)
             {
                 Die();
@@ -234,14 +247,36 @@ public class EntityBehaviour : MonoBehaviour, IPointerClickHandler, IPointerEnte
         OnEntityUnhovered?.Invoke(this);
     }
     
-    // Visual utilities
+    // Visual utilities - FIXED: Creates instance materials instead of modifying shared ones
     private void ApplyTintColor(Color color)
     {
-        foreach (var renderer in renderers)
+        for (int i = 0; i < renderers.Length; i++)
         {
-            if (renderer != null && renderer.material != null)
+            if (renderers[i] != null && renderers[i].sharedMaterial != null)
             {
-                renderer.material.color = color;
+                // Create instance material to avoid affecting other objects
+                Material instanceMaterial = new Material(renderers[i].sharedMaterial);
+                instanceMaterial.color = color;
+                renderers[i].material = instanceMaterial;
+            }
+        }
+    }
+    
+    private void CleanupMaterials()
+    {
+        // Destroy instanced materials to prevent memory leaks
+        if (renderers != null)
+        {
+            foreach (var renderer in renderers)
+            {
+                if (renderer != null && renderer.material != null)
+                {
+                    // Only destroy if it's not the original shared material
+                    if (renderer.material != renderer.sharedMaterial)
+                    {
+                        DestroyImmediate(renderer.material);
+                    }
+                }
             }
         }
     }

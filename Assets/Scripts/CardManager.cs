@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using UnityEngine;
+using System.Collections;
 
 public class CardManager : SingletonBehaviour<CardManager>, IGameManager
 {
@@ -33,12 +34,17 @@ public class CardManager : SingletonBehaviour<CardManager>, IGameManager
     private Queue<GameObject> _cardPool = new Queue<GameObject>();
     private int _nextCardId = 0;
     
+    // Batch processing for simultaneous spawns
+    private bool _isBatchingUpdates = false;
+    private List<Card> _pendingHandCards = new List<Card>();
+    
     // Reference to HandLayoutManager
     private HandLayoutManager _handLayoutManager;
     
     // Events
     public static event System.Action<Card> OnCardSpawned;
     public static event System.Action<Card> OnCardDestroyed;
+    public static event System.Action<Card> OnCardDiscarded;
     public static event System.Action<List<Card>> OnHandUpdated;
     public static event System.Action<List<Card>> OnSelectionChanged;
     public static event System.Action OnCardManagerInitialized;
@@ -57,7 +63,6 @@ public class CardManager : SingletonBehaviour<CardManager>, IGameManager
         IsInitialized = true;
         OnCardManagerInitialized?.Invoke();
     }
-    
     
     private void OnEnable()
     {
@@ -98,19 +103,46 @@ public class CardManager : SingletonBehaviour<CardManager>, IGameManager
         }
     }
     
+    // NEW: Batch spawn multiple cards without layout conflicts
+    public List<Card> SpawnMultipleCards(List<CardData> cardDataList, Transform parent = null, bool addToHand = false)
+    {
+        if (cardDataList == null || cardDataList.Count == 0) return new List<Card>();
+        
+        var spawnedCards = new List<Card>();
+        
+        // Start batching to prevent multiple layout updates
+        if (addToHand) StartBatchUpdate();
+        
+        try
+        {
+            foreach (var cardData in cardDataList)
+            {
+                var card = SpawnCardInternal(cardData, parent, addToHand);
+                if (card != null) spawnedCards.Add(card);
+            }
+        }
+        finally
+        {
+            // End batching and apply final layout
+            if (addToHand) EndBatchUpdate();
+        }
+        
+        return spawnedCards;
+    }
+    
     public Card SpawnCard(CardData cardData, Transform parent = null, bool addToHand = false)
+    {
+        return SpawnCardInternal(cardData, parent, addToHand);
+    }
+    
+    private Card SpawnCardInternal(CardData cardData, Transform parent = null, bool addToHand = false)
     {
         if (cardData == null || cardPrefab == null) return null;
         
         GameObject cardObject = GetCardObject();
         if (cardObject == null) return null;
         
-        // Setup transform
-        Transform targetParent = parent ?? defaultSpawnParent ?? transform;
-        cardObject.transform.SetParent(targetParent, false);
-        ResetCardTransform(cardObject);
-        
-        // Setup card component
+        // Setup card component FIRST
         Card cardComponent = cardObject.GetComponent<Card>();
         if (cardComponent == null)
         {
@@ -119,6 +151,30 @@ public class CardManager : SingletonBehaviour<CardManager>, IGameManager
         }
         
         cardComponent.SetCardData(cardData);
+        
+        // Setup transform AFTER card setup
+        if (addToHand && handContainer != null)
+        {
+            // For hand cards: parent to hand container and reset transform
+            cardObject.transform.SetParent(handContainer, false);
+            ResetCardTransform(cardObject);
+            
+            // Position at center initially to prevent flicker
+            var rectTransform = cardObject.GetComponent<RectTransform>();
+            if (rectTransform != null)
+            {
+                rectTransform.anchoredPosition = Vector2.zero;
+                rectTransform.localScale = Vector3.one * 0.75f; // Match hand scale
+            }
+        }
+        else
+        {
+            // For non-hand cards: use provided parent or default
+            Transform targetParent = parent ?? defaultSpawnParent ?? transform;
+            cardObject.transform.SetParent(targetParent, false);
+            ResetCardTransform(cardObject);
+        }
+        
         cardObject.SetActive(true);
         
         // Register card
@@ -127,10 +183,40 @@ public class CardManager : SingletonBehaviour<CardManager>, IGameManager
         _cardToId[cardComponent] = cardId;
         
         if (addToHand && _handCards.Count < maxHandSize)
-            AddCardToHandInternal(cardComponent);
+        {
+            if (_isBatchingUpdates)
+                _pendingHandCards.Add(cardComponent);
+            else
+                AddCardToHandInternal(cardComponent);
+        }
         
         OnCardSpawned?.Invoke(cardComponent);
         return cardComponent;
+    }
+    
+    // NEW: Batch update system
+    private void StartBatchUpdate()
+    {
+        _isBatchingUpdates = true;
+        _pendingHandCards.Clear();
+    }
+    
+    private void EndBatchUpdate()
+    {
+        if (!_isBatchingUpdates) return;
+        
+        _isBatchingUpdates = false;
+        
+        // Add all pending cards at once
+        foreach (var card in _pendingHandCards)
+        {
+            _handCards.Add(card);
+        }
+        _pendingHandCards.Clear();
+        
+        // Single layout update for all cards
+        UpdateHandLayoutImmediate();
+        OnHandUpdated?.Invoke(new List<Card>(_handCards));
     }
     
     private void HandleCardPlayTriggered(Card card)
@@ -156,16 +242,43 @@ public class CardManager : SingletonBehaviour<CardManager>, IGameManager
             rectTransform.localPosition = Vector3.zero;
             rectTransform.localRotation = Quaternion.identity;
             rectTransform.localScale = Vector3.one;
+            rectTransform.anchoredPosition = Vector2.zero;
         }
     }
     
     private void AddCardToHandInternal(Card card)
     {
         _handCards.Add(card);
-        card.transform.SetParent(handContainer, false);
+        // Parent already set in SpawnCard for hand cards
         
         UpdateHandLayout();
         OnHandUpdated?.Invoke(new List<Card>(_handCards));
+    }
+    
+    // NEW: Separate discard method that actually removes the card visually
+    public bool DiscardCard(Card card)
+    {
+        if (card == null) return false;
+        
+        // Remove from collections
+        _handCards.Remove(card);
+        _selectedCards.Remove(card);
+        
+        // Clean up hand layout manager reference
+        _handLayoutManager?.CleanupCardReference(card);
+        
+        // Fire discard event BEFORE destroying
+        OnCardDiscarded?.Invoke(card);
+        
+        // Actually destroy/hide the card
+        DestroyCardInternal(card);
+        
+        // Update layouts and events
+        UpdateHandLayout();
+        OnHandUpdated?.Invoke(new List<Card>(_handCards));
+        OnSelectionChanged?.Invoke(new List<Card>(_selectedCards));
+        
+        return true;
     }
     
     public void DestroyCard(Card card)
@@ -173,14 +286,29 @@ public class CardManager : SingletonBehaviour<CardManager>, IGameManager
         if (card == null) return;
         
         // Remove from tracking
+        _handCards.Remove(card);
+        _selectedCards.Remove(card);
+        
+        // Clean up hand layout manager reference
+        _handLayoutManager?.CleanupCardReference(card);
+        
+        DestroyCardInternal(card);
+        
+        UpdateHandLayout();
+        OnHandUpdated?.Invoke(new List<Card>(_handCards));
+        OnSelectionChanged?.Invoke(new List<Card>(_selectedCards));
+        OnCardDestroyed?.Invoke(card);
+    }
+    
+    // INTERNAL method for actual card destruction/pooling
+    private void DestroyCardInternal(Card card)
+    {
+        // Remove from tracking
         if (_cardToId.TryGetValue(card, out int cardId))
         {
             _allCards.Remove(cardId);
             _cardToId.Remove(card);
         }
-        
-        _handCards.Remove(card);
-        _selectedCards.Remove(card);
         
         GameObject cardObject = card.gameObject;
         
@@ -193,11 +321,6 @@ public class CardManager : SingletonBehaviour<CardManager>, IGameManager
         {
             Destroy(cardObject);
         }
-        
-        UpdateHandLayout();
-        OnHandUpdated?.Invoke(new List<Card>(_handCards));
-        OnSelectionChanged?.Invoke(new List<Card>(_selectedCards));
-        OnCardDestroyed?.Invoke(card);
     }
     
     private void ReturnToPool(GameObject cardObject)
@@ -253,13 +376,31 @@ public class CardManager : SingletonBehaviour<CardManager>, IGameManager
     
     private void UpdateHandLayout()
     {
+        if (_isBatchingUpdates) return; // Skip during batch operations
         _handLayoutManager?.UpdateLayout();
+    }
+    
+    private void UpdateHandLayoutImmediate()
+    {
+        _handLayoutManager?.SetLayoutImmediate();
     }
     
     public bool AddCardToHand(Card card)
     {
         if (card == null || _handCards.Contains(card) || _handCards.Count >= maxHandSize)
             return false;
+        
+        // Ensure proper parenting for existing cards
+        card.transform.SetParent(handContainer, false);
+        ResetCardTransform(card.gameObject);
+        
+        // Position at center initially
+        var rectTransform = card.GetComponent<RectTransform>();
+        if (rectTransform != null)
+        {
+            rectTransform.anchoredPosition = Vector2.zero;
+            rectTransform.localScale = Vector3.one * 0.75f;
+        }
         
         AddCardToHandInternal(card);
         return true;
@@ -284,8 +425,15 @@ public class CardManager : SingletonBehaviour<CardManager>, IGameManager
         if (card == null || !_handCards.Remove(card))
             return false;
         
+        // Remove from selection if selected
+        _selectedCards.Remove(card);
+        
+        // Clean up hand layout manager reference
+        _handLayoutManager?.CleanupCardReference(card);
+        
         UpdateHandLayout();
         OnHandUpdated?.Invoke(new List<Card>(_handCards));
+        OnSelectionChanged?.Invoke(new List<Card>(_selectedCards));
         return true;
     }
     
