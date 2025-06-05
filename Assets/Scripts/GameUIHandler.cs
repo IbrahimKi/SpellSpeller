@@ -24,6 +24,7 @@ public class GameUIHandler : MonoBehaviour
     [Header("Combat UI")]
     [SerializeField] private Button endTurnButton;
     [SerializeField] private TextMeshProUGUI turnText;
+    [SerializeField] private TextMeshProUGUI turnPhaseText; // NEW: Show current phase
     
     [Header("Settings")]
     [SerializeField] private bool showPercentages = true;
@@ -34,13 +35,11 @@ public class GameUIHandler : MonoBehaviour
     
     private void Start()
     {
-        // Warte auf Manager-Initialisierung
         StartCoroutine(WaitForManagersAndSetup());
     }
     
     private System.Collections.IEnumerator WaitForManagersAndSetup()
     {
-        // Warte auf GameManager
         while (!GameManager.HasInstance || !GameManager.Instance.IsInitialized)
         {
             yield return new WaitForSeconds(0.1f);
@@ -52,18 +51,31 @@ public class GameUIHandler : MonoBehaviour
     
     private void SetupEventListeners()
     {
-        // Combat Manager Events
-        CombatManager.OnLifeChanged += UpdateLifeDisplay;
-        CombatManager.OnCreativityChanged += UpdateCreativityDisplay;
-        CombatManager.OnDeckSizeChanged += UpdateDeckDisplay;
-        CombatManager.OnTurnChanged += UpdateTurnDisplay;
-        CombatManager.OnCombatStarted += OnCombatStarted;
-        CombatManager.OnCombatEnded += OnCombatEnded;
-        CombatManager.OnTurnEnded += OnTurnEnded;
-        CombatManager.OnTurnStarted += OnTurnStarted;
+        // Combat Manager Events - IMPROVED: More granular turn events
+        if (CombatManager.HasInstance)
+        {
+            CombatManager.OnLifeChanged += UpdateLifeDisplay;
+            CombatManager.OnCreativityChanged += UpdateCreativityDisplay;
+            CombatManager.OnDeckSizeChanged += UpdateDeckDisplay;
+            CombatManager.OnTurnChanged += UpdateTurnDisplay;
+            CombatManager.OnTurnPhaseChanged += UpdateTurnPhaseDisplay; // NEW
+            CombatManager.OnCombatStarted += OnCombatStarted;
+            CombatManager.OnCombatEnded += OnCombatEnded;
+            
+            // NEW: Granular turn events for better UI responsiveness
+            CombatManager.OnPlayerTurnStarted += OnPlayerTurnStarted;
+            CombatManager.OnPlayerTurnEnded += OnPlayerTurnEnded;
+            CombatManager.OnEnemyTurnStarted += OnEnemyTurnStarted;
+            CombatManager.OnEnemyTurnEnded += OnEnemyTurnEnded;
+            CombatManager.OnTurnTransitionStarted += OnTurnTransitionStarted;
+            CombatManager.OnTurnTransitionCompleted += OnTurnTransitionCompleted;
+        }
         
         // Card Manager Events
-        CardManager.OnSelectionChanged += UpdateCardPlayUI;
+        if (CardManager.HasInstance)
+        {
+            CardManager.OnSelectionChanged += UpdateCardPlayUI;
+        }
         
         // Spellcast Events
         if (SpellcastManager.HasInstance)
@@ -71,15 +83,55 @@ public class GameUIHandler : MonoBehaviour
             SpellcastManager.OnSpellFound += OnSpellFound;
             SpellcastManager.OnSpellNotFound += OnSpellNotFound;
             SpellcastManager.OnComboUpdated += UpdateComboDisplay;
-            
-            if (playButton) playButton.onClick.AddListener(() => SpellcastManager.Instance?.PlaySelectedCards());
-            if (clearButton) clearButton.onClick.AddListener(() => SpellcastManager.Instance?.ClearSelection());
-            if (drawButton) drawButton.onClick.AddListener(() => SpellcastManager.Instance?.DrawCard());
         }
         
-        // Combat UI Buttons
-        if (endTurnButton) endTurnButton.onClick.AddListener(EndTurn);
-        if (discardButton) discardButton.onClick.AddListener(DiscardSelectedCard);
+        // Setup Button Listeners - IMPROVED: Better turn button integration
+        SetupButtonListeners();
+    }
+    
+    private void SetupButtonListeners()
+    {
+        // Combat UI Buttons - IMPROVED: Direct integration with CombatManager's CanEndTurn
+        if (endTurnButton != null && CombatManager.HasInstance)
+        {
+            endTurnButton.onClick.RemoveAllListeners();
+            endTurnButton.onClick.AddListener(() => {
+                if (CombatManager.Instance.CanEndTurn)
+                {
+                    Debug.Log("[GameUIHandler] End Turn button clicked - executing EndPlayerTurn");
+                    CombatManager.Instance.EndPlayerTurn();
+                }
+                else
+                {
+                    Debug.LogWarning($"[GameUIHandler] Cannot end turn - Phase: {CombatManager.Instance.CurrentPhase}, Processing: {CombatManager.Instance.IsProcessingTurn}");
+                }
+            });
+        }
+        
+        // Card Play Buttons
+        if (playButton != null && SpellcastManager.HasInstance)
+        {
+            playButton.onClick.RemoveAllListeners();
+            playButton.onClick.AddListener(() => SpellcastManager.Instance.PlaySelectedCards());
+        }
+        
+        if (clearButton != null && SpellcastManager.HasInstance)
+        {
+            clearButton.onClick.RemoveAllListeners();
+            clearButton.onClick.AddListener(() => SpellcastManager.Instance.ClearSelection());
+        }
+        
+        if (drawButton != null && SpellcastManager.HasInstance)
+        {
+            drawButton.onClick.RemoveAllListeners();
+            drawButton.onClick.AddListener(() => SpellcastManager.Instance.DrawCard());
+        }
+        
+        if (discardButton != null)
+        {
+            discardButton.onClick.RemoveAllListeners();
+            discardButton.onClick.AddListener(DiscardSelectedCard);
+        }
     }
     
     private void OnDestroy()
@@ -91,10 +143,15 @@ public class GameUIHandler : MonoBehaviour
             CombatManager.OnCreativityChanged -= UpdateCreativityDisplay;
             CombatManager.OnDeckSizeChanged -= UpdateDeckDisplay;
             CombatManager.OnTurnChanged -= UpdateTurnDisplay;
+            CombatManager.OnTurnPhaseChanged -= UpdateTurnPhaseDisplay;
             CombatManager.OnCombatStarted -= OnCombatStarted;
             CombatManager.OnCombatEnded -= OnCombatEnded;
-            CombatManager.OnTurnEnded -= OnTurnEnded;
-            CombatManager.OnTurnStarted -= OnTurnStarted;
+            CombatManager.OnPlayerTurnStarted -= OnPlayerTurnStarted;
+            CombatManager.OnPlayerTurnEnded -= OnPlayerTurnEnded;
+            CombatManager.OnEnemyTurnStarted -= OnEnemyTurnStarted;
+            CombatManager.OnEnemyTurnEnded -= OnEnemyTurnEnded;
+            CombatManager.OnTurnTransitionStarted -= OnTurnTransitionStarted;
+            CombatManager.OnTurnTransitionCompleted -= OnTurnTransitionCompleted;
         }
         
         if (CardManager.HasInstance)
@@ -108,6 +165,13 @@ public class GameUIHandler : MonoBehaviour
             SpellcastManager.OnSpellNotFound -= OnSpellNotFound;
             SpellcastManager.OnComboUpdated -= UpdateComboDisplay;
         }
+        
+        // Clean up button listeners
+        endTurnButton?.onClick.RemoveAllListeners();
+        playButton?.onClick.RemoveAllListeners();
+        clearButton?.onClick.RemoveAllListeners();
+        drawButton?.onClick.RemoveAllListeners();
+        discardButton?.onClick.RemoveAllListeners();
     }
     
     private void RefreshAllDisplays()
@@ -119,14 +183,22 @@ public class GameUIHandler : MonoBehaviour
             UpdateCreativityDisplay(combat.Creativity);
             UpdateDeckDisplay(combat.DeckSize);
             UpdateTurnDisplay(combat.CurrentTurn);
+            UpdateTurnPhaseDisplay(combat.CurrentPhase);
         }
         
         if (CardManager.HasInstance)
             UpdateCardPlayUI(CardManager.Instance.SelectedCards);
         
+        UpdateAllButtons();
+    }
+    
+    // IMPROVED: Consolidated button update logic
+    private void UpdateAllButtons()
+    {
         UpdateDrawButton();
         UpdateDiscardButton();
         UpdateEndTurnButton();
+        UpdateCardPlayButtons();
     }
     
     private void UpdateLifeDisplay(Resource life)
@@ -172,16 +244,52 @@ public class GameUIHandler : MonoBehaviour
             turnText.text = $"Turn {turn}";
     }
     
+    // NEW: Display current turn phase
+    private void UpdateTurnPhaseDisplay(TurnPhase phase)
+    {
+        if (turnPhaseText != null)
+        {
+            string phaseText = phase switch
+            {
+                TurnPhase.PlayerTurn => "Your Turn",
+                TurnPhase.EnemyTurn => "Enemy Turn",
+                TurnPhase.TurnTransition => "Processing...",
+                TurnPhase.CombatEnd => "Combat Ended",
+                _ => phase.ToString()
+            };
+            
+            turnPhaseText.text = phaseText;
+            
+            // Color coding for better UX
+            turnPhaseText.color = phase switch
+            {
+                TurnPhase.PlayerTurn => Color.green,
+                TurnPhase.EnemyTurn => Color.red,
+                TurnPhase.TurnTransition => Color.yellow,
+                TurnPhase.CombatEnd => Color.gray,
+                _ => Color.white
+            };
+        }
+        
+        // Update turn button whenever phase changes
+        UpdateEndTurnButton();
+    }
+    
     private void UpdateCardPlayUI(System.Collections.Generic.List<Card> selectedCards)
     {
-        bool hasCards = selectedCards?.Count > 0;
-        
-        if (playButton != null) playButton.interactable = hasCards;
-        if (clearButton != null) clearButton.interactable = hasCards;
-        
         UpdateStatusDisplay(selectedCards);
+        UpdateCardPlayButtons();
         UpdateDrawButton();
         UpdateDiscardButton();
+    }
+    
+    private void UpdateCardPlayButtons()
+    {
+        bool hasCards = CardManager.HasInstance && CardManager.Instance.SelectedCards?.Count > 0;
+        bool isPlayerTurn = CombatManager.HasInstance && CombatManager.Instance.IsPlayerTurn;
+        
+        if (playButton != null) playButton.interactable = hasCards && isPlayerTurn;
+        if (clearButton != null) clearButton.interactable = hasCards && isPlayerTurn;
     }
     
     private void UpdateStatusDisplay(System.Collections.Generic.List<Card> selectedCards)
@@ -223,7 +331,9 @@ public class GameUIHandler : MonoBehaviour
         {
             bool canDraw = CardManager.HasInstance && !CardManager.Instance.IsHandFull &&
                           DeckManager.HasInstance && !DeckManager.Instance.IsDeckEmpty;
-            drawButton.interactable = canDraw;
+            bool isPlayerTurn = CombatManager.HasInstance && CombatManager.Instance.IsPlayerTurn;
+            
+            drawButton.interactable = canDraw && isPlayerTurn;
         }
     }
     
@@ -234,48 +344,117 @@ public class GameUIHandler : MonoBehaviour
             bool hasSelectedCard = CardManager.HasInstance && CardManager.Instance.SelectedCards?.Count == 1;
             bool hasCreativity = CombatManager.HasInstance && CombatManager.Instance.CanSpendCreativity(discardCost);
             bool canDrawNew = DeckManager.HasInstance && DeckManager.Instance.GetTotalAvailableCards() > 0;
+            bool isPlayerTurn = CombatManager.HasInstance && CombatManager.Instance.IsPlayerTurn;
             
-            discardButton.interactable = hasSelectedCard && hasCreativity && canDrawNew;
+            discardButton.interactable = hasSelectedCard && hasCreativity && canDrawNew && isPlayerTurn;
         }
     }
     
+    // IMPROVED: More precise turn button logic
     private void UpdateEndTurnButton()
     {
-        if (endTurnButton != null)
+        if (endTurnButton != null && CombatManager.HasInstance)
         {
-            bool canEndTurn = CombatManager.HasInstance && CombatManager.Instance.IsInCombat;
+            bool canEndTurn = CombatManager.Instance.CanEndTurn;
             endTurnButton.interactable = canEndTurn;
+            
+            // Update button text based on state
+            var buttonText = endTurnButton.GetComponentInChildren<TextMeshProUGUI>();
+            if (buttonText != null)
+            {
+                if (CombatManager.Instance.IsProcessingTurn)
+                {
+                    buttonText.text = "Processing...";
+                }
+                else if (CombatManager.Instance.IsPlayerTurn)
+                {
+                    buttonText.text = "End Turn";
+                }
+                else if (CombatManager.Instance.IsEnemyTurn)
+                {
+                    buttonText.text = "Enemy Turn";
+                }
+                else
+                {
+                    buttonText.text = "Wait...";
+                }
+            }
+            
+            Debug.Log($"[GameUIHandler] Turn Button Updated - CanEndTurn: {canEndTurn}, Phase: {CombatManager.Instance.CurrentPhase}, Processing: {CombatManager.Instance.IsProcessingTurn}");
         }
     }
     
-    private void EndTurn()
-    {
-        if (CombatManager.HasInstance && CombatManager.Instance.IsInCombat)
-        {
-            CombatManager.Instance.EndTurn();
-        }
-    }
-    
+    // EVENT HANDLERS - NEW: Granular turn event handling
     private void OnCombatStarted()
     {
-        UpdateEndTurnButton();
+        Debug.Log("[GameUIHandler] Combat started - updating all UI");
+        UpdateAllButtons();
     }
     
     private void OnCombatEnded()
     {
-        UpdateEndTurnButton();
+        Debug.Log("[GameUIHandler] Combat ended - disabling combat UI");
+        UpdateAllButtons();
     }
     
-    private void OnTurnEnded()
+    private void OnPlayerTurnStarted(int turn)
     {
-        // Button während Turn-End-Sequenz deaktivieren
-        if (endTurnButton) endTurnButton.interactable = false;
+        Debug.Log($"[GameUIHandler] Player turn {turn} started - enabling player actions");
+        UpdateAllButtons();
+        
+        // Optional: Flash the turn button or play sound
+        if (endTurnButton != null)
+        {
+            endTurnButton.GetComponent<Image>().color = Color.green;
+        }
     }
     
-    private void OnTurnStarted()
+    private void OnPlayerTurnEnded(int turn)
     {
-        // Button nach Turn-Start wieder aktivieren
-        UpdateEndTurnButton();
+        Debug.Log($"[GameUIHandler] Player turn {turn} ended - disabling player actions");
+        UpdateAllButtons();
+    }
+    
+    private void OnEnemyTurnStarted(int turn)
+    {
+        Debug.Log($"[GameUIHandler] Enemy turn {turn} started - disabling player actions");
+        UpdateAllButtons();
+        
+        // Optional: Change button color to indicate enemy turn
+        if (endTurnButton != null)
+        {
+            endTurnButton.GetComponent<Image>().color = Color.red;
+        }
+    }
+    
+    private void OnEnemyTurnEnded(int turn)
+    {
+        Debug.Log($"[GameUIHandler] Enemy turn {turn} ended");
+        UpdateAllButtons();
+    }
+    
+    private void OnTurnTransitionStarted()
+    {
+        Debug.Log("[GameUIHandler] Turn transition started - disabling all actions");
+        UpdateAllButtons();
+        
+        // Optional: Show processing indicator
+        if (endTurnButton != null)
+        {
+            endTurnButton.GetComponent<Image>().color = Color.yellow;
+        }
+    }
+    
+    private void OnTurnTransitionCompleted()
+    {
+        Debug.Log("[GameUIHandler] Turn transition completed - updating UI");
+        UpdateAllButtons();
+        
+        // Reset button color
+        if (endTurnButton != null)
+        {
+            endTurnButton.GetComponent<Image>().color = Color.white;
+        }
     }
     
     private void DiscardSelectedCard()
@@ -299,7 +478,6 @@ public class GameUIHandler : MonoBehaviour
         DeckManager.Instance.DiscardCard(cardToDiscard.CardData);
         
         // FIXED: Use DiscardCard instead of RemoveCardFromHand
-        // This properly destroys/hides the card instead of just removing it from hand
         CardManager.Instance.DiscardCard(cardToDiscard);
         
         // Draw new card
@@ -339,41 +517,6 @@ public class GameUIHandler : MonoBehaviour
             statusText.color = Color.white;
             if (CardManager.HasInstance)
                 UpdateCardPlayUI(CardManager.Instance.SelectedCards);
-        }
-    }
-    
-    private void SetupEntityEventListeners()
-    {
-        if (CombatManager.HasInstance)
-        {
-            CombatManager.OnTargetsChanged += UpdateTargetingDisplay;
-            CombatManager.OnTargetingModeChanged += UpdateTargetingModeDisplay;
-        }
-    }
-
-    private void UpdateTargetingDisplay(List<EntityBehaviour> targets)
-    {
-        // Update UI to show current targets
-        if (statusText != null)
-        {
-            if (targets.Count > 0)
-            {
-                string targetNames = string.Join(", ", targets.Select(t => t.EntityName));
-                statusText.text = $"Targets: {targetNames}";
-            }
-            else
-            {
-                statusText.text = "No targets selected";
-            }
-        }
-    }
-
-    private void UpdateTargetingModeDisplay(TargetingMode mode)
-    {
-        // Update UI to show targeting mode
-        if (statusText != null)
-        {
-            statusText.text = $"Targeting: {mode}";
         }
     }
 }

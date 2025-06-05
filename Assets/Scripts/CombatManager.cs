@@ -34,6 +34,14 @@ public class Resource
     }
 }
 
+public enum TurnPhase
+{
+    PlayerTurn,
+    EnemyTurn,
+    TurnTransition,
+    CombatEnd
+}
+
 public class CombatManager : SingletonBehaviour<CombatManager>, IGameManager
 {
     [Header("Player Resources")]
@@ -50,6 +58,7 @@ public class CombatManager : SingletonBehaviour<CombatManager>, IGameManager
     [SerializeField] private bool refillHandOnTurnEnd = true;
     [SerializeField] private bool resetCreativityOnTurnEnd = true;
     [SerializeField] private bool shuffleDiscardOnTurnEnd = true;
+    [SerializeField] private float turnTransitionDelay = 0.5f;
     
     [Header("Entity Settings")]
     [SerializeField] private bool autoTargetFirstEnemy = true;
@@ -59,8 +68,10 @@ public class CombatManager : SingletonBehaviour<CombatManager>, IGameManager
     private Resource _life;
     private Resource _creativity;
     
-    // Turn tracking
+    // Turn tracking - IMPROVED
     private int _currentTurn = 1;
+    private TurnPhase _currentPhase = TurnPhase.PlayerTurn;
+    private bool _isProcessingTurn = false;
     
     // Targeting
     private List<EntityBehaviour> _currentTargets = new List<EntityBehaviour>();
@@ -70,11 +81,15 @@ public class CombatManager : SingletonBehaviour<CombatManager>, IGameManager
     private bool _isReady = false;
     private bool _managersReady = false;
     
-    // Events
+    // Combat state
+    private bool _isInCombat = false;
+    
+    // Events - IMPROVED: More granular turn events
     public static event Action<Resource> OnLifeChanged;
     public static event Action<int> OnDeckSizeChanged;
     public static event Action<Resource> OnCreativityChanged;
     public static event Action<int> OnTurnChanged;
+    public static event Action<TurnPhase> OnTurnPhaseChanged;
     
     // Events - Combat
     public static event Action OnCombatStarted;
@@ -82,8 +97,14 @@ public class CombatManager : SingletonBehaviour<CombatManager>, IGameManager
     public static event Action OnPlayerDeath;
     public static event Action OnHandDrawn;
     public static event Action OnDeckEmpty;
-    public static event Action OnTurnEnded;
-    public static event Action OnTurnStarted;
+    
+    // Events - Turn System - IMPROVED: Clearer turn flow
+    public static event Action<int> OnPlayerTurnStarted;
+    public static event Action<int> OnPlayerTurnEnded;
+    public static event Action<int> OnEnemyTurnStarted;
+    public static event Action<int> OnEnemyTurnEnded;
+    public static event Action OnTurnTransitionStarted;
+    public static event Action OnTurnTransitionCompleted;
     
     // Events - Targeting
     public static event Action<List<EntityBehaviour>> OnTargetsChanged;
@@ -91,15 +112,22 @@ public class CombatManager : SingletonBehaviour<CombatManager>, IGameManager
     
     // Properties
     public bool IsReady => _isReady;
-    public bool IsInCombat { get; private set; }
+    public bool IsInCombat => _isInCombat;
     public bool ManagersReady => _managersReady;
+    public bool IsProcessingTurn => _isProcessingTurn; // NEW: For UI button states
     public Resource Life => _life;
     public Resource Creativity => _creativity;
     public int CurrentTurn => _currentTurn;
+    public TurnPhase CurrentPhase => _currentPhase; // NEW: Current turn phase
     public int DeckSize => DeckManager.HasInstance ? DeckManager.Instance.DeckSize : 0;
     public int DiscardSize => DeckManager.HasInstance ? DeckManager.Instance.DiscardSize : 0;
     public IReadOnlyList<EntityBehaviour> CurrentTargets => _currentTargets.AsReadOnly();
     public TargetingMode CurrentTargetingMode => _currentTargetingMode;
+    
+    // NEW: Turn control properties for UI
+    public bool CanEndTurn => _isInCombat && _currentPhase == TurnPhase.PlayerTurn && !_isProcessingTurn;
+    public bool IsPlayerTurn => _currentPhase == TurnPhase.PlayerTurn;
+    public bool IsEnemyTurn => _currentPhase == TurnPhase.EnemyTurn;
     
     protected override void OnAwakeInitialize()
     {
@@ -107,6 +135,7 @@ public class CombatManager : SingletonBehaviour<CombatManager>, IGameManager
         InitializeResources();
         _currentTargetingMode = defaultTargetingMode;
         _currentTurn = 1;
+        _currentPhase = TurnPhase.PlayerTurn;
         _isReady = true;
         _managersReady = true;
         Debug.Log($"[CombatManager] Initialized - IsReady: {_isReady}");
@@ -184,14 +213,17 @@ public class CombatManager : SingletonBehaviour<CombatManager>, IGameManager
     // Combat State Management
     public void StartCombat()
     {
-        if (IsInCombat) return;
+        if (_isInCombat) return;
         StartCoroutine(StartCombatSequence());
     }
     
     private IEnumerator StartCombatSequence()
     {
-        IsInCombat = true;
+        _isInCombat = true;
         _currentTurn = 1;
+        _currentPhase = TurnPhase.PlayerTurn;
+        _isProcessingTurn = false;
+        
         Debug.Log("[CombatManager] Starting combat sequence");
         
         // Check für Deck direkt über GameManager
@@ -217,14 +249,135 @@ public class CombatManager : SingletonBehaviour<CombatManager>, IGameManager
         }
         
         // Trigger initial UI updates
-        OnLifeChanged?.Invoke(_life);
-        OnCreativityChanged?.Invoke(_creativity);
-        OnDeckSizeChanged?.Invoke(DeckSize);
-        OnTurnChanged?.Invoke(_currentTurn);
+        TriggerAllResourceEvents();
         
         OnCombatStarted?.Invoke();
-        OnTurnStarted?.Invoke();
+        StartPlayerTurn();
+        
         Debug.Log("[CombatManager] Combat started successfully");
+    }
+    
+    // IMPROVED: Cleaner turn management
+    private void StartPlayerTurn()
+    {
+        _currentPhase = TurnPhase.PlayerTurn;
+        _isProcessingTurn = false;
+        
+        OnTurnPhaseChanged?.Invoke(_currentPhase);
+        OnPlayerTurnStarted?.Invoke(_currentTurn);
+        
+        Debug.Log($"[CombatManager] Player Turn {_currentTurn} started");
+    }
+    
+    private void StartEnemyTurn()
+    {
+        _currentPhase = TurnPhase.EnemyTurn;
+        _isProcessingTurn = true;
+        
+        OnTurnPhaseChanged?.Invoke(_currentPhase);
+        OnEnemyTurnStarted?.Invoke(_currentTurn);
+        
+        Debug.Log($"[CombatManager] Enemy Turn {_currentTurn} started");
+        
+        // Simple enemy AI - just wait then end turn
+        StartCoroutine(ProcessEnemyTurn());
+    }
+    
+    private IEnumerator ProcessEnemyTurn()
+    {
+        // Simple enemy behavior - wait and potentially attack
+        yield return new WaitForSeconds(1f);
+        
+        // Basic enemy action: damage player if possible
+        if (Life.CurrentValue > 0)
+        {
+            int damage = UnityEngine.Random.Range(5, 15);
+            ModifyLife(-damage);
+            Debug.Log($"[CombatManager] Enemies dealt {damage} damage to player");
+            yield return new WaitForSeconds(0.5f);
+        }
+        
+        EndEnemyTurn();
+    }
+    
+    private void EndEnemyTurn()
+    {
+        OnEnemyTurnEnded?.Invoke(_currentTurn);
+        StartTurnTransition();
+    }
+    
+    // IMPROVED: Public method for UI button - cleaner interface
+    public void EndPlayerTurn()
+    {
+        if (!CanEndTurn)
+        {
+            Debug.LogWarning($"[CombatManager] Cannot end turn - CanEndTurn: {CanEndTurn}, Phase: {_currentPhase}, Processing: {_isProcessingTurn}");
+            return;
+        }
+        
+        Debug.Log($"[CombatManager] Player ending turn {_currentTurn}");
+        OnPlayerTurnEnded?.Invoke(_currentTurn);
+        StartTurnTransition();
+    }
+    
+    // IMPROVED: Separate turn transition phase
+    private void StartTurnTransition()
+    {
+        _currentPhase = TurnPhase.TurnTransition;
+        _isProcessingTurn = true;
+        
+        OnTurnTransitionStarted?.Invoke();
+        OnTurnPhaseChanged?.Invoke(_currentPhase);
+        
+        StartCoroutine(ProcessTurnTransition());
+    }
+    
+    private IEnumerator ProcessTurnTransition()
+    {
+        Debug.Log($"[CombatManager] Starting turn transition from turn {_currentTurn}");
+        
+        // 1. Shuffle discard pile and played cards back into deck
+        if (shuffleDiscardOnTurnEnd)
+        {
+            yield return ShuffleDiscardIntoDeck();
+        }
+        
+        // 2. Reset creativity to start value
+        if (resetCreativityOnTurnEnd)
+        {
+            _creativity.Reset();
+            OnCreativityChanged?.Invoke(_creativity);
+        }
+        
+        // 3. Refill hand to starting hand size
+        if (refillHandOnTurnEnd)
+        {
+            yield return RefillHand();
+        }
+        
+        // 4. Wait for transition delay
+        yield return new WaitForSeconds(turnTransitionDelay);
+        
+        // 5. Increment turn counter
+        _currentTurn++;
+        OnTurnChanged?.Invoke(_currentTurn);
+        
+        OnTurnTransitionCompleted?.Invoke();
+        
+        // 6. Start next phase based on current logic
+        // For now, alternate between player and enemy
+        if (_currentPhase == TurnPhase.TurnTransition)
+        {
+            StartEnemyTurn();
+        }
+        
+        Debug.Log($"[CombatManager] Turn transition completed. Now on turn {_currentTurn}");
+    }
+    
+    // LEGACY: Keep old EndTurn method for backwards compatibility
+    public void EndTurn()
+    {
+        EndPlayerTurn();
     }
     
     private IEnumerator DrawStartingHand()
@@ -260,11 +413,13 @@ public class CombatManager : SingletonBehaviour<CombatManager>, IGameManager
     
     public void EndCombat()
     {
-        if (IsInCombat)
+        if (_isInCombat)
         {
-            IsInCombat = false;
+            _isInCombat = false;
             _currentTargets.Clear();
             _currentTurn = 1;
+            _currentPhase = TurnPhase.CombatEnd;
+            _isProcessingTurn = false;
             OnCombatEnded?.Invoke();
         }
     }
@@ -281,52 +436,21 @@ public class CombatManager : SingletonBehaviour<CombatManager>, IGameManager
         _life.Reset();
         _creativity.Reset();
         _currentTurn = 1;
-        IsInCombat = false;
+        _currentPhase = TurnPhase.PlayerTurn;
+        _isInCombat = false;
+        _isProcessingTurn = false;
         
+        TriggerAllResourceEvents();
+    }
+    
+    // HELPER: Trigger all resource events at once
+    private void TriggerAllResourceEvents()
+    {
         OnLifeChanged?.Invoke(_life);
         OnCreativityChanged?.Invoke(_creativity);
         OnDeckSizeChanged?.Invoke(DeckSize);
         OnTurnChanged?.Invoke(_currentTurn);
-    }
-    
-    // Turn Management
-    public void EndTurn()
-    {
-        if (!IsInCombat) return;
-        
-        StartCoroutine(EndTurnSequence());
-    }
-    
-    private IEnumerator EndTurnSequence()
-    {
-        Debug.Log($"[CombatManager] Ending turn {_currentTurn}");
-        OnTurnEnded?.Invoke();
-        
-        // 1. Shuffle discard pile and played cards back into deck
-        if (shuffleDiscardOnTurnEnd)
-        {
-            yield return ShuffleDiscardIntoDeck();
-        }
-        
-        // 2. Reset creativity to start value
-        if (resetCreativityOnTurnEnd)
-        {
-            _creativity.Reset();
-            OnCreativityChanged?.Invoke(_creativity);
-        }
-        
-        // 3. Refill hand to starting hand size
-        if (refillHandOnTurnEnd)
-        {
-            yield return RefillHand();
-        }
-        
-        // 4. Increment turn counter
-        _currentTurn++;
-        OnTurnChanged?.Invoke(_currentTurn);
-        
-        Debug.Log($"[CombatManager] Turn ended. Now on turn {_currentTurn}");
-        OnTurnStarted?.Invoke();
+        OnTurnPhaseChanged?.Invoke(_currentPhase);
     }
     
     private IEnumerator ShuffleDiscardIntoDeck()
@@ -348,7 +472,6 @@ public class CombatManager : SingletonBehaviour<CombatManager>, IGameManager
             if (card != null)
             {
                 deckManager.AddCardToBottom(card);
-                //cardManager.RemovePlayedCard(card);
             }
         }
         
@@ -594,6 +717,9 @@ public class CombatManager : SingletonBehaviour<CombatManager>, IGameManager
         Debug.Log($"[CombatManager] Combat Status:");
         Debug.Log($"  In Combat: {IsInCombat}");
         Debug.Log($"  Turn: {_currentTurn}");
+        Debug.Log($"  Phase: {_currentPhase}");
+        Debug.Log($"  Processing Turn: {_isProcessingTurn}");
+        Debug.Log($"  Can End Turn: {CanEndTurn}");
         Debug.Log($"  Life: {_life.CurrentValue}/{_life.MaxValue}");
         Debug.Log($"  Creativity: {_creativity.CurrentValue}/{_creativity.MaxValue}");
         Debug.Log($"  Targets: {_currentTargets.Count}");
@@ -603,7 +729,13 @@ public class CombatManager : SingletonBehaviour<CombatManager>, IGameManager
     [ContextMenu("End Turn (Debug)")]
     public void DebugEndTurn()
     {
-        EndTurn();
+        EndPlayerTurn();
+    }
+    
+    [ContextMenu("Start Enemy Turn (Debug)")]
+    public void DebugStartEnemyTurn()
+    {
+        StartEnemyTurn();
     }
 #endif
 }
