@@ -91,21 +91,47 @@ public class GameUIHandler : MonoBehaviour
     
     private void SetupButtonListeners()
     {
-        // Combat UI Buttons - IMPROVED: Direct integration with CombatManager's CanEndTurn
-        if (endTurnButton != null && CombatManager.HasInstance)
+        // Combat UI Buttons - VERBESSERTE Integration
+        if (endTurnButton != null)
         {
             endTurnButton.onClick.RemoveAllListeners();
             endTurnButton.onClick.AddListener(() => {
-                if (CombatManager.Instance.CanEndTurn)
+                Debug.Log("[GameUIHandler] End Turn button clicked!");
+            
+                // Detaillierte Checks
+                if (!CombatManager.HasInstance)
                 {
-                    Debug.Log("[GameUIHandler] End Turn button clicked - executing EndPlayerTurn");
-                    CombatManager.Instance.EndPlayerTurn();
+                    Debug.LogError("[GameUIHandler] CombatManager not available!");
+                    return;
+                }
+            
+                var combat = CombatManager.Instance;
+                Debug.Log($"[GameUIHandler] Combat Status - InCombat: {combat.IsInCombat}, Phase: {combat.CurrentPhase}, CanEndTurn: {combat.CanEndTurn}");
+            
+                if (!combat.IsInCombat)
+                {
+                    Debug.LogWarning("[GameUIHandler] Combat not active - starting combat first!");
+                    combat.StartCombat();
+                    return;
+                }
+            
+                if (combat.CanEndTurn)
+                {
+                    Debug.Log("[GameUIHandler] Executing EndPlayerTurn...");
+                    combat.EndPlayerTurn();
                 }
                 else
                 {
-                    Debug.LogWarning($"[GameUIHandler] Cannot end turn - Phase: {CombatManager.Instance.CurrentPhase}, Processing: {CombatManager.Instance.IsProcessingTurn}");
+                    Debug.LogWarning($"[GameUIHandler] Cannot end turn - Phase: {combat.CurrentPhase}, Processing: {combat.IsProcessingTurn}");
                 }
             });
+        
+            // SOFORT-FIX: Button erstmal aktivieren für Tests
+            if (Application.isEditor)
+            {
+                endTurnButton.interactable = true;
+                Debug.Log("[GameUIHandler] EDITOR: Force-enabled turn button for testing");
+            }
         }
         
         // Card Play Buttons
@@ -190,6 +216,7 @@ public class GameUIHandler : MonoBehaviour
             UpdateCardPlayUI(CardManager.Instance.SelectedCards);
         
         UpdateAllButtons();
+        ForceUpdateTurnButton();
     }
     
     // IMPROVED: Consolidated button update logic
@@ -487,7 +514,45 @@ public class GameUIHandler : MonoBehaviour
             CardManager.Instance.SpawnCard(newCardData, null, true);
         }
     }
+    public void ForceUpdateTurnButton()
+    {
+        if (endTurnButton == null) return;
     
+        bool shouldBeInteractable = true; // Für Testing
+    
+        if (CombatManager.HasInstance)
+        {
+            var combat = CombatManager.Instance;
+            shouldBeInteractable = combat.IsInCombat && combat.CanEndTurn;
+        
+            Debug.Log($"[GameUIHandler] Turn button update - InCombat: {combat.IsInCombat}, CanEndTurn: {combat.CanEndTurn}, Result: {shouldBeInteractable}");
+        }
+    
+        endTurnButton.interactable = shouldBeInteractable;
+    
+        // Update button text
+        var buttonText = endTurnButton.GetComponentInChildren<TextMeshProUGUI>();
+        if (buttonText != null && CombatManager.HasInstance)
+        {
+            var combat = CombatManager.Instance;
+            if (!combat.IsInCombat)
+            {
+                buttonText.text = "Start Combat";
+            }
+            else if (combat.IsProcessingTurn)
+            {
+                buttonText.text = "Processing...";
+            }
+            else if (combat.IsPlayerTurn)
+            {
+                buttonText.text = "End Turn";
+            }
+            else
+            {
+                buttonText.text = "Enemy Turn";
+            }
+        }
+    }
     private void OnSpellFound(SpellAsset spell, string usedLetters)
     {
         if (statusText != null)
