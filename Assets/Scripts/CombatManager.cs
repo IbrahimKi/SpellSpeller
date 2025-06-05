@@ -46,6 +46,11 @@ public class CombatManager : SingletonBehaviour<CombatManager>, IGameManager
     [SerializeField] private bool autoDrawOnCombatStart = true;
     [SerializeField] private float managerWaitTimeout = 3f;
     
+    [Header("Turn Settings")]
+    [SerializeField] private bool refillHandOnTurnEnd = true;
+    [SerializeField] private bool resetCreativityOnTurnEnd = true;
+    [SerializeField] private bool shuffleDiscardOnTurnEnd = true;
+    
     [Header("Entity Settings")]
     [SerializeField] private bool autoTargetFirstEnemy = true;
     [SerializeField] private TargetingMode defaultTargetingMode = TargetingMode.Single;
@@ -53,6 +58,9 @@ public class CombatManager : SingletonBehaviour<CombatManager>, IGameManager
     // Resources
     private Resource _life;
     private Resource _creativity;
+    
+    // Turn tracking
+    private int _currentTurn = 1;
     
     // Targeting
     private List<EntityBehaviour> _currentTargets = new List<EntityBehaviour>();
@@ -66,6 +74,7 @@ public class CombatManager : SingletonBehaviour<CombatManager>, IGameManager
     public static event Action<Resource> OnLifeChanged;
     public static event Action<int> OnDeckSizeChanged;
     public static event Action<Resource> OnCreativityChanged;
+    public static event Action<int> OnTurnChanged;
     
     // Events - Combat
     public static event Action OnCombatStarted;
@@ -73,6 +82,8 @@ public class CombatManager : SingletonBehaviour<CombatManager>, IGameManager
     public static event Action OnPlayerDeath;
     public static event Action OnHandDrawn;
     public static event Action OnDeckEmpty;
+    public static event Action OnTurnEnded;
+    public static event Action OnTurnStarted;
     
     // Events - Targeting
     public static event Action<List<EntityBehaviour>> OnTargetsChanged;
@@ -84,6 +95,7 @@ public class CombatManager : SingletonBehaviour<CombatManager>, IGameManager
     public bool ManagersReady => _managersReady;
     public Resource Life => _life;
     public Resource Creativity => _creativity;
+    public int CurrentTurn => _currentTurn;
     public int DeckSize => DeckManager.HasInstance ? DeckManager.Instance.DeckSize : 0;
     public int DiscardSize => DeckManager.HasInstance ? DeckManager.Instance.DiscardSize : 0;
     public IReadOnlyList<EntityBehaviour> CurrentTargets => _currentTargets.AsReadOnly();
@@ -94,6 +106,7 @@ public class CombatManager : SingletonBehaviour<CombatManager>, IGameManager
         Debug.Log("[CombatManager] OnAwakeInitialize called");
         InitializeResources();
         _currentTargetingMode = defaultTargetingMode;
+        _currentTurn = 1;
         _isReady = true;
         _managersReady = true;
         Debug.Log($"[CombatManager] Initialized - IsReady: {_isReady}");
@@ -178,6 +191,7 @@ public class CombatManager : SingletonBehaviour<CombatManager>, IGameManager
     private IEnumerator StartCombatSequence()
     {
         IsInCombat = true;
+        _currentTurn = 1;
         Debug.Log("[CombatManager] Starting combat sequence");
         
         // Check für Deck direkt über GameManager
@@ -206,8 +220,10 @@ public class CombatManager : SingletonBehaviour<CombatManager>, IGameManager
         OnLifeChanged?.Invoke(_life);
         OnCreativityChanged?.Invoke(_creativity);
         OnDeckSizeChanged?.Invoke(DeckSize);
+        OnTurnChanged?.Invoke(_currentTurn);
         
         OnCombatStarted?.Invoke();
+        OnTurnStarted?.Invoke();
         Debug.Log("[CombatManager] Combat started successfully");
     }
     
@@ -248,6 +264,7 @@ public class CombatManager : SingletonBehaviour<CombatManager>, IGameManager
         {
             IsInCombat = false;
             _currentTargets.Clear();
+            _currentTurn = 1;
             OnCombatEnded?.Invoke();
         }
     }
@@ -263,11 +280,117 @@ public class CombatManager : SingletonBehaviour<CombatManager>, IGameManager
         _currentTargets.Clear();
         _life.Reset();
         _creativity.Reset();
+        _currentTurn = 1;
         IsInCombat = false;
         
         OnLifeChanged?.Invoke(_life);
         OnCreativityChanged?.Invoke(_creativity);
         OnDeckSizeChanged?.Invoke(DeckSize);
+        OnTurnChanged?.Invoke(_currentTurn);
+    }
+    
+    // Turn Management
+    public void EndTurn()
+    {
+        if (!IsInCombat) return;
+        
+        StartCoroutine(EndTurnSequence());
+    }
+    
+    private IEnumerator EndTurnSequence()
+    {
+        Debug.Log($"[CombatManager] Ending turn {_currentTurn}");
+        OnTurnEnded?.Invoke();
+        
+        // 1. Shuffle discard pile and played cards back into deck
+        if (shuffleDiscardOnTurnEnd)
+        {
+            yield return ShuffleDiscardIntoDeck();
+        }
+        
+        // 2. Reset creativity to start value
+        if (resetCreativityOnTurnEnd)
+        {
+            _creativity.Reset();
+            OnCreativityChanged?.Invoke(_creativity);
+        }
+        
+        // 3. Refill hand to starting hand size
+        if (refillHandOnTurnEnd)
+        {
+            yield return RefillHand();
+        }
+        
+        // 4. Increment turn counter
+        _currentTurn++;
+        OnTurnChanged?.Invoke(_currentTurn);
+        
+        Debug.Log($"[CombatManager] Turn ended. Now on turn {_currentTurn}");
+        OnTurnStarted?.Invoke();
+    }
+    
+    private IEnumerator ShuffleDiscardIntoDeck()
+    {
+        var deckManager = GameManager.Instance?.DeckManager;
+        var cardManager = GameManager.Instance?.CardManager;
+        
+        if (deckManager == null || cardManager == null)
+        {
+            Debug.LogWarning("[CombatManager] Managers not available for shuffling discard");
+            yield break;
+        }
+        
+        Debug.Log("[CombatManager] Shuffling discard pile and played cards back into deck");
+        
+        // Collect all played cards first
+        foreach (var card in deckManager.GetDiscardPileContents())
+        {
+            if (card != null)
+            {
+                deckManager.AddCardToBottom(card);
+                //cardManager.RemovePlayedCard(card);
+            }
+        }
+        
+        // Shuffle discard pile back into deck (at bottom)
+        deckManager.ShuffleDiscardIntoDeck();
+        
+        OnDeckSizeChanged?.Invoke(DeckSize);
+        yield return new WaitForSeconds(0.1f);
+    }
+    
+    private IEnumerator RefillHand()
+    {
+        var cardManager = GameManager.Instance?.CardManager;
+        var deckManager = GameManager.Instance?.DeckManager;
+        
+        if (cardManager == null || deckManager == null)
+        {
+            Debug.LogWarning("[CombatManager] Managers not available for refilling hand");
+            yield break;
+        }
+        
+        int currentHandSize = cardManager.HandSize;
+        int cardsToRefill = Mathf.Max(0, startingHandSize - currentHandSize);
+        
+        Debug.Log($"[CombatManager] Refilling hand: {currentHandSize} -> {startingHandSize} (drawing {cardsToRefill} cards)");
+        
+        for (int i = 0; i < cardsToRefill; i++)
+        {
+            var cardData = deckManager.DrawCard();
+            if (cardData != null)
+            {
+                cardManager.SpawnCard(cardData, null, true);
+                yield return new WaitForSeconds(0.1f);
+            }
+            else
+            {
+                Debug.LogWarning($"[CombatManager] Could not draw card {i+1}/{cardsToRefill} during refill");
+                break;
+            }
+        }
+        
+        OnHandDrawn?.Invoke();
     }
     
     // Resource Management
@@ -470,10 +593,17 @@ public class CombatManager : SingletonBehaviour<CombatManager>, IGameManager
     {
         Debug.Log($"[CombatManager] Combat Status:");
         Debug.Log($"  In Combat: {IsInCombat}");
+        Debug.Log($"  Turn: {_currentTurn}");
         Debug.Log($"  Life: {_life.CurrentValue}/{_life.MaxValue}");
         Debug.Log($"  Creativity: {_creativity.CurrentValue}/{_creativity.MaxValue}");
         Debug.Log($"  Targets: {_currentTargets.Count}");
         Debug.Log($"  Targeting Mode: {_currentTargetingMode}");
+    }
+    
+    [ContextMenu("End Turn (Debug)")]
+    public void DebugEndTurn()
+    {
+        EndTurn();
     }
 #endif
 }
@@ -490,8 +620,5 @@ public enum DamageType
 {
     Normal,
     Fire,
-    Ice,
-    Lightning,
-    Poison,
     True
 }

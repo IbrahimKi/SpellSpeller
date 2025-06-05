@@ -21,6 +21,10 @@ public class GameUIHandler : MonoBehaviour
     [SerializeField] private Button drawButton;
     [SerializeField] private Button discardButton;
     
+    [Header("Combat UI")]
+    [SerializeField] private Button endTurnButton;
+    [SerializeField] private TextMeshProUGUI turnText;
+    
     [Header("Settings")]
     [SerializeField] private bool showPercentages = true;
     [SerializeField] private Color healthLowColor = Color.red;
@@ -52,6 +56,11 @@ public class GameUIHandler : MonoBehaviour
         CombatManager.OnLifeChanged += UpdateLifeDisplay;
         CombatManager.OnCreativityChanged += UpdateCreativityDisplay;
         CombatManager.OnDeckSizeChanged += UpdateDeckDisplay;
+        CombatManager.OnTurnChanged += UpdateTurnDisplay;
+        CombatManager.OnCombatStarted += OnCombatStarted;
+        CombatManager.OnCombatEnded += OnCombatEnded;
+        CombatManager.OnTurnEnded += OnTurnEnded;
+        CombatManager.OnTurnStarted += OnTurnStarted;
         
         // Card Manager Events
         CardManager.OnSelectionChanged += UpdateCardPlayUI;
@@ -68,7 +77,8 @@ public class GameUIHandler : MonoBehaviour
             if (drawButton) drawButton.onClick.AddListener(() => SpellcastManager.Instance?.DrawCard());
         }
         
-        // Discard Button
+        // Combat UI Buttons
+        if (endTurnButton) endTurnButton.onClick.AddListener(EndTurn);
         if (discardButton) discardButton.onClick.AddListener(DiscardSelectedCard);
     }
     
@@ -80,6 +90,11 @@ public class GameUIHandler : MonoBehaviour
             CombatManager.OnLifeChanged -= UpdateLifeDisplay;
             CombatManager.OnCreativityChanged -= UpdateCreativityDisplay;
             CombatManager.OnDeckSizeChanged -= UpdateDeckDisplay;
+            CombatManager.OnTurnChanged -= UpdateTurnDisplay;
+            CombatManager.OnCombatStarted -= OnCombatStarted;
+            CombatManager.OnCombatEnded -= OnCombatEnded;
+            CombatManager.OnTurnEnded -= OnTurnEnded;
+            CombatManager.OnTurnStarted -= OnTurnStarted;
         }
         
         if (CardManager.HasInstance)
@@ -103,6 +118,7 @@ public class GameUIHandler : MonoBehaviour
             UpdateLifeDisplay(combat.Life);
             UpdateCreativityDisplay(combat.Creativity);
             UpdateDeckDisplay(combat.DeckSize);
+            UpdateTurnDisplay(combat.CurrentTurn);
         }
         
         if (CardManager.HasInstance)
@@ -110,6 +126,7 @@ public class GameUIHandler : MonoBehaviour
         
         UpdateDrawButton();
         UpdateDiscardButton();
+        UpdateEndTurnButton();
     }
     
     private void UpdateLifeDisplay(Resource life)
@@ -147,6 +164,12 @@ public class GameUIHandler : MonoBehaviour
         
         UpdateDrawButton();
         UpdateDiscardButton();
+    }
+    
+    private void UpdateTurnDisplay(int turn)
+    {
+        if (turnText != null)
+            turnText.text = $"Turn {turn}";
     }
     
     private void UpdateCardPlayUI(System.Collections.Generic.List<Card> selectedCards)
@@ -214,6 +237,45 @@ public class GameUIHandler : MonoBehaviour
             
             discardButton.interactable = hasSelectedCard && hasCreativity && canDrawNew;
         }
+    }
+    
+    private void UpdateEndTurnButton()
+    {
+        if (endTurnButton != null)
+        {
+            bool canEndTurn = CombatManager.HasInstance && CombatManager.Instance.IsInCombat;
+            endTurnButton.interactable = canEndTurn;
+        }
+    }
+    
+    private void EndTurn()
+    {
+        if (CombatManager.HasInstance && CombatManager.Instance.IsInCombat)
+        {
+            CombatManager.Instance.EndTurn();
+        }
+    }
+    
+    private void OnCombatStarted()
+    {
+        UpdateEndTurnButton();
+    }
+    
+    private void OnCombatEnded()
+    {
+        UpdateEndTurnButton();
+    }
+    
+    private void OnTurnEnded()
+    {
+        // Button während Turn-End-Sequenz deaktivieren
+        if (endTurnButton) endTurnButton.interactable = false;
+    }
+    
+    private void OnTurnStarted()
+    {
+        // Button nach Turn-Start wieder aktivieren
+        UpdateEndTurnButton();
     }
     
     private void DiscardSelectedCard()

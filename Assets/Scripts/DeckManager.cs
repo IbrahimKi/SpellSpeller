@@ -249,6 +249,63 @@ public class DeckManager : SingletonBehaviour<DeckManager>, IGameManager
         return true;
     }
     
+    public void ShuffleDiscardIntoDeck()
+    {
+        if (_discardPile.Count == 0)
+        {
+            LogDebug("[DeckManager] No discard pile to shuffle");
+            return;
+        }
+    
+        LogDebug($"[DeckManager] Shuffling {_discardPile.Count} cards from discard to bottom of deck");
+    
+        // Convert current deck to list
+        var currentDeck = _deck.ToList();
+        _deck.Clear();
+    
+        // Shuffle discard pile
+        var shuffledDiscard = new List<CardData>(_discardPile);
+        for (int i = shuffledDiscard.Count - 1; i > 0; i--)
+        {
+            int randomIndex = Random.Range(0, i + 1);
+            (shuffledDiscard[i], shuffledDiscard[randomIndex]) = (shuffledDiscard[randomIndex], shuffledDiscard[i]);
+        }
+    
+        // Re-enqueue: current deck first, then shuffled discard pile (bottom)
+        foreach (var card in currentDeck)
+            _deck.Enqueue(card);
+    
+        foreach (var card in shuffledDiscard)
+            _deck.Enqueue(card);
+    
+        // Clear discard pile
+        _discardPile.Clear();
+    
+        // Fire events
+        OnDeckSizeChanged?.Invoke(DeckSize);
+        OnDiscardPileSizeChanged?.Invoke(DiscardSize);
+        OnDeckShuffled?.Invoke();
+    
+        LogDebug($"[DeckManager] Shuffle complete. Deck size: {DeckSize}");
+    }
+
+// Add this method to add cards to bottom of deck (for played cards)
+    public void AddCardToBottom(CardData cardData)
+    {
+        if (cardData == null) return;
+    
+        // Convert to list, add at end, rebuild queue
+        var deckList = _deck.ToList();
+        deckList.Add(cardData);
+    
+        _deck.Clear();
+        foreach (var card in deckList)
+            _deck.Enqueue(card);
+    
+        OnDeckSizeChanged?.Invoke(DeckSize);
+        LogDebug($"[DeckManager] Added {cardData.cardName} to bottom of deck");
+    }
+    
     public void ForceInitialization()
     {
         Debug.Log("[DeckManager] Force initialization requested");

@@ -1,5 +1,109 @@
 %YAML 1.1
 %TAG !u! tag:unity3d.com,2011:
+--- !u!1 &903885125828957097
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 6854857605251048796}
+  - component: {fileID: 3995873033341004294}
+  m_Layer: 0
+  m_Name: EnemyManager
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &6854857605251048796
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 903885125828957097}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 7308546259657053959}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &3995873033341004294
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 903885125828957097}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1d8d8cc6099d2c64ca7a060044008b0b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  maxEnemies: 10
+  enemyContainer: {fileID: 0}
+  allowMultiTarget: 0
+  maxTargets: 1
+  targetedTintColor: {r: 1, g: 0.8, b: 0.8, a: 1}
+  spawnPoints: []
+  spawnAnimationDuration: 0.5
+--- !u!1 &1903825727418076221
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1434681418306273543}
+  - component: {fileID: 5199589829645773498}
+  m_Layer: 0
+  m_Name: UnitManager
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1434681418306273543
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1903825727418076221}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 7308546259657053959}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &5199589829645773498
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1903825727418076221}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d1a670f250af7564e9417085daa89d1a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  maxUnits: 5
+  unitContainer: {fileID: 0}
+  allowUnitSelection: 1
+  selectedTintColor: {r: 0.8, g: 1, b: 0.8, a: 1}
+  unitSpacing: 2
+  formationCenter: {x: -5, y: 0, z: 0}
+  formationType: 0
+  spawnAnimationDuration: 0.5
+  formationUpdateSpeed: 2
 --- !u!1 &2655637456042339397
 GameObject:
   m_ObjectHideFlags: 0
@@ -111,25 +215,19 @@ MonoBehaviour:
   startingDeck:
   - {fileID: 11400000, guid: 618d617a769eee1448dfdcd900ab18b0, type: 2}
   - {fileID: 11400000, guid: 618d617a769eee1448dfdcd900ab18b0, type: 2}
-  - {fileID: 11400000, guid: 7bf28af1962ff3c4699839cab9ce4cd6, type: 2}
-  - {fileID: 11400000, guid: 7bf28af1962ff3c4699839cab9ce4cd6, type: 2}
+  - {fileID: 11400000, guid: 618d617a769eee1448dfdcd900ab18b0, type: 2}
   - {fileID: 11400000, guid: 298a3b5ca8bfbbd4b86f024b5acfb55c, type: 2}
   - {fileID: 11400000, guid: 298a3b5ca8bfbbd4b86f024b5acfb55c, type: 2}
-  - {fileID: 11400000, guid: 1564cd2b393ad8149bf56154e3fa5e8b, type: 2}
-  - {fileID: 11400000, guid: 1564cd2b393ad8149bf56154e3fa5e8b, type: 2}
-  - {fileID: 11400000, guid: 779d0685831921142934bf15d6e4d0e6, type: 2}
-  - {fileID: 11400000, guid: 7d7f3066e76ead940a7c9d779aa12708, type: 2}
-  - {fileID: 11400000, guid: 7d7f3066e76ead940a7c9d779aa12708, type: 2}
-  - {fileID: 11400000, guid: 23de81d7d26a58f469ea56017ac628b6, type: 2}
-  - {fileID: 11400000, guid: 23de81d7d26a58f469ea56017ac628b6, type: 2}
-  - {fileID: 11400000, guid: 9be0b35cf7bf3794e9b61d06d708f830, type: 2}
+  - {fileID: 11400000, guid: 298a3b5ca8bfbbd4b86f024b5acfb55c, type: 2}
+  - {fileID: 11400000, guid: eaccdf877a7afac4b9277e7d17b432f5, type: 2}
+  - {fileID: 11400000, guid: eaccdf877a7afac4b9277e7d17b432f5, type: 2}
   - {fileID: 11400000, guid: eaccdf877a7afac4b9277e7d17b432f5, type: 2}
   - {fileID: 11400000, guid: 1fbe65f187789ff4d9b0c4226f796806, type: 2}
   - {fileID: 11400000, guid: 1fbe65f187789ff4d9b0c4226f796806, type: 2}
+  - {fileID: 11400000, guid: 1fbe65f187789ff4d9b0c4226f796806, type: 2}
   - {fileID: 11400000, guid: a932cb074942bc84191393d40792f63e, type: 2}
   - {fileID: 11400000, guid: a932cb074942bc84191393d40792f63e, type: 2}
-  - {fileID: 11400000, guid: a367ace559e7cea408392f6530ad6cca, type: 2}
-  - {fileID: 11400000, guid: a367ace559e7cea408392f6530ad6cca, type: 2}
+  - {fileID: 11400000, guid: a932cb074942bc84191393d40792f63e, type: 2}
   fallbackCards:
   - {fileID: 11400000, guid: 618d617a769eee1448dfdcd900ab18b0, type: 2}
   - {fileID: 11400000, guid: 7bf28af1962ff3c4699839cab9ce4cd6, type: 2}
@@ -183,6 +281,8 @@ Transform:
   - {fileID: 473311279198881270}
   - {fileID: 7835769595142106838}
   - {fileID: 4332417519562294035}
+  - {fileID: 6854857605251048796}
+  - {fileID: 1434681418306273543}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!114 &5242847096659800578
@@ -215,6 +315,12 @@ MonoBehaviour:
     enabled: 1
   - managerType: 5
     priority: 5
+    enabled: 1
+  - managerType: 6
+    priority: 6
+    enabled: 1
+  - managerType: 7
+    priority: 7
     enabled: 1
   initStepDelay: 0.05
   timeoutPerManager: 2
@@ -332,6 +438,7 @@ GameObject:
   m_Component:
   - component: {fileID: 7835769595142106838}
   - component: {fileID: 5747360116101224894}
+  - component: {fileID: 5788717976600067361}
   m_Layer: 0
   m_Name: CombatManager
   m_TagString: Untagged
@@ -371,5 +478,25 @@ MonoBehaviour:
   maxCreativity: 100
   startingHandSize: 5
   autoDrawOnCombatStart: 1
-  validateDeckOnCombatStart: 1
   managerWaitTimeout: 3
+  refillHandOnTurnEnd: 1
+  resetCreativityOnTurnEnd: 1
+  shuffleDiscardOnTurnEnd: 1
+  autoTargetFirstEnemy: 1
+  defaultTargetingMode: 0
+--- !u!114 &5788717976600067361
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8790267260798922403}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: de4aa9e9e3b106542ae581ac4942f638, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  testEnemyPrefab: {fileID: 4767993026877623265, guid: b126e1fcb0801e74eb191234f3aa9a3a, type: 3}
+  spawnPosition: {x: 0, y: 0, z: 0}
+  testEnemyHealth: 50
+  autoSpawnOnStart: 1
