@@ -16,4 +16,7 @@ MonoBehaviour:
   letterCode: KO
   spellType: 0
   spellSubtypes: 09000000
-  effects: []
+  effects:
+  - effectName: Basic Interrupt
+    effectType: 3
+    value: 1

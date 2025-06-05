@@ -16,4 +16,7 @@ MonoBehaviour:
   letterCode: MI
   spellType: 0
   spellSubtypes: 06000000
-  effects: []
+  effects:
+  - effectName: Single Damage
+    effectType: 0
+    value: 3

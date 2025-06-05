@@ -32,6 +32,7 @@ public class DeckManager : SingletonBehaviour<DeckManager>, IGameManager
     public static event System.Action OnDeckEmpty;
     public static event System.Action OnDeckInitialized;
     public static event System.Action<int> OnTestDeckGenerated;
+    public static event System.Action<int> OnDiscardPileSizeChanged;
     
     // Properties
     public int DeckSize => _deck.Count;
@@ -151,6 +152,7 @@ public class DeckManager : SingletonBehaviour<DeckManager>, IGameManager
             ShuffleDeck();
         
         OnDeckSizeChanged?.Invoke(DeckSize);
+        OnDiscardPileSizeChanged?.Invoke(DiscardSize);
         LogDebug($"[DeckManager] Deck reset with {DeckSize} cards");
     }
     
@@ -201,6 +203,7 @@ public class DeckManager : SingletonBehaviour<DeckManager>, IGameManager
         
         _discardPile.Add(cardData);
         OnCardDiscarded?.Invoke(cardData);
+        OnDiscardPileSizeChanged?.Invoke(DiscardSize);
         LogDebug($"[DeckManager] Discarded: {cardData.cardName}, {DiscardSize} in discard pile");
     }
     
@@ -241,6 +244,7 @@ public class DeckManager : SingletonBehaviour<DeckManager>, IGameManager
         _discardPile.Clear();
         ShuffleDeck();
         OnDeckSizeChanged?.Invoke(DeckSize);
+        OnDiscardPileSizeChanged?.Invoke(DiscardSize);
         
         return true;
     }

@@ -16,4 +16,7 @@ MonoBehaviour:
   letterCode: DI
   spellType: 0
   spellSubtypes: 07000000
-  effects: []
+  effects:
+  - effectName: Summon Reflector
+    effectType: 4
+    value: 1

@@ -1,0 +1,29 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c26c155fadfc72440be07646b842e327, type: 3}
+  m_Name: Enemy_Dummy
+  m_EditorClassIdentifier: 
+  entityName: Dummy
+  entityType: 0
+  entityIcon: {fileID: 10901, guid: 0000000000000000f000000000000000, type: 0}
+  prefab: {fileID: 0}
+  baseHealth: 100
+  baseArmor: 0
+  tintColor: {r: 0.5, g: 0, b: 0, a: 1}
+  scale: 1
+  isTargetable: 1
+  targetPriority: 1
+  targetOffset: {x: 0, y: 1, z: 0}
+  spawnWithAnimation: 1
+  spawnDelay: 0
+  tags: []
+  category: 3

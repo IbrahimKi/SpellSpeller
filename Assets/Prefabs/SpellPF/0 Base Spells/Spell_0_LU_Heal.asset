@@ -16,4 +16,7 @@ MonoBehaviour:
   letterCode: LU
   spellType: 0
   spellSubtypes: 08000000
-  effects: []
+  effects:
+  - effectName: Basic Heal
+    effectType: 1
+    value: 5

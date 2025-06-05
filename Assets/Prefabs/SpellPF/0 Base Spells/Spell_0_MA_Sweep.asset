@@ -16,4 +16,7 @@ MonoBehaviour:
   letterCode: MA
   spellType: 0
   spellSubtypes: 06000000
-  effects: []
+  effects:
+  - effectName: Area Damage
+    effectType: 0
+    value: 1

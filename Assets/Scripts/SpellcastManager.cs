@@ -9,7 +9,7 @@ public class SpellcastManager : SingletonBehaviour<SpellcastManager>, IGameManag
     [Header("Spell Configuration")]
     [SerializeField] private List<SpellAsset> availableSpells = new List<SpellAsset>();
     [SerializeField] private bool caseSensitive = false;
-    [SerializeField] private bool consumeCardsOnCast = true;
+    [SerializeField] private bool consumeCardsOnCast = false; // CHANGED: Cards are NOT consumed on cast
     
     private string _currentCombo = "";
     private Dictionary<string, SpellAsset> _spellCache = new Dictionary<string, SpellAsset>();
@@ -30,6 +30,7 @@ public class SpellcastManager : SingletonBehaviour<SpellcastManager>, IGameManag
     public static event Action OnComboCleared;
     public static event Action<SpellAsset, List<Card>> OnSpellCast;
     public static event Action<SpellEffect> OnSpellEffectTriggered;
+    public static event Action<List<Card>> OnCardsDiscarded;
     
     // Properties
     public string CurrentCombo => _currentCombo;
@@ -81,6 +82,36 @@ public class SpellcastManager : SingletonBehaviour<SpellcastManager>, IGameManag
         }
     }
 
+    public void DiscardSelectedCards()
+    {
+        if (!CanDiscard()) return;
+        
+        var selectedCards = CardManager.Instance.SelectedCards;
+        if (selectedCards.Count == 0) return;
+        
+        // Spend creativity for discard
+        if (_combatManager.SpendCreativity(1))
+        {
+            // Discard cards
+            foreach (var card in selectedCards.ToList())
+            {
+                if (card != null)
+                {
+                    _deckManager.DiscardCard(card.CardData);
+                    _cardManager.RemoveCardFromHand(card);
+                    _cardManager.DestroyCard(card);
+                }
+            }
+            
+            OnCardsDiscarded?.Invoke(selectedCards);
+            
+            // Draw new card
+            DrawCard();
+            
+            _cardManager.ClearSelection();
+        }
+    }
+
     public void DrawCard()
     {
         if (!CanDraw()) return;
@@ -104,6 +135,13 @@ public class SpellcastManager : SingletonBehaviour<SpellcastManager>, IGameManag
     {
         return CardManager.HasInstance && !CardManager.Instance.IsHandFull && 
                DeckManager.HasInstance && !DeckManager.Instance.IsDeckEmpty;
+    }
+    
+    private bool CanDiscard()
+    {
+        return CardManager.HasInstance && 
+               CombatManager.HasInstance && CombatManager.Instance.CanSpendCreativity(1) &&
+               CardManager.Instance.SelectedCards.Count > 0;
     }
     
     private void OnCardSelectionChanged(List<Card> selectedCards)
@@ -145,6 +183,8 @@ public class SpellcastManager : SingletonBehaviour<SpellcastManager>, IGameManag
         }
         
         string letterSequence = ExtractLettersFromCards(selectedCards);
+        
+        
         if (string.IsNullOrEmpty(letterSequence))
         {
             Debug.LogWarning("[SpellcastManager] No letters found in selected cards");
@@ -181,6 +221,7 @@ public class SpellcastManager : SingletonBehaviour<SpellcastManager>, IGameManag
     
         // Try partial matches
         var partialMatches = FindPartialMatches(normalizedLetters);
+        Debug.Log($"[SpellcastManager] Gefundener Value: {normalizedLetters}");
         if (partialMatches.Count > 0)
         {
             var bestMatch = partialMatches.OrderByDescending(s => s.LetterCode.Length).First();
@@ -188,9 +229,10 @@ public class SpellcastManager : SingletonBehaviour<SpellcastManager>, IGameManag
             return;
         }
     
-        // No matches found
+        
         FireEvent(OnSpellNotFound, normalizedLetters);
         Debug.Log($"[SpellcastManager] No spell found for: {normalizedLetters}");
+        
     }
     
     private bool TryMatchSpell(string letterSequence, List<Card> sourceCards)
@@ -235,11 +277,7 @@ public class SpellcastManager : SingletonBehaviour<SpellcastManager>, IGameManag
         
         ExecuteSpellEffects(spell);
         
-        if (consumeCardsOnCast && _cardManager != null)
-        {
-            ConsumeCards(sourceCards);
-        }
-        
+        // Clear selection after spell cast (cards remain in hand)
         if (_cardManager != null)
         {
             _cardManager.ClearSelection();
@@ -254,22 +292,6 @@ public class SpellcastManager : SingletonBehaviour<SpellcastManager>, IGameManag
             if (effect != null)
             {
                 TriggerSpellEffect(effect);
-            }
-        }
-    }
-    
-    private void ConsumeCards(List<Card> cards)
-    {
-        foreach (var card in cards)
-        {
-            if (card != null)
-            {
-                if (_deckManager != null)
-                {
-                    _deckManager.DiscardCard(card.CardData);
-                }
-                
-                _cardManager.DestroyCard(card);
             }
         }
     }

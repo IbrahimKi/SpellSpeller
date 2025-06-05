@@ -16,4 +16,7 @@ MonoBehaviour:
   letterCode: DE
   spellType: 0
   spellSubtypes: 07000000
-  effects: []
+  effects:
+  - effectName: Summon Block
+    effectType: 4
+    value: 1
