@@ -63,6 +63,10 @@ public class Card : MonoBehaviour, IPointerClickHandler, IPointerEnterHandler, I
     private void Awake()
     {
         CacheComponents();
+    
+        // Add drag handler if missing
+        if (GetComponent<CardDragHandler>() == null)
+            gameObject.AddComponent<CardDragHandler>();
     }
     
     private void CacheComponents()
