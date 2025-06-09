@@ -8,14 +8,13 @@ public class GameManager : SingletonBehaviour<GameManager>
     [Header("Initialization Order")]
     [SerializeField] private List<ManagerInitConfig> managerInitOrder = new List<ManagerInitConfig>()
     {
-        new ManagerInitConfig { managerType = ManagerType.Input, priority = 0 },
-        new ManagerInitConfig { managerType = ManagerType.Card, priority = 1 },
-        new ManagerInitConfig { managerType = ManagerType.Deck, priority = 2 },
-        new ManagerInitConfig { managerType = ManagerType.HandLayout, priority = 3 },
-        new ManagerInitConfig { managerType = ManagerType.Spellcast, priority = 4 },
-        new ManagerInitConfig { managerType = ManagerType.Combat, priority = 5 },
-        new ManagerInitConfig { managerType = ManagerType.Enemy, priority = 6 },
-        new ManagerInitConfig { managerType = ManagerType.Unit, priority = 7 }
+        new ManagerInitConfig { managerType = ManagerType.Card, priority = 0 },
+        new ManagerInitConfig { managerType = ManagerType.Deck, priority = 1 },
+        new ManagerInitConfig { managerType = ManagerType.HandLayout, priority = 2 },
+        new ManagerInitConfig { managerType = ManagerType.Spellcast, priority = 3 },
+        new ManagerInitConfig { managerType = ManagerType.Combat, priority = 4 },
+        new ManagerInitConfig { managerType = ManagerType.Enemy, priority = 5 },
+        new ManagerInitConfig { managerType = ManagerType.Unit, priority = 6 }
     };
     
     [Header("Settings")]
@@ -86,8 +85,6 @@ public class GameManager : SingletonBehaviour<GameManager>
     private void DiscoverManagers()
     {
         // Find all manager instances - use HasInstance check
-        if (InputManager.HasInstance)
-            RegisterManager(ManagerType.Input, InputManager.Instance);
         if (CardManager.HasInstance)
             RegisterManager(ManagerType.Card, CardManager.Instance);
         if (DeckManager.HasInstance)
@@ -251,7 +248,6 @@ public class ManagerInitConfig
 
 public enum ManagerType
 {
-    Input,
     Card,
     Deck,
     HandLayout,

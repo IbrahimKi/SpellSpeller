@@ -48,7 +48,26 @@ public class CardDragHandler : MonoBehaviour, IBeginDragHandler, IDragHandler, I
         
         _cardRectTransform = GetComponent<RectTransform>();
         
-        // Find the root Canvas (not a potential Canvas on this card)
+        _canvasGroup = GetComponent<CanvasGroup>();
+        if (_canvasGroup == null)
+        {
+            _canvasGroup = gameObject.AddComponent<CanvasGroup>();
+            if (enableDebugLogs) Debug.Log($"[CardDragHandler] Added CanvasGroup to {gameObject.name}");
+        }
+        
+        // Don't search for Canvas in Awake - wait until the card is properly parented
+        if (enableDebugLogs)
+        {
+            Debug.Log($"[CardDragHandler] Components cached for {gameObject.name}");
+        }
+    }
+    
+    // NEW: Find Canvas when actually needed (lazy initialization)
+    private bool EnsureCanvasReference()
+    {
+        if (_parentCanvas != null) return true;
+        
+        // Find the root Canvas
         _parentCanvas = GetComponentInParent<Canvas>();
         while (_parentCanvas != null && !_parentCanvas.isRootCanvas)
         {
@@ -57,31 +76,29 @@ public class CardDragHandler : MonoBehaviour, IBeginDragHandler, IDragHandler, I
         
         if (_parentCanvas == null)
         {
-            Debug.LogError($"[CardDragHandler] No parent Canvas found for {gameObject.name}!");
-            enabled = false;
-            return;
-        }
-        
-        _canvasGroup = GetComponent<CanvasGroup>();
-        if (_canvasGroup == null)
-        {
-            _canvasGroup = gameObject.AddComponent<CanvasGroup>();
-            if (enableDebugLogs) Debug.Log($"[CardDragHandler] Added CanvasGroup to {gameObject.name}");
+            if (enableDebugLogs) Debug.LogWarning($"[CardDragHandler] No parent Canvas found for {gameObject.name}");
+            return false;
         }
         
         _raycaster = _parentCanvas.GetComponent<GraphicRaycaster>();
         
         if (enableDebugLogs)
         {
-            Debug.Log($"[CardDragHandler] Initialized on {gameObject.name}");
-            Debug.Log($"  Parent Canvas: {_parentCanvas.name}");
-            Debug.Log($"  Canvas Render Mode: {_parentCanvas.renderMode}");
-            Debug.Log($"  Raycaster: {(_raycaster != null ? "Found" : "Not Found")}");
+            Debug.Log($"[CardDragHandler] Found Canvas: {_parentCanvas.name}");
         }
+        
+        return true;
     }
     
     public void OnBeginDrag(PointerEventData eventData)
     {
+        // Ensure we have a canvas reference before starting drag
+        if (!EnsureCanvasReference())
+        {
+            Debug.LogError($"[CardDragHandler] Cannot drag - no Canvas found!");
+            return;
+        }
+        
         if (!CanStartDrag(eventData)) return;
         
         _isDragging = true;
@@ -184,12 +201,7 @@ public class CardDragHandler : MonoBehaviour, IBeginDragHandler, IDragHandler, I
             return false;
         }
         
-        if (_parentCanvas == null)
-        {
-            if (enableDebugLogs) Debug.Log("[CardDragHandler] Cannot drag: No parent canvas");
-            return false;
-        }
-        
+        // Canvas will be found lazily in OnBeginDrag
         return true;
     }
     
@@ -342,8 +354,8 @@ public class CardDragHandler : MonoBehaviour, IBeginDragHandler, IDragHandler, I
         _cardRectTransform.localScale = _originalScale;
     }
     
-    // Public property for external checks
-    public bool CanDrag => !_isDragging && _card != null && _card.IsInteractable && _parentCanvas != null;
+    // Public property for external checks - updated to use lazy canvas finding
+    public bool CanDrag => !_isDragging && _card != null && _card.IsInteractable;
     
     // Debug method
     [ContextMenu("Test Drag Setup")]
@@ -352,6 +364,9 @@ public class CardDragHandler : MonoBehaviour, IBeginDragHandler, IDragHandler, I
         Debug.Log("=== CARD DRAG SETUP TEST ===");
         Debug.Log($"Card: {(_card != null ? _card.name : "NULL")}");
         Debug.Log($"RectTransform: {(_cardRectTransform != null ? "OK" : "NULL")}");
+        
+        // Try to find canvas
+        EnsureCanvasReference();
         Debug.Log($"Parent Canvas: {(_parentCanvas != null ? _parentCanvas.name : "NULL")}");
         Debug.Log($"CanvasGroup: {(_canvasGroup != null ? "OK" : "NULL")}");
         Debug.Log($"Raycaster: {(_raycaster != null ? "OK" : "NULL")}");

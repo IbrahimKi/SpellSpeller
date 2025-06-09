@@ -278,7 +278,6 @@ Transform:
   m_Children:
   - {fileID: 4549132381759102272}
   - {fileID: 5782291187925454484}
-  - {fileID: 473311279198881270}
   - {fileID: 7835769595142106838}
   - {fileID: 4332417519562294035}
   - {fileID: 6854857605251048796}
@@ -325,50 +324,6 @@ MonoBehaviour:
   initStepDelay: 0.05
   timeoutPerManager: 2
   autoStartCombat: 1
---- !u!1 &6962830850928090346
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 473311279198881270}
-  - component: {fileID: 3394627771945467580}
-  m_Layer: 0
-  m_Name: InputManager
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!4 &473311279198881270
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 6962830850928090346}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 7308546259657053959}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &3394627771945467580
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 6962830850928090346}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: d1f6639597147df4a8dfbaba194d1f8e, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
 --- !u!1 &8101450668280017253
 GameObject:
   m_ObjectHideFlags: 0
@@ -482,6 +437,7 @@ MonoBehaviour:
   refillHandOnTurnEnd: 1
   resetCreativityOnTurnEnd: 1
   shuffleDiscardOnTurnEnd: 1
+  turnTransitionDelay: 0.5
   autoTargetFirstEnemy: 1
   defaultTargetingMode: 0
 --- !u!114 &5788717976600067361
