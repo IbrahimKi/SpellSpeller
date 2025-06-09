@@ -63,10 +63,7 @@ public class Card : MonoBehaviour, IPointerClickHandler, IPointerEnterHandler, I
     private void Awake()
     {
         CacheComponents();
-    
-        // Add drag handler automatically
-        if (GetComponent<CardDragHandler>() == null)
-            gameObject.AddComponent<CardDragHandler>();
+        // REMOVED: Automatic CardDragHandler addition
     }
     
     private void CacheComponents()
@@ -86,23 +83,31 @@ public class Card : MonoBehaviour, IPointerClickHandler, IPointerEnterHandler, I
         {
             switch (text.name.ToLowerInvariant())
             {
-                case "cardname" when cardNameText == null:
+                case "card name" when cardNameText == null:
                     cardNameText = text;
                     break;
-                case "description" when descriptionText == null:
+                case "card text" when descriptionText == null:
                     descriptionText = text;
                     break;
-                case "lettervalues" when letterValuesText == null:
+                case "card lettervalue" when letterValuesText == null:
                     letterValuesText = text;
                     break;
-                case "tier" when tierText == null:
+                case "card tier" when tierText == null:
                     tierText = text;
                     break;
             }
         }
         
-        cardImage ??= GetComponentInChildren<Image>(true);
-        if (cardImage == cardBackground) cardImage = null;
+        // Find Card Image child
+        var childImages = GetComponentsInChildren<Image>(true);
+        foreach (var img in childImages)
+        {
+            if (img.name.ToLowerInvariant().Contains("card image"))
+            {
+                cardImage = img;
+                break;
+            }
+        }
     }
     
     private void Start()

@@ -9,19 +9,22 @@ public class CardDragHandler : MonoBehaviour, IBeginDragHandler, IDragHandler, I
     [SerializeField] private int dragSortOrder = 100;
     [SerializeField] private float snapBackDuration = 0.2f;
     
+    [Header("Debug")]
+    [SerializeField] private bool enableDebugLogs = false;
+    
     // Cached components
     private Card _card;
-    private RectTransform _rectTransform;
-    private Canvas _canvas;
+    private RectTransform _cardRectTransform;
+    private Canvas _parentCanvas;
     private CanvasGroup _canvasGroup;
     private GraphicRaycaster _raycaster;
     
     // Drag state
     private Transform _originalParent;
-    private Vector3 _originalPosition;
+    private Vector2 _originalAnchoredPosition;
     private Vector3 _originalScale;
-    private int _originalSortOrder;
     private bool _isDragging;
+    private Canvas _tempCanvas;
     
     // Events
     public static event System.Action<Card> OnCardDragStart;
@@ -36,69 +39,94 @@ public class CardDragHandler : MonoBehaviour, IBeginDragHandler, IDragHandler, I
     private void CacheComponents()
     {
         _card = GetComponent<Card>();
-        _rectTransform = GetComponent<RectTransform>();
-        _canvas = GetComponentInParent<Canvas>();
+        if (_card == null)
+        {
+            Debug.LogError($"[CardDragHandler] No Card component found on {gameObject.name}!");
+            enabled = false;
+            return;
+        }
+        
+        _cardRectTransform = GetComponent<RectTransform>();
+        
+        // Find the root Canvas (not a potential Canvas on this card)
+        _parentCanvas = GetComponentInParent<Canvas>();
+        while (_parentCanvas != null && !_parentCanvas.isRootCanvas)
+        {
+            _parentCanvas = _parentCanvas.GetComponentInParent<Canvas>();
+        }
+        
+        if (_parentCanvas == null)
+        {
+            Debug.LogError($"[CardDragHandler] No parent Canvas found for {gameObject.name}!");
+            enabled = false;
+            return;
+        }
+        
         _canvasGroup = GetComponent<CanvasGroup>();
         if (_canvasGroup == null)
+        {
             _canvasGroup = gameObject.AddComponent<CanvasGroup>();
+            if (enableDebugLogs) Debug.Log($"[CardDragHandler] Added CanvasGroup to {gameObject.name}");
+        }
         
-        _raycaster = GetComponentInParent<GraphicRaycaster>();
+        _raycaster = _parentCanvas.GetComponent<GraphicRaycaster>();
+        
+        if (enableDebugLogs)
+        {
+            Debug.Log($"[CardDragHandler] Initialized on {gameObject.name}");
+            Debug.Log($"  Parent Canvas: {_parentCanvas.name}");
+            Debug.Log($"  Canvas Render Mode: {_parentCanvas.renderMode}");
+            Debug.Log($"  Raycaster: {(_raycaster != null ? "Found" : "Not Found")}");
+        }
     }
     
     public void OnBeginDrag(PointerEventData eventData)
     {
-        if (!_card.IsInteractable || eventData.button != PointerEventData.InputButton.Left) 
-            return;
+        if (!CanStartDrag(eventData)) return;
         
         _isDragging = true;
         
         // Store original state
-        _originalParent = transform.parent;
-        _originalPosition = _rectTransform.localPosition;
-        _originalScale = _rectTransform.localScale;
-        
-        // Get Canvas from parent hierarchy
-        if (_canvas == null)
-            _canvas = GetComponentInParent<Canvas>();
-            
-        // Store original canvas order if it has a Canvas component
-        var cardCanvas = GetComponent<Canvas>();
-        if (cardCanvas != null)
-            _originalSortOrder = cardCanvas.sortingOrder;
+        _originalParent = _cardRectTransform.parent;
+        _originalAnchoredPosition = _cardRectTransform.anchoredPosition;
+        _originalScale = _cardRectTransform.localScale;
         
         // Setup for dragging
         _canvasGroup.blocksRaycasts = false;
         _canvasGroup.alpha = 0.8f;
         
-        // Move to canvas root for proper dragging
-        transform.SetParent(_canvas.transform);
+        // Create temporary Canvas for proper sorting
+        _tempCanvas = gameObject.AddComponent<Canvas>();
+        _tempCanvas.overrideSorting = true;
+        _tempCanvas.sortingOrder = dragSortOrder;
         
-        // Create temporary canvas for sorting if needed
-        if (cardCanvas == null)
-        {
-            cardCanvas = gameObject.AddComponent<Canvas>();
-            cardCanvas.overrideSorting = true;
-        }
-        cardCanvas.sortingOrder = dragSortOrder;
-        
-        _rectTransform.localScale = _originalScale * dragScaleMultiplier;
+        // Scale the card
+        _cardRectTransform.localScale = _originalScale * dragScaleMultiplier;
         
         OnCardDragStart?.Invoke(_card);
+        
+        if (enableDebugLogs)
+        {
+            Debug.Log($"[CardDragHandler] Drag started on {_card.name}");
+            Debug.Log($"  Original Position: {_originalAnchoredPosition}");
+            Debug.Log($"  Parent Canvas: {_parentCanvas.name}");
+        }
     }
     
     public void OnDrag(PointerEventData eventData)
     {
-        if (!_isDragging) return;
+        if (!_isDragging || _parentCanvas == null) return;
         
+        // Convert screen position to local position in parent Canvas
         Vector2 localPoint;
-        RectTransformUtility.ScreenPointToLocalPointInRectangle(
-            _canvas.transform as RectTransform,
+        if (RectTransformUtility.ScreenPointToLocalPointInRectangle(
+            _parentCanvas.transform as RectTransform,
             eventData.position,
-            eventData.pressEventCamera,
-            out localPoint
-        );
-        
-        _rectTransform.localPosition = localPoint;
+            _parentCanvas.worldCamera,
+            out localPoint))
+        {
+            _cardRectTransform.anchoredPosition = localPoint;
+        }
     }
     
     public void OnEndDrag(PointerEventData eventData)
@@ -107,25 +135,12 @@ public class CardDragHandler : MonoBehaviour, IBeginDragHandler, IDragHandler, I
         
         _isDragging = false;
         
-        // Check what we're over
+        // Check drop target
         GameObject dropTarget = GetDropTarget(eventData);
         
         if (dropTarget != null)
         {
-            // Check drop area type
-            if (dropTarget.CompareTag("PlayArea"))
-            {
-                HandlePlayAreaDrop();
-            }
-            else if (dropTarget.CompareTag("DiscardArea"))
-            {
-                HandleDiscardAreaDrop();
-            }
-            else
-            {
-                SnapBack();
-            }
-            
+            HandleDrop(dropTarget);
             OnCardDropped?.Invoke(_card, dropTarget);
         }
         else
@@ -133,62 +148,135 @@ public class CardDragHandler : MonoBehaviour, IBeginDragHandler, IDragHandler, I
             SnapBack();
         }
         
-        // Reset visual state
+        // Cleanup
         _canvasGroup.blocksRaycasts = true;
         _canvasGroup.alpha = 1f;
         
-        // Clean up temporary canvas if created
-        var cardCanvas = GetComponent<Canvas>();
-        if (cardCanvas != null)
+        if (_tempCanvas != null)
         {
-            if (_originalSortOrder > 0)
-                cardCanvas.sortingOrder = _originalSortOrder;
-            else
-                Destroy(cardCanvas);
+            Destroy(_tempCanvas);
+            _tempCanvas = null;
         }
         
         OnCardDragEnd?.Invoke(_card);
+        
+        if (enableDebugLogs)
+        {
+            Debug.Log($"[CardDragHandler] Drag ended on {_card.name}");
+            if (dropTarget != null)
+                Debug.Log($"  Dropped on: {dropTarget.name}");
+            else
+                Debug.Log("  No valid drop target");
+        }
+    }
+    
+    private bool CanStartDrag(PointerEventData eventData)
+    {
+        if (_card == null || !_card.IsInteractable)
+        {
+            if (enableDebugLogs) Debug.Log("[CardDragHandler] Cannot drag: Card not interactable");
+            return false;
+        }
+        
+        if (eventData.button != PointerEventData.InputButton.Left)
+        {
+            if (enableDebugLogs) Debug.Log("[CardDragHandler] Cannot drag: Not left mouse button");
+            return false;
+        }
+        
+        if (_parentCanvas == null)
+        {
+            if (enableDebugLogs) Debug.Log("[CardDragHandler] Cannot drag: No parent canvas");
+            return false;
+        }
+        
+        return true;
     }
     
     private GameObject GetDropTarget(PointerEventData eventData)
     {
+        if (_raycaster == null) return null;
+        
         var results = new System.Collections.Generic.List<RaycastResult>();
         _raycaster.Raycast(eventData, results);
         
         foreach (var result in results)
         {
-            if (result.gameObject != gameObject && 
-                (result.gameObject.CompareTag("PlayArea") || 
-                 result.gameObject.CompareTag("DiscardArea")))
+            if (result.gameObject != gameObject)
             {
-                return result.gameObject;
+                // Check for tagged drop areas
+                if (result.gameObject.CompareTag("PlayArea") || 
+                    result.gameObject.CompareTag("DiscardArea"))
+                {
+                    return result.gameObject;
+                }
+                
+                // Check for DropAreaHandler component
+                var dropArea = result.gameObject.GetComponent<DropAreaHandler>();
+                if (dropArea != null)
+                {
+                    return result.gameObject;
+                }
             }
         }
         
         return null;
     }
     
+    private void HandleDrop(GameObject dropTarget)
+    {
+        if (!_card.IsSelected) _card.Select();
+        
+        switch (dropTarget.tag)
+        {
+            case "PlayArea":
+                HandlePlayAreaDrop();
+                break;
+                
+            case "DiscardArea":
+                HandleDiscardAreaDrop();
+                break;
+                
+            default:
+                // Try DropAreaHandler
+                var dropAreaHandler = dropTarget.GetComponent<DropAreaHandler>();
+                if (dropAreaHandler != null)
+                {
+                    // Let DropAreaHandler determine the action
+                    if (dropTarget.CompareTag("PlayArea"))
+                        HandlePlayAreaDrop();
+                    else if (dropTarget.CompareTag("DiscardArea"))
+                        HandleDiscardAreaDrop();
+                    else
+                        SnapBack();
+                }
+                else
+                {
+                    SnapBack();
+                }
+                break;
+        }
+    }
+    
     private void HandlePlayAreaDrop()
     {
-        // Select card if not selected
-        if (!_card.IsSelected)
-            _card.Select();
-        
-        // Trigger play
-        SpellcastManager.Instance?.TryPlayCards(new System.Collections.Generic.List<Card> { _card });
-        
-        // Card will be destroyed by play logic, no need to snap back
+        if (SpellcastManager.HasInstance)
+        {
+            SpellcastManager.Instance.TryPlayCards(new System.Collections.Generic.List<Card> { _card });
+            if (enableDebugLogs) Debug.Log($"[CardDragHandler] Card {_card.name} played");
+        }
+        else
+        {
+            Debug.LogWarning("[CardDragHandler] SpellcastManager not available for play");
+            SnapBack();
+        }
     }
     
     private void HandleDiscardAreaDrop()
     {
-        // Select card if not selected
-        if (!_card.IsSelected)
-            _card.Select();
-        
-        // Check if we can spend creativity for discard
         if (!CombatManager.HasInstance || !CombatManager.Instance.CanSpendCreativity(1))
         {
+            if (enableDebugLogs) Debug.Log("[CardDragHandler] Cannot discard: Not enough creativity");
             SnapBack();
             return;
         }
@@ -208,44 +296,71 @@ public class CardDragHandler : MonoBehaviour, IBeginDragHandler, IDragHandler, I
             CardManager.Instance.DiscardCard(_card);
         }
         
-        // Draw new card if possible
+        // Draw replacement card
         if (DeckManager.HasInstance && !DeckManager.Instance.IsDeckEmpty)
         {
-            var newCardData = DeckManager.Instance.DrawCard();
-            if (newCardData != null && CardManager.HasInstance)
+            var newCard = DeckManager.Instance.DrawCard();
+            if (newCard != null && CardManager.HasInstance)
             {
-                CardManager.Instance.SpawnCard(newCardData, null, true);
+                CardManager.Instance.SpawnCard(newCard, null, true);
             }
         }
+        
+        if (enableDebugLogs) Debug.Log($"[CardDragHandler] Card {_card.name} discarded");
     }
     
     private void SnapBack()
     {
-        transform.SetParent(_originalParent);
+        // Ensure we're in the original parent
+        if (_cardRectTransform.parent != _originalParent)
+            _cardRectTransform.SetParent(_originalParent, false);
+            
         StartCoroutine(AnimateSnapBack());
+        
+        if (enableDebugLogs) Debug.Log($"[CardDragHandler] Snapping {_card.name} back to original position");
     }
     
     private System.Collections.IEnumerator AnimateSnapBack()
     {
         float elapsed = 0f;
-        Vector3 startPos = _rectTransform.localPosition;
-        Vector3 startScale = _rectTransform.localScale;
+        Vector2 startPos = _cardRectTransform.anchoredPosition;
+        Vector3 startScale = _cardRectTransform.localScale;
         
         while (elapsed < snapBackDuration)
         {
             elapsed += Time.deltaTime;
             float t = elapsed / snapBackDuration;
             
-            _rectTransform.localPosition = Vector3.Lerp(startPos, _originalPosition, t);
-            _rectTransform.localScale = Vector3.Lerp(startScale, _originalScale, t);
+            _cardRectTransform.anchoredPosition = Vector2.Lerp(startPos, _originalAnchoredPosition, t);
+            _cardRectTransform.localScale = Vector3.Lerp(startScale, _originalScale, t);
             
             yield return null;
         }
         
-        _rectTransform.localPosition = _originalPosition;
-        _rectTransform.localScale = _originalScale;
+        // Ensure final position is exact
+        _cardRectTransform.anchoredPosition = _originalAnchoredPosition;
+        _cardRectTransform.localScale = _originalScale;
     }
     
-    // Prevent drag if card is animating
-    public bool CanDrag => !_isDragging && _card != null && _card.IsInteractable;
+    // Public property for external checks
+    public bool CanDrag => !_isDragging && _card != null && _card.IsInteractable && _parentCanvas != null;
+    
+    // Debug method
+    [ContextMenu("Test Drag Setup")]
+    public void TestDragSetup()
+    {
+        Debug.Log("=== CARD DRAG SETUP TEST ===");
+        Debug.Log($"Card: {(_card != null ? _card.name : "NULL")}");
+        Debug.Log($"RectTransform: {(_cardRectTransform != null ? "OK" : "NULL")}");
+        Debug.Log($"Parent Canvas: {(_parentCanvas != null ? _parentCanvas.name : "NULL")}");
+        Debug.Log($"CanvasGroup: {(_canvasGroup != null ? "OK" : "NULL")}");
+        Debug.Log($"Raycaster: {(_raycaster != null ? "OK" : "NULL")}");
+        Debug.Log($"Can Drag: {CanDrag}");
+        
+        if (_parentCanvas != null)
+        {
+            Debug.Log($"Canvas Render Mode: {_parentCanvas.renderMode}");
+            Debug.Log($"Canvas is Root: {_parentCanvas.isRootCanvas}");
+        }
+    }
 }
