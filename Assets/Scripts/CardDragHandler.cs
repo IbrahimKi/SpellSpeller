@@ -56,15 +56,31 @@ public class CardDragHandler : MonoBehaviour, IBeginDragHandler, IDragHandler, I
         _originalParent = transform.parent;
         _originalPosition = _rectTransform.localPosition;
         _originalScale = _rectTransform.localScale;
-        _originalSortOrder = _canvas.sortingOrder;
+        
+        // Get Canvas from parent hierarchy
+        if (_canvas == null)
+            _canvas = GetComponentInParent<Canvas>();
+            
+        // Store original canvas order if it has a Canvas component
+        var cardCanvas = GetComponent<Canvas>();
+        if (cardCanvas != null)
+            _originalSortOrder = cardCanvas.sortingOrder;
         
         // Setup for dragging
         _canvasGroup.blocksRaycasts = false;
         _canvasGroup.alpha = 0.8f;
         
-        // Move to top layer
+        // Move to canvas root for proper dragging
         transform.SetParent(_canvas.transform);
-        _canvas.sortingOrder = dragSortOrder;
+        
+        // Create temporary canvas for sorting if needed
+        if (cardCanvas == null)
+        {
+            cardCanvas = gameObject.AddComponent<Canvas>();
+            cardCanvas.overrideSorting = true;
+        }
+        cardCanvas.sortingOrder = dragSortOrder;
+        
         _rectTransform.localScale = _originalScale * dragScaleMultiplier;
         
         OnCardDragStart?.Invoke(_card);
@@ -120,7 +136,16 @@ public class CardDragHandler : MonoBehaviour, IBeginDragHandler, IDragHandler, I
         // Reset visual state
         _canvasGroup.blocksRaycasts = true;
         _canvasGroup.alpha = 1f;
-        _canvas.sortingOrder = _originalSortOrder;
+        
+        // Clean up temporary canvas if created
+        var cardCanvas = GetComponent<Canvas>();
+        if (cardCanvas != null)
+        {
+            if (_originalSortOrder > 0)
+                cardCanvas.sortingOrder = _originalSortOrder;
+            else
+                Destroy(cardCanvas);
+        }
         
         OnCardDragEnd?.Invoke(_card);
     }
