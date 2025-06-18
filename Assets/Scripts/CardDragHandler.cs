@@ -26,6 +26,10 @@ public class CardDragHandler : MonoBehaviour, IBeginDragHandler, IDragHandler, I
     private bool _isDragging;
     private Canvas _tempCanvas;
     
+    // FIXED: Mouse offset tracking für korrektes Dragging
+    private Vector2 _dragOffset;
+    private Camera _canvasCamera;
+    
     // Events
     public static event System.Action<Card> OnCardDragStart;
     public static event System.Action<Card> OnCardDragEnd;
@@ -55,14 +59,13 @@ public class CardDragHandler : MonoBehaviour, IBeginDragHandler, IDragHandler, I
             if (enableDebugLogs) Debug.Log($"[CardDragHandler] Added CanvasGroup to {gameObject.name}");
         }
         
-        // Don't search for Canvas in Awake - wait until the card is properly parented
         if (enableDebugLogs)
         {
             Debug.Log($"[CardDragHandler] Components cached for {gameObject.name}");
         }
     }
     
-    // NEW: Find Canvas when actually needed (lazy initialization)
+    // FIXED: Improved Canvas detection mit Camera-Handling
     private bool EnsureCanvasReference()
     {
         if (_parentCanvas != null) return true;
@@ -82,9 +85,16 @@ public class CardDragHandler : MonoBehaviour, IBeginDragHandler, IDragHandler, I
         
         _raycaster = _parentCanvas.GetComponent<GraphicRaycaster>();
         
+        // FIXED: Canvas Camera Detection
+        _canvasCamera = _parentCanvas.renderMode == RenderMode.ScreenSpaceOverlay ? null : _parentCanvas.worldCamera;
+        if (_canvasCamera == null && _parentCanvas.renderMode == RenderMode.ScreenSpaceCamera)
+        {
+            _canvasCamera = Camera.main;
+        }
+        
         if (enableDebugLogs)
         {
-            Debug.Log($"[CardDragHandler] Found Canvas: {_parentCanvas.name}");
+            Debug.Log($"[CardDragHandler] Canvas: {_parentCanvas.name}, RenderMode: {_parentCanvas.renderMode}, Camera: {(_canvasCamera ? _canvasCamera.name : "null")}");
         }
         
         return true;
@@ -92,7 +102,6 @@ public class CardDragHandler : MonoBehaviour, IBeginDragHandler, IDragHandler, I
     
     public void OnBeginDrag(PointerEventData eventData)
     {
-        // Ensure we have a canvas reference before starting drag
         if (!EnsureCanvasReference())
         {
             Debug.LogError($"[CardDragHandler] Cannot drag - no Canvas found!");
@@ -107,6 +116,21 @@ public class CardDragHandler : MonoBehaviour, IBeginDragHandler, IDragHandler, I
         _originalParent = _cardRectTransform.parent;
         _originalAnchoredPosition = _cardRectTransform.anchoredPosition;
         _originalScale = _cardRectTransform.localScale;
+        
+        // FIXED: Calculate initial drag offset
+        Vector2 localPoint;
+        if (RectTransformUtility.ScreenPointToLocalPointInRectangle(
+            _cardRectTransform, 
+            eventData.position, 
+            _canvasCamera, 
+            out localPoint))
+        {
+            _dragOffset = localPoint;
+        }
+        else
+        {
+            _dragOffset = Vector2.zero;
+        }
         
         // Setup for dragging
         _canvasGroup.blocksRaycasts = false;
@@ -126,6 +150,7 @@ public class CardDragHandler : MonoBehaviour, IBeginDragHandler, IDragHandler, I
         {
             Debug.Log($"[CardDragHandler] Drag started on {_card.name}");
             Debug.Log($"  Original Position: {_originalAnchoredPosition}");
+            Debug.Log($"  Drag Offset: {_dragOffset}");
             Debug.Log($"  Parent Canvas: {_parentCanvas.name}");
         }
     }
@@ -134,15 +159,21 @@ public class CardDragHandler : MonoBehaviour, IBeginDragHandler, IDragHandler, I
     {
         if (!_isDragging || _parentCanvas == null) return;
         
-        // Convert screen position to local position in parent Canvas
+        // FIXED: Korrekte Position Calculation mit Offset-Korrektur
         Vector2 localPoint;
         if (RectTransformUtility.ScreenPointToLocalPointInRectangle(
             _parentCanvas.transform as RectTransform,
             eventData.position,
-            _parentCanvas.worldCamera,
+            _canvasCamera,
             out localPoint))
         {
-            _cardRectTransform.anchoredPosition = localPoint;
+            // Subtract the initial drag offset so the card doesn't jump
+            _cardRectTransform.anchoredPosition = localPoint - _dragOffset;
+        }
+        
+        if (enableDebugLogs && Time.frameCount % 30 == 0) // Log every 30 frames
+        {
+            Debug.Log($"[CardDragHandler] Dragging - Screen: {eventData.position}, Local: {localPoint}, Final: {localPoint - _dragOffset}");
         }
     }
     
@@ -201,7 +232,6 @@ public class CardDragHandler : MonoBehaviour, IBeginDragHandler, IDragHandler, I
             return false;
         }
         
-        // Canvas will be found lazily in OnBeginDrag
         return true;
     }
     
@@ -354,10 +384,10 @@ public class CardDragHandler : MonoBehaviour, IBeginDragHandler, IDragHandler, I
         _cardRectTransform.localScale = _originalScale;
     }
     
-    // Public property for external checks - updated to use lazy canvas finding
+    // Public property for external checks
     public bool CanDrag => !_isDragging && _card != null && _card.IsInteractable;
     
-    // Debug method
+    // FIXED: Improved Debug method mit Canvas-Details
     [ContextMenu("Test Drag Setup")]
     public void TestDragSetup()
     {
@@ -376,6 +406,18 @@ public class CardDragHandler : MonoBehaviour, IBeginDragHandler, IDragHandler, I
         {
             Debug.Log($"Canvas Render Mode: {_parentCanvas.renderMode}");
             Debug.Log($"Canvas is Root: {_parentCanvas.isRootCanvas}");
+            Debug.Log($"Canvas Camera: {(_canvasCamera != null ? _canvasCamera.name : "NULL")}");
+            Debug.Log($"Canvas Scale Factor: {_parentCanvas.scaleFactor}");
         }
+        
+        // Test coordinate conversion
+        Vector2 testScreenPos = new Vector2(Screen.width * 0.5f, Screen.height * 0.5f);
+        Vector2 localPoint;
+        bool success = RectTransformUtility.ScreenPointToLocalPointInRectangle(
+            _parentCanvas.transform as RectTransform,
+            testScreenPos,
+            _canvasCamera,
+            out localPoint);
+        Debug.Log($"Test coordinate conversion - Success: {success}, Screen: {testScreenPos}, Local: {localPoint}");
     }
 }
