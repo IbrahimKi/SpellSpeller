@@ -2,154 +2,172 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
-public class DropAreaHandler : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler
+public class DropAreaHandler : MonoBehaviour, IDropHandler, IPointerEnterHandler, IPointerExitHandler
 {
-    [Header("Area Type")]
-    [SerializeField] private AreaType areaType = AreaType.Play;
-    
     [Header("Visual Feedback")]
-    [SerializeField] private Image highlightImage;
-    [SerializeField] private Color normalColor = new Color(1f, 1f, 1f, 0.1f);
-    [SerializeField] private Color hoverColor = new Color(0f, 1f, 0f, 0.3f);
-    [SerializeField] private Color validDropColor = new Color(0f, 1f, 0f, 0.5f);
-    [SerializeField] private Color invalidDropColor = new Color(1f, 0f, 0f, 0.3f);
+    [SerializeField] private Color normalColor = Color.white;
+    [SerializeField] private Color highlightColor = Color.green;
+    [SerializeField] private Color invalidColor = Color.red;
     
-    private bool _isHovered;
-    private bool _isDragActive;
+    [Header("Drop Settings")]
+    [SerializeField] private bool acceptMultipleCards = false;
+    [SerializeField] private int maxCards = 1;
     
-    // Events
-    public static event System.Action<AreaType> OnAreaHovered;
-    public static event System.Action<AreaType> OnAreaUnhovered;
+    private Image dropAreaImage;
+    private int currentCardCount = 0;
+    private GameObject currentDraggedCard;
     
-    public enum AreaType
+    void Awake()
     {
-        Play,
-        Discard
-    }
-    
-    private void Awake()
-    {
-        // Ensure we have required tag
-        switch (areaType)
+        dropAreaImage = GetComponent<Image>();
+        if (dropAreaImage == null)
         {
-            case AreaType.Play:
-                gameObject.tag = "PlayArea";
-                break;
-            case AreaType.Discard:
-                gameObject.tag = "DiscardArea";
-                break;
+            dropAreaImage = gameObject.AddComponent<Image>();
         }
+        dropAreaImage.color = normalColor;
+    }
+    
+    void OnEnable()
+    {
+        // Abonniere die Drag-Events
+        CardDragHandler.OnCardDragStart.AddListener(OnCardDragStart);
+        CardDragHandler.OnCardDragEnd.AddListener(OnCardDragEnd);
+    }
+    
+    void OnDisable()
+    {
+        // Deabonniere die Events
+        CardDragHandler.OnCardDragStart.RemoveListener(OnCardDragStart);
+        CardDragHandler.OnCardDragEnd.RemoveListener(OnCardDragEnd);
+    }
+    
+    private void OnCardDragStart(GameObject card)
+    {
+        currentDraggedCard = card;
+        Debug.Log($"[DropAreaHandler] Card drag started: {card.name}");
         
-        // Setup highlight if not assigned
-        if (highlightImage == null)
+        // Visuelles Feedback wenn Area verfügbar ist
+        if (CanAcceptCard())
         {
-            highlightImage = GetComponent<Image>();
-            if (highlightImage == null)
-            {
-                highlightImage = gameObject.AddComponent<Image>();
-                highlightImage.raycastTarget = true;
-            }
+            dropAreaImage.color = highlightColor;
         }
-        
-        UpdateVisual();
     }
     
-    private void OnEnable()
+    private void OnCardDragEnd(GameObject card)
     {
-        CardDragHandler.OnCardDragStart += OnCardDragStart;
-        CardDragHandler.OnCardDragEnd += OnCardDragEnd;
-    }
-    
-    private void OnDisable()
-    {
-        CardDragHandler.OnCardDragStart -= OnCardDragStart;
-        CardDragHandler.OnCardDragEnd -= OnCardDragEnd;
-    }
-    
-    private void OnCardDragStart(Card card)
-    {
-        _isDragActive = true;
-        UpdateVisual();
-    }
-    
-    private void OnCardDragEnd(Card card)
-    {
-        _isDragActive = false;
-        UpdateVisual();
+        currentDraggedCard = null;
+        dropAreaImage.color = normalColor;
+        Debug.Log($"[DropAreaHandler] Card drag ended: {card.name}");
     }
     
     public void OnPointerEnter(PointerEventData eventData)
     {
-        _isHovered = true;
-        UpdateVisual();
-        OnAreaHovered?.Invoke(areaType);
+        if (currentDraggedCard != null)
+        {
+            // Zeige ob Drop möglich ist
+            dropAreaImage.color = CanAcceptCard() ? highlightColor : invalidColor;
+        }
     }
     
     public void OnPointerExit(PointerEventData eventData)
     {
-        _isHovered = false;
-        UpdateVisual();
-        OnAreaUnhovered?.Invoke(areaType);
+        if (currentDraggedCard != null)
+        {
+            dropAreaImage.color = normalColor;
+        }
     }
     
-    private void UpdateVisual()
+    public void OnDrop(PointerEventData eventData)
     {
-        if (highlightImage == null) return;
+        GameObject droppedCard = eventData.pointerDrag;
         
-        Color targetColor = normalColor;
-        
-        if (_isDragActive)
+        if (droppedCard != null && CanAcceptCard())
         {
-            if (_isHovered)
+            PlaceCard(droppedCard);
+            Debug.Log($"[DropAreaHandler] Card dropped: {droppedCard.name}");
+        }
+        else
+        {
+            Debug.Log("[DropAreaHandler] Drop rejected - area full or invalid card");
+        }
+        
+        dropAreaImage.color = normalColor;
+    }
+    
+    private bool CanAcceptCard()
+    {
+        if (!acceptMultipleCards)
+        {
+            return currentCardCount == 0;
+        }
+        return currentCardCount < maxCards;
+    }
+    
+    private void PlaceCard(GameObject card)
+    {
+        // Setze die Karte als Child dieser Drop Area
+        card.transform.SetParent(transform);
+        
+        // Positioniere die Karte
+        RectTransform cardRect = card.GetComponent<RectTransform>();
+        
+        if (!acceptMultipleCards)
+        {
+            // Einzelne Karte - zentrieren
+            cardRect.anchoredPosition = Vector2.zero;
+        }
+        else
+        {
+            // Multiple Karten - arrangiere sie
+            ArrangeCards();
+        }
+        
+        currentCardCount++;
+        
+        // Optional: Deaktiviere weiteres Dragging wenn gewünscht
+        // card.GetComponent<CardDragHandler>().enabled = false;
+    }
+    
+    private void ArrangeCards()
+    {
+        // Arrangiere alle Karten-Children gleichmäßig
+        int childCount = transform.childCount;
+        float spacing = 100f; // Abstand zwischen Karten
+        float totalWidth = (childCount - 1) * spacing;
+        float startX = -totalWidth / 2f;
+        
+        for (int i = 0; i < childCount; i++)
+        {
+            RectTransform child = transform.GetChild(i).GetComponent<RectTransform>();
+            if (child != null)
             {
-                targetColor = CanAcceptDrop() ? validDropColor : invalidDropColor;
+                float xPos = startX + (i * spacing);
+                child.anchoredPosition = new Vector2(xPos, 0);
             }
-            else
+        }
+    }
+    
+    public void RemoveCard(GameObject card)
+    {
+        if (card.transform.parent == transform)
+        {
+            currentCardCount--;
+            
+            if (acceptMultipleCards)
             {
-                targetColor = hoverColor;
+                ArrangeCards();
             }
         }
-        else if (_isHovered)
-        {
-            targetColor = hoverColor;
-        }
-        
-        highlightImage.color = targetColor;
     }
     
-    private bool CanAcceptDrop()
+    public void ClearArea()
     {
-        switch (areaType)
+        // Entferne alle Karten aus dieser Area
+        while (transform.childCount > 0)
         {
-            case AreaType.Play:
-                return CardManager.HasInstance && CardManager.Instance.SelectedCards.Count > 0;
-                
-            case AreaType.Discard:
-                return CardManager.HasInstance && 
-                       CardManager.Instance.SelectedCards.Count == 1 &&
-                       CombatManager.HasInstance && 
-                       CombatManager.Instance.CanSpendCreativity(1);
-                
-            default:
-                return false;
+            Transform child = transform.GetChild(0);
+            child.SetParent(null);
         }
+        currentCardCount = 0;
     }
-    
-#if UNITY_EDITOR
-    private void OnValidate()
-    {
-        if (Application.isPlaying) return;
-        
-        // Update tag in editor
-        switch (areaType)
-        {
-            case AreaType.Play:
-                gameObject.tag = "PlayArea";
-                break;
-            case AreaType.Discard:
-                gameObject.tag = "DiscardArea";
-                break;
-        }
-    }
-#endif
 }
