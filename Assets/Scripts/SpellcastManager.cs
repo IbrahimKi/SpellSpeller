@@ -451,6 +451,59 @@ public class SpellcastManager : SingletonBehaviour<SpellcastManager>, IGameManag
         eventAction?.Invoke();
     }
     
+    // Public Check Methods for Drop Areas
+    public bool CanPlayCards(List<Card> cards = null)
+    {
+        // Use provided cards or current selection
+        var cardsToCheck = cards ?? (_cardManager?.SelectedCards ?? new List<Card>());
+        
+        if (cardsToCheck.Count == 0)
+            return false;
+            
+        // Check if it's player's turn
+        if (_combatManager != null && !_combatManager.IsPlayerTurn)
+            return false;
+            
+        // Check if we're in combat
+        if (_combatManager != null && !_combatManager.IsInCombat)
+            return false;
+            
+        // Could add more checks here (e.g. mana cost, special conditions)
+        return true;
+    }
+    
+    public bool CanDiscardCard(Card card = null)
+    {
+        // Check if we have a card to discard
+        if (card == null && (_cardManager?.SelectedCards?.Count ?? 0) == 0)
+            return false;
+            
+        // Check if it's player's turn
+        if (_combatManager != null && !_combatManager.IsPlayerTurn)
+            return false;
+            
+        // Check if we have enough creativity
+        if (_combatManager != null && !_combatManager.CanSpendCreativity(1))
+            return false;
+            
+        // Check if deck has cards to draw
+        if (_deckManager != null && _deckManager.GetTotalAvailableCards() == 0)
+            return false;
+            
+        return true;
+    }
+    
+    // Static helper methods for easy access
+    public static bool CheckCanPlayCards(List<Card> cards = null)
+    {
+        return HasInstance && Instance.CanPlayCards(cards);
+    }
+    
+    public static bool CheckCanDiscardCard(Card card = null)
+    {
+        return HasInstance && Instance.CanDiscardCard(card);
+    }
+    
 #if UNITY_EDITOR
     [ContextMenu("Log Available Spells")]
     public void LogAvailableSpells()

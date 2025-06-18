@@ -392,6 +392,24 @@ RectTransform:
   m_CorrespondingSourceObject: {fileID: 8061170319694174372, guid: caae495249123394caf3d5fcd2f26a1f, type: 3}
   m_PrefabInstance: {fileID: 6743933080846455888}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &1845580600 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 4082564174892169672, guid: caae495249123394caf3d5fcd2f26a1f, type: 3}
+  m_PrefabInstance: {fileID: 6743933080846455888}
+  m_PrefabAsset: {fileID: 0}
+--- !u!114 &1845580606
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1845580600}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e2b5520ab2aa54b44bf35fa061584c9d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  autoFixOnStart: 1
 --- !u!1001 &4597286536364365517
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -477,9 +495,57 @@ PrefabInstance:
       propertyPath: m_AnchorMax.y
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 1289385385576713687, guid: caae495249123394caf3d5fcd2f26a1f, type: 3}
+      propertyPath: invalidColor.b
+      value: 0.14165173
+      objectReference: {fileID: 0}
+    - target: {fileID: 1289385385576713687, guid: caae495249123394caf3d5fcd2f26a1f, type: 3}
+      propertyPath: invalidColor.g
+      value: 0.21442893
+      objectReference: {fileID: 0}
+    - target: {fileID: 1289385385576713687, guid: caae495249123394caf3d5fcd2f26a1f, type: 3}
+      propertyPath: invalidColor.r
+      value: 0.6528301
+      objectReference: {fileID: 0}
+    - target: {fileID: 1289385385576713687, guid: caae495249123394caf3d5fcd2f26a1f, type: 3}
+      propertyPath: highlightColor.b
+      value: 0.554717
+      objectReference: {fileID: 0}
+    - target: {fileID: 1289385385576713687, guid: caae495249123394caf3d5fcd2f26a1f, type: 3}
+      propertyPath: highlightColor.g
+      value: 0.524576
+      objectReference: {fileID: 0}
+    - target: {fileID: 1289385385576713687, guid: caae495249123394caf3d5fcd2f26a1f, type: 3}
+      propertyPath: highlightColor.r
+      value: 0
+      objectReference: {fileID: 0}
     - target: {fileID: 2988389057235663269, guid: caae495249123394caf3d5fcd2f26a1f, type: 3}
       propertyPath: m_AnchorMax.y
       value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3915465646234969746, guid: caae495249123394caf3d5fcd2f26a1f, type: 3}
+      propertyPath: invalidColor.a
+      value: 0.7058824
+      objectReference: {fileID: 0}
+    - target: {fileID: 3915465646234969746, guid: caae495249123394caf3d5fcd2f26a1f, type: 3}
+      propertyPath: invalidColor.b
+      value: 0.101960786
+      objectReference: {fileID: 0}
+    - target: {fileID: 3915465646234969746, guid: caae495249123394caf3d5fcd2f26a1f, type: 3}
+      propertyPath: invalidColor.g
+      value: 0.10206576
+      objectReference: {fileID: 0}
+    - target: {fileID: 3915465646234969746, guid: caae495249123394caf3d5fcd2f26a1f, type: 3}
+      propertyPath: invalidColor.r
+      value: 0.15294118
+      objectReference: {fileID: 0}
+    - target: {fileID: 3915465646234969746, guid: caae495249123394caf3d5fcd2f26a1f, type: 3}
+      propertyPath: highlightColor.g
+      value: 0.629811
+      objectReference: {fileID: 0}
+    - target: {fileID: 3915465646234969746, guid: caae495249123394caf3d5fcd2f26a1f, type: 3}
+      propertyPath: highlightColor.r
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 4082564174892169672, guid: caae495249123394caf3d5fcd2f26a1f, type: 3}
       propertyPath: m_Name
@@ -576,7 +642,10 @@ PrefabInstance:
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
-    m_AddedComponents: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 4082564174892169672, guid: caae495249123394caf3d5fcd2f26a1f, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1845580606}
   m_SourcePrefab: {fileID: 100100000, guid: caae495249123394caf3d5fcd2f26a1f, type: 3}
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
