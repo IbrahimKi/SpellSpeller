@@ -382,7 +382,7 @@ public class CardManager : SingletonBehaviour<CardManager>, IGameManager
     
     private void UpdateHandLayoutImmediate()
     {
-        _handLayoutManager?.SetLayoutImmediate();
+        _handLayoutManager?.ForceImmediateLayout();
     }
     
     public bool AddCardToHand(Card card)
