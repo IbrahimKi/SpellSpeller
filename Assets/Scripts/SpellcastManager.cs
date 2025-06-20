@@ -3,6 +3,16 @@ using System.Collections.Generic;
 using System.Linq;
 using System;
 using System.Text;
+using System.Collections;
+
+public enum ComboState
+{
+    Empty,          // Keine Combo
+    Building,       // Combo wird aufgebaut (gelb)
+    Potential,      // Hat Potential für Spells (grün)
+    Invalid,        // Keine Spells möglich (rot)
+    Completed       // Spell gefunden und ausgeführt (blau)
+}
 
 public class SpellcastManager : SingletonBehaviour<SpellcastManager>, IGameManager
 {
@@ -22,9 +32,10 @@ public class SpellcastManager : SingletonBehaviour<SpellcastManager>, IGameManag
     private DeckManager _deckManager;
     private CombatManager _combatManager;
     
-    // Events
-    public static event Action<List<Card>, string> OnCardsPlayed;
+    // Events - ERWEITERT für bessere UI Integration
+    public static event Action<List<Card>, string> OnCardsPlayed; // NEU: Für UI Status
     public static event Action<string> OnComboUpdated;
+    public static event Action<string, ComboState> OnComboStateChanged; // NEUER Event für Farbkodierung
     public static event Action<SpellAsset, string> OnSpellFound;
     public static event Action<string> OnSpellNotFound;
     public static event Action OnComboCleared;
@@ -34,10 +45,13 @@ public class SpellcastManager : SingletonBehaviour<SpellcastManager>, IGameManag
     
     // Properties
     public string CurrentCombo => _currentCombo;
+    public ComboState CurrentComboState { get; private set; } = ComboState.Empty;
+    public string LastPlayedSequence { get; private set; } = "";
     public IReadOnlyList<SpellAsset> AvailableSpells => availableSpells.AsReadOnly();
     
     protected override void OnAwakeInitialize()
     {
+        // Cached references für bessere Performance
         _cardManager = CardManager.Instance;
         _deckManager = DeckManager.Instance;
         _combatManager = CombatManager.Instance;
@@ -182,6 +196,7 @@ public class SpellcastManager : SingletonBehaviour<SpellcastManager>, IGameManag
         ProcessCardPlay(selectedCards, letterSequence);
     }
     
+    // OPTIMIERT: Bessere String-Performance
     private string ExtractLettersFromCards(List<Card> cards)
     {
         if (cards == null || cards.Count == 0) return "";
@@ -195,28 +210,43 @@ public class SpellcastManager : SingletonBehaviour<SpellcastManager>, IGameManag
         return letterBuilder.ToString();
     }
     
+    // ÜBERARBEITETE ProcessCardPlay Methode mit persistenter Combo-Anzeige
     public void ProcessCardPlay(List<Card> playedCards, string letterSequence)
     {
         string normalizedLetters = caseSensitive ? letterSequence : letterSequence.ToUpper();
+        
+        // Event für UI Handler - sofortiges Feedback
         FireEvent(OnCardsPlayed, playedCards, normalizedLetters);
-    
+        
+        // Store last played sequence für Anzeige
+        LastPlayedSequence = normalizedLetters;
+
         // Update persistent combo
         string testCombo = _currentCombo + normalizedLetters;
         
         // Try exact match with new combo
         if (TryMatchSpell(testCombo, playedCards))
         {
-            ClearCombo();
+            // Spell gefunden - zeige kurz als "Completed"
+            SetComboState(testCombo, ComboState.Completed);
+            
+            // Nach kurzer Verzögerung combo clearen
+            StartCoroutine(DelayedComboClear(0.5f));
             return;
         }
-    
+
         // Try partial matches with new combo
         var partialMatches = FindPartialMatches(testCombo);
         if (partialMatches.Count > 0)
         {
             var bestMatch = partialMatches.OrderByDescending(s => s.LetterCode.Length).First();
+            
+            // Spell gefunden - zeige als "Completed"
+            SetComboState(bestMatch.LetterCode, ComboState.Completed);
             ExecuteSpell(bestMatch, playedCards, bestMatch.LetterCode);
-            ClearCombo();
+            
+            // Nach kurzer Verzögerung combo clearen
+            StartCoroutine(DelayedComboClear(0.5f));
             return;
         }
         
@@ -225,27 +255,50 @@ public class SpellcastManager : SingletonBehaviour<SpellcastManager>, IGameManag
         {
             // Store the combo and continue building
             _currentCombo = testCombo;
-            UpdateComboDisplay(_currentCombo);
+            SetComboState(_currentCombo, ComboState.Potential);
             Debug.Log($"[SpellcastManager] Building combo: {_currentCombo}");
         }
         else
         {
-            // No potential - clear combo and start fresh with current letters
-            ClearCombo();
+            // NEUE LOGIK: Combo bleibt sichtbar aber als Invalid markiert
+            _currentCombo = testCombo; // Behalte die Combo für Anzeige
+            SetComboState(_currentCombo, ComboState.Invalid);
             
-            // Check if just the current letters have potential
-            if (HasPotentialMatch(normalizedLetters))
-            {
-                _currentCombo = normalizedLetters;
-                UpdateComboDisplay(_currentCombo);
-                Debug.Log($"[SpellcastManager] Started new combo: {_currentCombo}");
-            }
-            else
-            {
-                FireEvent(OnSpellNotFound, normalizedLetters);
-                Debug.Log($"[SpellcastManager] No spell found for: {normalizedLetters}");
-            }
+            // Fire spell not found event
+            FireEvent(OnSpellNotFound, normalizedLetters);
+            Debug.Log($"[SpellcastManager] Invalid combo: {_currentCombo}");
+            
+            // Nach kurzer Zeit zurück zu Empty (aber Combo bleibt sichtbar)
+            StartCoroutine(DelayedComboStateReset(2f));
         }
+    }
+    
+    // NEUE Hilfsmethoden für Combo-Zustand
+    private void SetComboState(string combo, ComboState state)
+    {
+        _currentCombo = combo;
+        CurrentComboState = state;
+        
+        // Feuere sowohl alte als auch neue Events für Kompatibilität
+        FireEvent(OnComboUpdated, combo);
+        FireEvent(OnComboStateChanged, combo, state);
+        
+        Debug.Log($"[SpellcastManager] Combo state: {combo} -> {state}");
+    }
+    
+    private IEnumerator DelayedComboClear(float delay)
+    {
+        yield return new WaitForSeconds(delay);
+        ClearCombo();
+    }
+    
+    private IEnumerator DelayedComboStateReset(float delay)
+    {
+        yield return new WaitForSeconds(delay);
+        
+        // Nur State zurücksetzen, Combo bleibt für Anzeige
+        CurrentComboState = ComboState.Empty;
+        FireEvent(OnComboStateChanged, _currentCombo, CurrentComboState);
     }
     
     private bool TryMatchSpell(string letterSequence, List<Card> sourceCards)
@@ -285,6 +338,7 @@ public class SpellcastManager : SingletonBehaviour<SpellcastManager>, IGameManag
         
         Debug.Log($"[SpellcastManager] Casting '{spell.SpellName}' with sequence: {usedLetters}");
         
+        // Events in korrekter Reihenfolge für UI
         FireEvent(OnSpellFound, spell, usedLetters);
         FireEvent(OnSpellCast, spell, sourceCards);
         
@@ -386,14 +440,29 @@ public class SpellcastManager : SingletonBehaviour<SpellcastManager>, IGameManag
         Debug.Log($"[SpellcastManager] Applied buff: {effect.effectName}");
     }
     
+    // ÜBERARBEITETE ClearCombo Methode
     public void ClearCombo()
     {
         if (!string.IsNullOrEmpty(_currentCombo))
         {
+            string oldCombo = _currentCombo;
             _currentCombo = "";
+            CurrentComboState = ComboState.Empty;
+            
+            // Events feuern
             FireEvent(OnComboCleared);
-            UpdateComboDisplay(_currentCombo);
+            FireEvent(OnComboUpdated, _currentCombo);
+            FireEvent(OnComboStateChanged, _currentCombo, CurrentComboState);
+            
+            Debug.Log($"[SpellcastManager] Combo cleared from: {oldCombo}");
         }
+    }
+    
+    // NEUE Methode für manuelles Combo-Reset (z.B. durch Button)
+    public void ResetComboDisplay()
+    {
+        ClearCombo();
+        LastPlayedSequence = "";
     }
     
     public bool HasSpell(string letterCode)
@@ -436,19 +505,41 @@ public class SpellcastManager : SingletonBehaviour<SpellcastManager>, IGameManag
         }
     }
     
+    // OPTIMIERT: Bessere Event-Performance mit Error Handling
     private void FireEvent<T>(System.Action<T> eventAction, T parameter)
     {
-        eventAction?.Invoke(parameter);
+        try
+        {
+            eventAction?.Invoke(parameter);
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogError($"[SpellcastManager] Event error: {e.Message}");
+        }
     }
     
     private void FireEvent<T1, T2>(System.Action<T1, T2> eventAction, T1 param1, T2 param2)
     {
-        eventAction?.Invoke(param1, param2);
+        try
+        {
+            eventAction?.Invoke(param1, param2);
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogError($"[SpellcastManager] Event error: {e.Message}");
+        }
     }
     
     private void FireEvent(System.Action eventAction)
     {
-        eventAction?.Invoke();
+        try
+        {
+            eventAction?.Invoke();
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogError($"[SpellcastManager] Event error: {e.Message}");
+        }
     }
     
     // Public Check Methods for Drop Areas
@@ -468,7 +559,6 @@ public class SpellcastManager : SingletonBehaviour<SpellcastManager>, IGameManag
         if (_combatManager != null && !_combatManager.IsInCombat)
             return false;
             
-        // Could add more checks here (e.g. mana cost, special conditions)
         return true;
     }
     
@@ -523,6 +613,12 @@ public class SpellcastManager : SingletonBehaviour<SpellcastManager>, IGameManag
     public void DebugClearCombo()
     {
         ClearCombo();
+    }
+    
+    [ContextMenu("Reset Combo Display")]
+    public void DebugResetComboDisplay()
+    {
+        ResetComboDisplay();
     }
     
     [ContextMenu("Test Spell Cast")]

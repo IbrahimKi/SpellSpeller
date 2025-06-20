@@ -3,6 +3,7 @@ using System.Linq;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
+using System.Collections;
 
 public class GameUIHandler : MonoBehaviour
 {
@@ -24,14 +25,63 @@ public class GameUIHandler : MonoBehaviour
     [Header("Combat UI")]
     [SerializeField] private Button endTurnButton;
     [SerializeField] private TextMeshProUGUI turnText;
-    [SerializeField] private TextMeshProUGUI turnPhaseText; // NEW: Show current phase
+    [SerializeField] private TextMeshProUGUI turnPhaseText;
     
-    [Header("Settings")]
+    [Header("Combo Control")]
+    [SerializeField] private Button comboClearButton; // Optional: Button für Combo Reset
+    
+    [Header("Status Display Settings")]
     [SerializeField] private bool showPercentages = true;
     [SerializeField] private Color healthLowColor = Color.red;
     [SerializeField] private Color healthNormalColor = Color.white;
     [SerializeField] private float healthLowThreshold = 0.25f;
     [SerializeField] private int discardCost = 1;
+    [SerializeField] private float statusDisplayDuration = 3f; // Wie lange Status-Nachrichten angezeigt werden
+    [SerializeField] private float statusFadeDelay = 1f; // Verzögerung vor dem Fade
+    
+    [Header("Combo Display Settings")]
+    [SerializeField] private Color comboEmptyColor = Color.gray;
+    [SerializeField] private Color comboBuildingColor = Color.yellow;
+    [SerializeField] private Color comboPotentialColor = Color.green;
+    [SerializeField] private Color comboInvalidColor = Color.red;
+    [SerializeField] private Color comboCompletedColor = Color.cyan;
+    [SerializeField] private bool showLastPlayedInCombo = true;
+    
+    // Status Display System
+    private enum StatusType
+    {
+        Selection,
+        SpellSuccess,
+        SpellFailed,
+        Combat,
+        Error
+    }
+    
+    [System.Serializable]
+    private class StatusMessage
+    {
+        public string message;
+        public Color color;
+        public StatusType type;
+        public float timestamp;
+        public float duration;
+        
+        public StatusMessage(string msg, Color col, StatusType typ, float dur = 3f)
+        {
+            message = msg;
+            color = col;
+            type = typ;
+            timestamp = Time.time;
+            duration = dur;
+        }
+        
+        public bool IsExpired => Time.time - timestamp > duration;
+    }
+    
+    private StatusMessage _currentStatus;
+    private StatusMessage _pendingStatus;
+    private Coroutine _statusUpdateCoroutine;
+    private bool _isStatusLocked = false;
     
     private void Start()
     {
@@ -51,18 +101,16 @@ public class GameUIHandler : MonoBehaviour
     
     private void SetupEventListeners()
     {
-        // Combat Manager Events - IMPROVED: More granular turn events
+        // Combat Manager Events
         if (CombatManager.HasInstance)
         {
             CombatManager.OnLifeChanged += UpdateLifeDisplay;
             CombatManager.OnCreativityChanged += UpdateCreativityDisplay;
             CombatManager.OnDeckSizeChanged += UpdateDeckDisplay;
             CombatManager.OnTurnChanged += UpdateTurnDisplay;
-            CombatManager.OnTurnPhaseChanged += UpdateTurnPhaseDisplay; // NEW
+            CombatManager.OnTurnPhaseChanged += UpdateTurnPhaseDisplay;
             CombatManager.OnCombatStarted += OnCombatStarted;
             CombatManager.OnCombatEnded += OnCombatEnded;
-            
-            // NEW: Granular turn events for better UI responsiveness
             CombatManager.OnPlayerTurnStarted += OnPlayerTurnStarted;
             CombatManager.OnPlayerTurnEnded += OnPlayerTurnEnded;
             CombatManager.OnEnemyTurnStarted += OnEnemyTurnStarted;
@@ -71,34 +119,33 @@ public class GameUIHandler : MonoBehaviour
             CombatManager.OnTurnTransitionCompleted += OnTurnTransitionCompleted;
         }
         
-        // Card Manager Events
+        // Card Manager Events - IMPROVED: Nicht sofort überschreiben
         if (CardManager.HasInstance)
         {
-            CardManager.OnSelectionChanged += UpdateCardPlayUI;
+            CardManager.OnSelectionChanged += OnCardSelectionChanged;
         }
         
-        // Spellcast Events
+        // Spellcast Events - ERWEITERT für bessere Combo-Anzeige
         if (SpellcastManager.HasInstance)
         {
             SpellcastManager.OnSpellFound += OnSpellFound;
             SpellcastManager.OnSpellNotFound += OnSpellNotFound;
             SpellcastManager.OnComboUpdated += UpdateComboDisplay;
+            SpellcastManager.OnComboStateChanged += UpdateComboDisplayWithState; // NEUER Event
+            SpellcastManager.OnCardsPlayed += OnCardsPlayed;
         }
         
-        // Setup Button Listeners - IMPROVED: Better turn button integration
         SetupButtonListeners();
     }
     
     private void SetupButtonListeners()
     {
-        // Combat UI Buttons - VERBESSERTE Integration
         if (endTurnButton != null)
         {
             endTurnButton.onClick.RemoveAllListeners();
             endTurnButton.onClick.AddListener(() => {
                 Debug.Log("[GameUIHandler] End Turn button clicked!");
             
-                // Detaillierte Checks
                 if (!CombatManager.HasInstance)
                 {
                     Debug.LogError("[GameUIHandler] CombatManager not available!");
@@ -126,7 +173,6 @@ public class GameUIHandler : MonoBehaviour
                 }
             });
         
-            // SOFORT-FIX: Button erstmal aktivieren für Tests
             if (Application.isEditor)
             {
                 endTurnButton.interactable = true;
@@ -158,6 +204,19 @@ public class GameUIHandler : MonoBehaviour
             discardButton.onClick.RemoveAllListeners();
             discardButton.onClick.AddListener(DiscardSelectedCard);
         }
+        
+        // NEUER Combo Clear Button
+        if (comboClearButton != null && SpellcastManager.HasInstance)
+        {
+            comboClearButton.onClick.RemoveAllListeners();
+            comboClearButton.onClick.AddListener(() => {
+                if (SpellcastManager.HasInstance)
+                {
+                    SpellcastManager.Instance.ResetComboDisplay();
+                    SetStatus("Combo cleared", Color.red, StatusType.Combat, 1f);
+                }
+            });
+        }
     }
     
     private void OnDestroy()
@@ -182,7 +241,7 @@ public class GameUIHandler : MonoBehaviour
         
         if (CardManager.HasInstance)
         {
-            CardManager.OnSelectionChanged -= UpdateCardPlayUI;
+            CardManager.OnSelectionChanged -= OnCardSelectionChanged;
         }
         
         if (SpellcastManager.HasInstance)
@@ -190,6 +249,8 @@ public class GameUIHandler : MonoBehaviour
             SpellcastManager.OnSpellFound -= OnSpellFound;
             SpellcastManager.OnSpellNotFound -= OnSpellNotFound;
             SpellcastManager.OnComboUpdated -= UpdateComboDisplay;
+            SpellcastManager.OnComboStateChanged -= UpdateComboDisplayWithState;
+            SpellcastManager.OnCardsPlayed -= OnCardsPlayed;
         }
         
         // Clean up button listeners
@@ -198,7 +259,190 @@ public class GameUIHandler : MonoBehaviour
         clearButton?.onClick.RemoveAllListeners();
         drawButton?.onClick.RemoveAllListeners();
         discardButton?.onClick.RemoveAllListeners();
+        comboClearButton?.onClick.RemoveAllListeners();
+        
+        // Stop coroutines
+        if (_statusUpdateCoroutine != null)
+        {
+            StopCoroutine(_statusUpdateCoroutine);
+        }
     }
+    
+    // =========================
+    // IMPROVED STATUS SYSTEM
+    // =========================
+    
+    // NEW: Event handler für gespielte Karten
+    private void OnCardsPlayed(List<Card> playedCards, string letterSequence)
+    {
+        if (playedCards?.Count > 0)
+        {
+            // Zeige gespielte Buchstaben als Status (wird eventuell durch Spell überschrieben)
+            SetStatus($"Played: {letterSequence}", Color.white, StatusType.Selection, 2f);
+        }
+    }
+    
+    private void OnCardSelectionChanged(List<Card> selectedCards)
+    {
+        // NUR aktualisieren wenn kein wichtiger Status aktiv ist
+        if (!_isStatusLocked && (_currentStatus == null || _currentStatus.type == StatusType.Selection))
+        {
+            UpdateCardPlayUI(selectedCards);
+        }
+        
+        UpdateCardPlayButtons();
+        UpdateDrawButton();
+        UpdateDiscardButton();
+    }
+    
+    private void SetStatus(string message, Color color, StatusType type, float duration = 3f)
+    {
+        var newStatus = new StatusMessage(message, color, type, duration);
+        
+        // Prioritäten: Spell > Combat > Error > Selection
+        bool shouldOverride = _currentStatus == null || 
+                             type == StatusType.SpellSuccess || type == StatusType.SpellFailed ||
+                             (type == StatusType.Combat && _currentStatus.type == StatusType.Selection) ||
+                             (type == StatusType.Error);
+        
+        if (shouldOverride)
+        {
+            _currentStatus = newStatus;
+            UpdateStatusDisplay();
+            
+            // Lock status für wichtige Nachrichten
+            if (type == StatusType.SpellSuccess || type == StatusType.SpellFailed)
+            {
+                _isStatusLocked = true;
+                
+                // Start countdown für unlock
+                if (_statusUpdateCoroutine != null)
+                    StopCoroutine(_statusUpdateCoroutine);
+                _statusUpdateCoroutine = StartCoroutine(StatusUnlockCountdown(duration));
+            }
+        }
+        else
+        {
+            // Store as pending if current status is more important
+            _pendingStatus = newStatus;
+        }
+    }
+    
+    private IEnumerator StatusUnlockCountdown(float duration)
+    {
+        yield return new WaitForSeconds(duration - statusFadeDelay);
+        
+        // Begin fade
+        yield return new WaitForSeconds(statusFadeDelay);
+        
+        // Unlock and check for pending
+        _isStatusLocked = false;
+        _currentStatus = null;
+        
+        // Show pending status or return to selection display
+        if (_pendingStatus != null && !_pendingStatus.IsExpired)
+        {
+            _currentStatus = _pendingStatus;
+            _pendingStatus = null;
+            UpdateStatusDisplay();
+        }
+        else
+        {
+            // Return to selection display
+            if (CardManager.HasInstance)
+            {
+                UpdateCardPlayUI(CardManager.Instance.SelectedCards);
+            }
+        }
+    }
+    
+    private void UpdateStatusDisplay()
+    {
+        if (statusText == null || _currentStatus == null) return;
+        
+        statusText.text = _currentStatus.message;
+        statusText.color = _currentStatus.color;
+        
+        Debug.Log($"[GameUIHandler] Status updated: {_currentStatus.message} ({_currentStatus.type})");
+    }
+    
+    // =========================
+    // COMBO DISPLAY SYSTEM
+    // =========================
+    
+    // NEUE Methode für zustandsbasierte Combo-Anzeige
+    private void UpdateComboDisplayWithState(string currentCombo, ComboState state)
+    {
+        if (comboText == null) return;
+        
+        // Bestimme Anzeige-Text und Farbe basierend auf Zustand
+        string displayText;
+        Color displayColor;
+        
+        switch (state)
+        {
+            case ComboState.Empty:
+                displayText = "Combo: -";
+                displayColor = comboEmptyColor;
+                break;
+                
+            case ComboState.Building:
+                displayText = $"Combo: {currentCombo}";
+                displayColor = comboBuildingColor;
+                break;
+                
+            case ComboState.Potential:
+                displayText = $"Combo: {currentCombo} ✓";
+                displayColor = comboPotentialColor;
+                break;
+                
+            case ComboState.Invalid:
+                // Zeige die invalid combo in rot, aber persistent
+                displayText = showLastPlayedInCombo && SpellcastManager.HasInstance 
+                    ? $"Played: {SpellcastManager.Instance.LastPlayedSequence} ✗"
+                    : $"Combo: {currentCombo} ✗";
+                displayColor = comboInvalidColor;
+                break;
+                
+            case ComboState.Completed:
+                displayText = $"Combo: {currentCombo} ★";
+                displayColor = comboCompletedColor;
+                break;
+                
+            default:
+                displayText = $"Combo: {currentCombo}";
+                displayColor = comboEmptyColor;
+                break;
+        }
+        
+        // Aktualisiere UI
+        comboText.text = displayText;
+        comboText.color = displayColor;
+        
+        Debug.Log($"[GameUIHandler] Combo display updated: {displayText} ({state})");
+    }
+    
+    // ÜBERARBEITETE UpdateComboDisplay Methode (Fallback für Kompatibilität)
+    private void UpdateComboDisplay(string currentCombo)
+    {
+        if (comboText == null) return;
+        
+        // Fallback falls der neue Event nicht verfügbar ist
+        if (string.IsNullOrEmpty(currentCombo))
+        {
+            comboText.text = "Combo: -";
+            comboText.color = comboEmptyColor;
+        }
+        else
+        {
+            comboText.text = $"Combo: {currentCombo}";
+            comboText.color = comboBuildingColor; // Default gelb
+        }
+    }
+    
+    // =========================
+    // RESOURCE DISPLAYS
+    // =========================
     
     private void RefreshAllDisplays()
     {
@@ -212,14 +456,13 @@ public class GameUIHandler : MonoBehaviour
             UpdateTurnPhaseDisplay(combat.CurrentPhase);
         }
         
-        if (CardManager.HasInstance)
+        if (CardManager.HasInstance && !_isStatusLocked)
             UpdateCardPlayUI(CardManager.Instance.SelectedCards);
         
         UpdateAllButtons();
         ForceUpdateTurnButton();
     }
     
-    // IMPROVED: Consolidated button update logic
     private void UpdateAllButtons()
     {
         UpdateDrawButton();
@@ -271,7 +514,6 @@ public class GameUIHandler : MonoBehaviour
             turnText.text = $"Turn {turn}";
     }
     
-    // NEW: Display current turn phase
     private void UpdateTurnPhaseDisplay(TurnPhase phase)
     {
         if (turnPhaseText != null)
@@ -287,7 +529,6 @@ public class GameUIHandler : MonoBehaviour
             
             turnPhaseText.text = phaseText;
             
-            // Color coding for better UX
             turnPhaseText.color = phase switch
             {
                 TurnPhase.PlayerTurn => Color.green,
@@ -298,13 +539,15 @@ public class GameUIHandler : MonoBehaviour
             };
         }
         
-        // Update turn button whenever phase changes
         UpdateEndTurnButton();
     }
     
     private void UpdateCardPlayUI(System.Collections.Generic.List<Card> selectedCards)
     {
-        UpdateStatusDisplay(selectedCards);
+        // NUR aktualisieren wenn Status nicht gesperrt ist
+        if (_isStatusLocked) return;
+        
+        UpdateStatusDisplayForSelection(selectedCards);
         UpdateCardPlayButtons();
         UpdateDrawButton();
         UpdateDiscardButton();
@@ -317,38 +560,28 @@ public class GameUIHandler : MonoBehaviour
         
         if (playButton != null) playButton.interactable = hasCards && isPlayerTurn;
         if (clearButton != null) clearButton.interactable = hasCards && isPlayerTurn;
+        
+        // NEUER Combo Clear Button State
+        if (comboClearButton != null && SpellcastManager.HasInstance) 
+        {
+            bool hasCombo = !string.IsNullOrEmpty(SpellcastManager.Instance.CurrentCombo) || 
+                           !string.IsNullOrEmpty(SpellcastManager.Instance.LastPlayedSequence);
+            comboClearButton.interactable = hasCombo && isPlayerTurn;
+        }
     }
     
-    private void UpdateStatusDisplay(System.Collections.Generic.List<Card> selectedCards)
+    private void UpdateStatusDisplayForSelection(System.Collections.Generic.List<Card> selectedCards)
     {
         if (statusText == null) return;
         
         if (selectedCards?.Count > 0)
         {
             string letters = CardManager.GetLetterSequenceFromCards(selectedCards);
-            statusText.text = $"Letters: {letters}";
-            statusText.color = Color.white;
+            SetStatus($"Letters: {letters}", Color.white, StatusType.Selection, 1f);
         }
         else
         {
-            statusText.text = "Select cards to play\nTip: Double-click, hold, or Ctrl+click to play instantly";
-            statusText.color = Color.gray;
-        }
-    }
-    
-    private void UpdateComboDisplay(string currentCombo)
-    {
-        if (comboText == null) return;
-        
-        if (string.IsNullOrEmpty(currentCombo))
-        {
-            comboText.text = "Combo: -";
-            comboText.color = Color.gray;
-        }
-        else
-        {
-            comboText.text = $"Combo: {currentCombo}";
-            comboText.color = Color.yellow;
+            SetStatus("Select cards to play\nTip: Double-click, hold, or Ctrl+click to play instantly", Color.gray, StatusType.Selection, 1f);
         }
     }
     
@@ -377,7 +610,6 @@ public class GameUIHandler : MonoBehaviour
         }
     }
     
-    // IMPROVED: More precise turn button logic
     private void UpdateEndTurnButton()
     {
         if (endTurnButton != null && CombatManager.HasInstance)
@@ -385,7 +617,6 @@ public class GameUIHandler : MonoBehaviour
             bool canEndTurn = CombatManager.Instance.CanEndTurn;
             endTurnButton.interactable = canEndTurn;
             
-            // Update button text based on state
             var buttonText = endTurnButton.GetComponentInChildren<TextMeshProUGUI>();
             if (buttonText != null)
             {
@@ -411,16 +642,21 @@ public class GameUIHandler : MonoBehaviour
         }
     }
     
-    // EVENT HANDLERS - NEW: Granular turn event handling
+    // =========================
+    // EVENT HANDLERS
+    // =========================
+    
     private void OnCombatStarted()
     {
         Debug.Log("[GameUIHandler] Combat started - updating all UI");
+        SetStatus("Combat Started!", Color.green, StatusType.Combat, 2f);
         UpdateAllButtons();
     }
     
     private void OnCombatEnded()
     {
         Debug.Log("[GameUIHandler] Combat ended - disabling combat UI");
+        SetStatus("Combat Ended", Color.gray, StatusType.Combat, 2f);
         UpdateAllButtons();
     }
     
@@ -429,7 +665,6 @@ public class GameUIHandler : MonoBehaviour
         Debug.Log($"[GameUIHandler] Player turn {turn} started - enabling player actions");
         UpdateAllButtons();
         
-        // Optional: Flash the turn button or play sound
         if (endTurnButton != null)
         {
             endTurnButton.GetComponent<Image>().color = Color.green;
@@ -447,7 +682,6 @@ public class GameUIHandler : MonoBehaviour
         Debug.Log($"[GameUIHandler] Enemy turn {turn} started - disabling player actions");
         UpdateAllButtons();
         
-        // Optional: Change button color to indicate enemy turn
         if (endTurnButton != null)
         {
             endTurnButton.GetComponent<Image>().color = Color.red;
@@ -465,7 +699,6 @@ public class GameUIHandler : MonoBehaviour
         Debug.Log("[GameUIHandler] Turn transition started - disabling all actions");
         UpdateAllButtons();
         
-        // Optional: Show processing indicator
         if (endTurnButton != null)
         {
             endTurnButton.GetComponent<Image>().color = Color.yellow;
@@ -477,7 +710,6 @@ public class GameUIHandler : MonoBehaviour
         Debug.Log("[GameUIHandler] Turn transition completed - updating UI");
         UpdateAllButtons();
         
-        // Reset button color
         if (endTurnButton != null)
         {
             endTurnButton.GetComponent<Image>().color = Color.white;
@@ -498,27 +730,24 @@ public class GameUIHandler : MonoBehaviour
             
         var cardToDiscard = selectedCards[0];
         
-        // Spend creativity
         CombatManager.Instance.SpendCreativity(discardCost);
-        
-        // Add to discard pile
         DeckManager.Instance.DiscardCard(cardToDiscard.CardData);
-        
-        // FIXED: Use DiscardCard instead of RemoveCardFromHand
         CardManager.Instance.DiscardCard(cardToDiscard);
         
-        // Draw new card
         var newCardData = DeckManager.Instance.DrawCard();
         if (newCardData != null)
         {
             CardManager.Instance.SpawnCard(newCardData, null, true);
         }
+        
+        SetStatus("Card discarded", Color.red, StatusType.Combat, 1.5f);
     }
+    
     public void ForceUpdateTurnButton()
     {
         if (endTurnButton == null) return;
     
-        bool shouldBeInteractable = true; // Für Testing
+        bool shouldBeInteractable = true;
     
         if (CombatManager.HasInstance)
         {
@@ -530,7 +759,6 @@ public class GameUIHandler : MonoBehaviour
     
         endTurnButton.interactable = shouldBeInteractable;
     
-        // Update button text
         var buttonText = endTurnButton.GetComponentInChildren<TextMeshProUGUI>();
         if (buttonText != null && CombatManager.HasInstance)
         {
@@ -553,35 +781,18 @@ public class GameUIHandler : MonoBehaviour
             }
         }
     }
+    
+    // IMPROVED: Spell Events mit besserer Persistenz
     private void OnSpellFound(SpellAsset spell, string usedLetters)
     {
-        if (statusText != null)
+        if (spell != null)
         {
-            statusText.text = $"Spell: {spell.SpellName}!";
-            statusText.color = Color.green;
-            CancelInvoke(nameof(ResetStatusText));
-            Invoke(nameof(ResetStatusText), 2f);
+            SetStatus($"Spell: {spell.SpellName}!", Color.green, StatusType.SpellSuccess, statusDisplayDuration);
         }
     }
     
     private void OnSpellNotFound(string attemptedLetters)
     {
-        if (statusText != null)
-        {
-            statusText.text = "No spell found";
-            statusText.color = Color.red;
-            CancelInvoke(nameof(ResetStatusText));
-            Invoke(nameof(ResetStatusText), 1.5f);
-        }
-    }
-    
-    private void ResetStatusText()
-    {
-        if (statusText != null)
-        {
-            statusText.color = Color.white;
-            if (CardManager.HasInstance)
-                UpdateCardPlayUI(CardManager.Instance.SelectedCards);
-        }
+        SetStatus("No spell found", Color.red, StatusType.SpellFailed, 2f);
     }
 }

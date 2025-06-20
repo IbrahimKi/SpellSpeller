@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text;
 using UnityEngine;
 using System.Collections;
+using UnityEngine.UI;
 
 public class CardManager : SingletonBehaviour<CardManager>, IGameManager
 {
@@ -155,16 +156,30 @@ public class CardManager : SingletonBehaviour<CardManager>, IGameManager
         // Setup transform AFTER card setup
         if (addToHand && handContainer != null)
         {
-            // For hand cards: parent to hand container and reset transform
+            // For hand cards: parent to hand container
             cardObject.transform.SetParent(handContainer, false);
-            ResetCardTransform(cardObject);
             
-            // Position at center initially to prevent flicker
+            // KRITISCH: Korrekte RectTransform Setup für Hand-Karten
             var rectTransform = cardObject.GetComponent<RectTransform>();
             if (rectTransform != null)
             {
+                // Reset auf Standard-UI Layout
+                rectTransform.localPosition = Vector3.zero;
+                rectTransform.localRotation = Quaternion.identity;
+                rectTransform.localScale = Vector3.one; // WICHTIG: Keine Scale-Manipulation hier!
+                
+                // Anchors für UI Layout
+                rectTransform.anchorMin = new Vector2(0.5f, 0.5f);
+                rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
+                rectTransform.pivot = new Vector2(0.5f, 0.5f);
                 rectTransform.anchoredPosition = Vector2.zero;
-                rectTransform.localScale = Vector3.one * 0.75f; // Match hand scale
+                
+                // WICHTIG: Entferne existierende LayoutElement (HandLayoutManager setzt neue)
+                var existingLayoutElement = cardObject.GetComponent<LayoutElement>();
+                if (existingLayoutElement != null)
+                {
+                    DestroyImmediate(existingLayoutElement);
+                }
             }
         }
         else
@@ -241,8 +256,20 @@ public class CardManager : SingletonBehaviour<CardManager>, IGameManager
         {
             rectTransform.localPosition = Vector3.zero;
             rectTransform.localRotation = Quaternion.identity;
-            rectTransform.localScale = Vector3.one;
+            rectTransform.localScale = Vector3.one; // Immer 1,1,1 für UI
+            
+            // Standard UI Anchors
+            rectTransform.anchorMin = new Vector2(0.5f, 0.5f);
+            rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
+            rectTransform.pivot = new Vector2(0.5f, 0.5f);
             rectTransform.anchoredPosition = Vector2.zero;
+            
+            // Entferne LayoutElement falls vorhanden (wird vom HandLayoutManager neu gesetzt)
+            var existingLayoutElement = cardObject.GetComponent<LayoutElement>();
+            if (existingLayoutElement != null)
+            {
+                DestroyImmediate(existingLayoutElement);
+            }
         }
     }
     
@@ -393,14 +420,6 @@ public class CardManager : SingletonBehaviour<CardManager>, IGameManager
         // Ensure proper parenting for existing cards
         card.transform.SetParent(handContainer, false);
         ResetCardTransform(card.gameObject);
-        
-        // Position at center initially
-        var rectTransform = card.GetComponent<RectTransform>();
-        if (rectTransform != null)
-        {
-            rectTransform.anchoredPosition = Vector2.zero;
-            rectTransform.localScale = Vector3.one * 0.75f;
-        }
         
         AddCardToHandInternal(card);
         return true;
