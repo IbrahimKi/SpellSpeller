@@ -1004,7 +1004,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 9110910959325880325, guid: caae495249123394caf3d5fcd2f26a1f, type: 3}
       propertyPath: cardSpacing
-      value: 200
+      value: 10
       objectReference: {fileID: 0}
     - target: {fileID: 9110910959325880325, guid: caae495249123394caf3d5fcd2f26a1f, type: 3}
       propertyPath: enableHandScaling
