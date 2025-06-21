@@ -22,7 +22,6 @@ public class DropAreaHandler : MonoBehaviour, IDropHandler, IPointerEnterHandler
             dropAreaImage = gameObject.AddComponent<Image>();
         }
         
-        // Set initial color
         if (dropAreaImage.color.a == 0)
         {
             dropAreaImage.color = normalColor;
@@ -31,14 +30,12 @@ public class DropAreaHandler : MonoBehaviour, IDropHandler, IPointerEnterHandler
     
     void OnEnable()
     {
-        // Subscribe to drag events
         CardDragHandler.OnCardDragStart.AddListener(OnCardDragStart);
         CardDragHandler.OnCardDragEnd.AddListener(OnCardDragEnd);
     }
     
     void OnDisable()
     {
-        // Unsubscribe from events
         CardDragHandler.OnCardDragStart.RemoveListener(OnCardDragStart);
         CardDragHandler.OnCardDragEnd.RemoveListener(OnCardDragEnd);
     }
@@ -46,9 +43,6 @@ public class DropAreaHandler : MonoBehaviour, IDropHandler, IPointerEnterHandler
     private void OnCardDragStart(GameObject card)
     {
         currentDraggedCard = card;
-        Debug.Log($"[DropAreaHandler] Card drag started: {card.name}");
-        
-        // Check if this area can accept the card
         UpdateDropValidity();
     }
     
@@ -57,7 +51,6 @@ public class DropAreaHandler : MonoBehaviour, IDropHandler, IPointerEnterHandler
         currentDraggedCard = null;
         canAcceptDrop = false;
         dropAreaImage.color = normalColor;
-        Debug.Log($"[DropAreaHandler] Card drag ended: {card.name}");
     }
     
     private void UpdateDropValidity()
@@ -80,27 +73,21 @@ public class DropAreaHandler : MonoBehaviour, IDropHandler, IPointerEnterHandler
         // Check based on area type
         if (gameObject.CompareTag("PlayArea"))
         {
-            // For play area, check if we can play the card
+            // For play area - always allow adding to combo during player turn
             var cardList = new List<Card> { cardComponent };
             canAcceptDrop = SpellcastManager.CheckCanPlayCards(cardList);
         }
         else if (gameObject.CompareTag("DiscardArea"))
         {
-            // For discard area, check if we can discard
+            // For discard area - check resources
             canAcceptDrop = SpellcastManager.CheckCanDiscardCard(cardComponent);
-        }
-        else if (gameObject.CompareTag("CardSlot"))
-        {
-            // For card slots, check if slot is empty
-            var slot = GetComponent<CardSlot>();
-            canAcceptDrop = slot != null && slot.CanAcceptCard(currentDraggedCard);
         }
         else
         {
             canAcceptDrop = false;
         }
         
-        // Update visual feedback
+        // Update visual
         dropAreaImage.color = canAcceptDrop ? highlightColor : invalidColor;
     }
     
@@ -108,13 +95,11 @@ public class DropAreaHandler : MonoBehaviour, IDropHandler, IPointerEnterHandler
     {
         if (currentDraggedCard != null)
         {
-            // Update validity check when hovering
             UpdateDropValidity();
             
-            // Show enhanced feedback when hovering
             if (canAcceptDrop)
             {
-                // Make color slightly brighter when hovering
+                // Enhanced hover feedback
                 Color hoverColor = highlightColor;
                 hoverColor.a = Mathf.Min(1f, highlightColor.a * 1.5f);
                 dropAreaImage.color = hoverColor;
@@ -126,30 +111,30 @@ public class DropAreaHandler : MonoBehaviour, IDropHandler, IPointerEnterHandler
     {
         if (currentDraggedCard != null)
         {
-            // Return to base validity color
             dropAreaImage.color = canAcceptDrop ? highlightColor : invalidColor;
         }
     }
     
     public void OnDrop(PointerEventData eventData)
     {
-        GameObject droppedCard = eventData.pointerDrag;
+        // Drop handling is done in CardDragHandler
+        // This just provides visual feedback
         
-        if (droppedCard != null && canAcceptDrop)
+        if (eventData.pointerDrag != null && canAcceptDrop)
         {
-            // The actual drop is handled by CardDragHandler
-            Debug.Log($"[DropAreaHandler] Valid drop on {gameObject.name}");
-        }
-        else
-        {
-            Debug.Log($"[DropAreaHandler] Invalid drop rejected on {gameObject.name}");
+            // Visual feedback for successful drop
+            dropAreaImage.color = highlightColor;
         }
         
-        // Reset color after drop
+        // Reset color after short delay
+        Invoke(nameof(ResetColor), 0.1f);
+    }
+    
+    private void ResetColor()
+    {
         dropAreaImage.color = normalColor;
     }
     
-    // Helper method to manually update validity (useful for turn changes)
     public void RefreshDropValidity()
     {
         if (currentDraggedCard != null)
@@ -157,20 +142,18 @@ public class DropAreaHandler : MonoBehaviour, IDropHandler, IPointerEnterHandler
             UpdateDropValidity();
         }
     }
-    
+
 #if UNITY_EDITOR
-    [ContextMenu("Test Colors")]
-    private void TestColors()
+    [ContextMenu("Test Visual Feedback")]
+    private void TestVisualFeedback()
     {
         if (dropAreaImage == null)
             dropAreaImage = GetComponent<Image>();
             
         if (dropAreaImage != null)
         {
-            Debug.Log("Testing colors - watch the area change:");
-            Debug.Log("Normal: " + normalColor);
-            Debug.Log("Highlight: " + highlightColor);
-            Debug.Log("Invalid: " + invalidColor);
+            dropAreaImage.color = highlightColor;
+            Invoke(nameof(ResetColor), 1f);
         }
     }
 #endif

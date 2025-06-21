@@ -8,10 +8,9 @@ using System.Collections;
 public enum ComboState
 {
     Empty,          // Keine Combo
-    Building,       // Combo wird aufgebaut (gelb)
-    Potential,      // Hat Potential für Spells (grün)
-    Invalid,        // Keine Spells möglich (rot)
-    Completed       // Spell gefunden und ausgeführt (blau)
+    Building,       // Combo wird aufgebaut
+    Ready,          // Combo kann gecastet werden
+    Invalid         // Keine weiteren Spells möglich
 }
 
 public class SpellcastManager : SingletonBehaviour<SpellcastManager>, IGameManager
@@ -19,42 +18,34 @@ public class SpellcastManager : SingletonBehaviour<SpellcastManager>, IGameManag
     [Header("Spell Configuration")]
     [SerializeField] private List<SpellAsset> availableSpells = new List<SpellAsset>();
     [SerializeField] private bool caseSensitive = false;
-    [SerializeField] private bool consumeCardsOnCast = false;
+    
+    [Header("Combo Settings")]
+    [SerializeField] private bool autoCastOnInvalid = true;
+    [SerializeField] private float comboClearDelay = 0.5f;
     
     private string _currentCombo = "";
     private Dictionary<string, SpellAsset> _spellCache = new Dictionary<string, SpellAsset>();
+    private List<Card> _comboCards = new List<Card>(); // Track cards in combo
     
     private bool _isReady = false;
     public bool IsReady => _isReady;
     
-    // Cached Manager References
-    private CardManager _cardManager;
-    private DeckManager _deckManager;
-    private CombatManager _combatManager;
-    
-    // Events - ERWEITERT für bessere UI Integration
-    public static event Action<List<Card>, string> OnCardsPlayed; // NEU: Für UI Status
-    public static event Action<string> OnComboUpdated;
-    public static event Action<string, ComboState> OnComboStateChanged; // NEUER Event für Farbkodierung
+    // Events
+    public static event Action<List<Card>, string> OnCardsPlayed;
+    public static event Action<string, ComboState> OnComboStateChanged;
     public static event Action<SpellAsset, string> OnSpellFound;
     public static event Action<string> OnSpellNotFound;
     public static event Action OnComboCleared;
     public static event Action<SpellAsset, List<Card>> OnSpellCast;
     public static event Action<SpellEffect> OnSpellEffectTriggered;
-    public static event Action<List<Card>> OnCardsDiscarded;
     
     // Properties
     public string CurrentCombo => _currentCombo;
     public ComboState CurrentComboState { get; private set; } = ComboState.Empty;
-    public string LastPlayedSequence { get; private set; } = "";
-    public IReadOnlyList<SpellAsset> AvailableSpells => availableSpells.AsReadOnly();
+    public bool CanCastCombo => CurrentComboState == ComboState.Ready && _comboCards.Count > 0;
     
     protected override void OnAwakeInitialize()
     {
-        // Cached references für bessere Performance
-        _cardManager = CardManager.Instance;
-        _deckManager = DeckManager.Instance;
-        _combatManager = CombatManager.Instance;
         InitializeSpellCache();
         _isReady = true;
     }
@@ -69,21 +60,57 @@ public class SpellcastManager : SingletonBehaviour<SpellcastManager>, IGameManag
         CardManager.OnSelectionChanged -= OnCardSelectionChanged;
     }
     
+    private void Update()
+    {
+        // Leertaste für Combo-Cast
+        if (Input.GetKeyDown(KeyCode.Space) && CanCastCombo)
+        {
+            TryCastCurrentCombo();
+        }
+    }
+    
     private void InitializeSpellCache()
     {
         _spellCache.Clear();
         
-        foreach (var spell in availableSpells)
+        foreach (var spell in availableSpells.Where(s => s?.IsValid == true))
         {
-            if (spell?.IsValid == true)
-            {
-                string key = caseSensitive ? spell.LetterCode : spell.LetterCode.ToUpper();
-                if (!_spellCache.ContainsKey(key))
-                    _spellCache[key] = spell;
-            }
+            string key = caseSensitive ? spell.LetterCode : spell.LetterCode.ToUpper();
+            if (!_spellCache.ContainsKey(key))
+                _spellCache[key] = spell;
         }
         
         Debug.Log($"[SpellcastManager] Initialized {_spellCache.Count} spells");
+    }
+    
+    private void OnCardSelectionChanged(List<Card> selectedCards)
+    {
+        if (selectedCards?.Count > 0)
+        {
+            UpdateComboPreview(selectedCards);
+        }
+    }
+    
+    private void UpdateComboPreview(List<Card> selectedCards)
+    {
+        string letterSequence = ExtractLettersFromCards(selectedCards);
+        if (string.IsNullOrEmpty(letterSequence)) return;
+        
+        string preview = _currentCombo + letterSequence;
+        
+        // Check potential state
+        if (HasExactSpell(preview))
+        {
+            SetComboState(preview, ComboState.Ready);
+        }
+        else if (HasPotentialMatch(preview))
+        {
+            SetComboState(preview, ComboState.Building);
+        }
+        else
+        {
+            SetComboState(preview, ComboState.Invalid);
+        }
     }
     
     public void PlaySelectedCards()
@@ -92,232 +119,259 @@ public class SpellcastManager : SingletonBehaviour<SpellcastManager>, IGameManag
         var selectedCards = CardManager.Instance.SelectedCards;
         if (selectedCards.Count > 0)
         {
-            TryPlayCards(selectedCards);
+            ProcessCardPlay(selectedCards);
         }
     }
-
-    public void DiscardSelectedCards()
+    
+    public void ProcessCardPlay(List<Card> playedCards)
     {
-        if (!CanDiscard()) return;
+        if (playedCards == null || playedCards.Count == 0) return;
         
-        var selectedCards = CardManager.Instance.SelectedCards;
-        if (selectedCards.Count == 0) return;
+        string letterSequence = ExtractLettersFromCards(playedCards);
+        if (string.IsNullOrEmpty(letterSequence)) return;
         
-        if (_combatManager.SpendCreativity(1))
+        string normalizedLetters = caseSensitive ? letterSequence : letterSequence.ToUpper();
+        
+        // Add to combo
+        _currentCombo += normalizedLetters;
+        _comboCards.AddRange(playedCards);
+        
+        OnCardsPlayed?.Invoke(playedCards, normalizedLetters);
+        
+        // Check combo state
+        bool hasExactMatch = HasExactSpell(_currentCombo);
+        bool hasPotential = HasPotentialMatch(_currentCombo);
+        
+        if (hasExactMatch)
         {
-            foreach (var card in selectedCards.ToList())
-            {
-                if (card != null)
-                {
-                    _deckManager.DiscardCard(card.CardData);
-                    _cardManager.RemoveCardFromHand(card);
-                    _cardManager.DestroyCard(card);
-                }
-            }
+            // Combo is ready to cast
+            SetComboState(_currentCombo, ComboState.Ready);
+            Debug.Log($"[SpellcastManager] Combo ready: {_currentCombo} - Press SPACE to cast!");
+        }
+        else if (hasPotential)
+        {
+            // Can still build combo
+            SetComboState(_currentCombo, ComboState.Building);
+            Debug.Log($"[SpellcastManager] Building combo: {_currentCombo}");
+        }
+        else
+        {
+            // No valid spell possible
+            SetComboState(_currentCombo, ComboState.Invalid);
             
-            OnCardsDiscarded?.Invoke(selectedCards);
-            DrawCard();
-            _cardManager.ClearSelection();
+            if (autoCastOnInvalid)
+            {
+                // Try to cast any partial match before clearing
+                TryAutoCastPartialMatch();
+            }
+            else
+            {
+                OnSpellNotFound?.Invoke(_currentCombo);
+                StartCoroutine(DelayedComboClear(comboClearDelay));
+            }
         }
     }
-
-    public void DrawCard()
+    
+    // Manual combo cast (via Space or UI button)
+    public void TryCastCurrentCombo()
     {
-        if (!CanDraw()) return;
-        var drawnCard = DeckManager.Instance.DrawCard();
-        if (drawnCard != null)
+        if (!CanCastCombo) return;
+        
+        if (_spellCache.TryGetValue(_currentCombo, out SpellAsset spell))
         {
-            CardManager.Instance.SpawnCard(drawnCard, null, true);
+            ExecuteSpell(spell, _comboCards, _currentCombo);
+            ClearCombo();
         }
     }
-
-    public void ClearSelection()
+    
+    // Auto-cast when combo becomes invalid
+    private void TryAutoCastPartialMatch()
     {
+        // Check for partial matches in the combo
+        var partialMatches = FindAllPartialMatches(_currentCombo);
+        
+        if (partialMatches.Count > 0)
+        {
+            // Cast the longest matching spell
+            var bestMatch = partialMatches.OrderByDescending(s => s.LetterCode.Length).First();
+            
+            // Find which cards were used for this spell
+            int spellLength = bestMatch.LetterCode.Length;
+            var usedCards = GetCardsForSpellLength(spellLength);
+            
+            ExecuteSpell(bestMatch, usedCards, bestMatch.LetterCode);
+            
+            // Keep remaining combo
+            string remainingCombo = _currentCombo.Substring(spellLength);
+            var remainingCards = _comboCards.Skip(usedCards.Count).ToList();
+            
+            _currentCombo = remainingCombo;
+            _comboCards = remainingCards;
+            
+            // Re-evaluate remaining combo
+            if (string.IsNullOrEmpty(_currentCombo))
+            {
+                ClearCombo();
+            }
+            else
+            {
+                ProcessRemainingCombo();
+            }
+        }
+        else
+        {
+            // No spells found
+            OnSpellNotFound?.Invoke(_currentCombo);
+            ClearCombo();
+        }
+    }
+    
+    private void ProcessRemainingCombo()
+    {
+        if (HasExactSpell(_currentCombo))
+        {
+            SetComboState(_currentCombo, ComboState.Ready);
+        }
+        else if (HasPotentialMatch(_currentCombo))
+        {
+            SetComboState(_currentCombo, ComboState.Building);
+        }
+        else
+        {
+            SetComboState(_currentCombo, ComboState.Invalid);
+            if (autoCastOnInvalid)
+            {
+                TryAutoCastPartialMatch();
+            }
+        }
+    }
+    
+    private List<Card> GetCardsForSpellLength(int length)
+    {
+        var result = new List<Card>();
+        int currentLength = 0;
+        
+        foreach (var card in _comboCards)
+        {
+            if (currentLength >= length) break;
+            result.Add(card);
+            currentLength += card.CardData.letterValues.Length;
+        }
+        
+        return result;
+    }
+    
+    private void ExecuteSpell(SpellAsset spell, List<Card> sourceCards, string usedLetters)
+    {
+        Debug.Log($"[SpellcastManager] Casting '{spell.SpellName}' with sequence: {usedLetters}");
+        
+        OnSpellFound?.Invoke(spell, usedLetters);
+        OnSpellCast?.Invoke(spell, sourceCards);
+        
+        // Execute effects
+        foreach (var effect in spell.Effects)
+        {
+            TriggerSpellEffect(effect);
+        }
+        
+        // Clear selection
         if (CardManager.HasInstance)
         {
             CardManager.Instance.ClearSelection();
         }
     }
-
-    private bool CanDraw()
-    {
-        return CardManager.HasInstance && !CardManager.Instance.IsHandFull && 
-               DeckManager.HasInstance && !DeckManager.Instance.IsDeckEmpty;
-    }
     
-    private bool CanDiscard()
+    public void TriggerSpellEffect(SpellEffect effect)
     {
-        return CardManager.HasInstance && 
-               CombatManager.HasInstance && CombatManager.Instance.CanSpendCreativity(1) &&
-               CardManager.Instance.SelectedCards.Count > 0;
-    }
-    
-    private void OnCardSelectionChanged(List<Card> selectedCards)
-    {
-        if (selectedCards?.Count > 0)
-        {
-            UpdateComboFromSelection(selectedCards);
-        }
-        else
-        {
-            UpdateComboDisplay(_currentCombo);
-        }
-    }
-    
-    private void UpdateComboFromSelection(List<Card> selectedCards)
-    {
-        string letterSequence = ExtractLettersFromCards(selectedCards);
-        if (string.IsNullOrEmpty(letterSequence)) return;
+        OnSpellEffectTriggered?.Invoke(effect);
         
-        string normalizedLetters = caseSensitive ? letterSequence : letterSequence.ToUpper();
-        UpdateComboDisplay(normalizedLetters);
-    }
-    
-    private void UpdateComboDisplay(string combo)
-    {
-        FireEvent(OnComboUpdated, combo);
-    }
-    
-    public void TryPlayCards(List<Card> selectedCards)
-    {
-        if (selectedCards?.Count == 0)
+        if (!CombatManager.HasInstance) return;
+        
+        switch (effect.effectType)
         {
-            Debug.LogWarning("[SpellcastManager] No cards selected for play");
-            return;
+            case SpellEffectType.Damage:
+                ApplyDamageEffect(effect);
+                break;
+            case SpellEffectType.Heal:
+                CombatManager.Instance.ModifyLife(Mathf.RoundToInt(effect.value));
+                break;
+            case SpellEffectType.Buff:
+                if (effect.effectName.ToLower().Contains("creativity"))
+                    CombatManager.Instance.ModifyCreativity(Mathf.RoundToInt(effect.value));
+                break;
+        }
+    }
+    
+    private void ApplyDamageEffect(SpellEffect effect)
+    {
+        var combat = CombatManager.Instance;
+        
+        // Auto-target if needed
+        if (combat.CurrentTargets.Count == 0 && EnemyManager.HasInstance)
+        {
+            var firstEnemy = EnemyManager.Instance.AliveEnemies.FirstOrDefault();
+            if (firstEnemy != null)
+            {
+                combat.AddTarget(firstEnemy);
+            }
         }
         
-        string letterSequence = ExtractLettersFromCards(selectedCards);
-        if (string.IsNullOrEmpty(letterSequence))
+        if (combat.CurrentTargets.Count > 0)
         {
-            Debug.LogWarning("[SpellcastManager] No letters found in selected cards");
-            return;
+            combat.DealDamageToTargets(Mathf.RoundToInt(effect.value));
         }
-        
-        ProcessCardPlay(selectedCards, letterSequence);
     }
     
-    // OPTIMIERT: Bessere String-Performance
+    public void ClearCombo()
+    {
+        _currentCombo = "";
+        _comboCards.Clear();
+        CurrentComboState = ComboState.Empty;
+        
+        OnComboCleared?.Invoke();
+        OnComboStateChanged?.Invoke(_currentCombo, CurrentComboState);
+    }
+    
+    // Helper methods
     private string ExtractLettersFromCards(List<Card> cards)
     {
         if (cards == null || cards.Count == 0) return "";
-    
-        var letterBuilder = new StringBuilder(cards.Count * 2);
-        foreach (var card in cards)
+        
+        var sb = new StringBuilder(cards.Count * 2);
+        foreach (var card in cards.Where(c => c?.CardData != null))
         {
-            if (card?.CardData?.letterValues != null)
-                letterBuilder.Append(card.CardData.letterValues);
+            sb.Append(card.CardData.letterValues);
         }
-        return letterBuilder.ToString();
+        return sb.ToString();
     }
     
-    // ÜBERARBEITETE ProcessCardPlay Methode mit persistenter Combo-Anzeige
-    public void ProcessCardPlay(List<Card> playedCards, string letterSequence)
-    {
-        string normalizedLetters = caseSensitive ? letterSequence : letterSequence.ToUpper();
-        
-        // Event für UI Handler - sofortiges Feedback
-        FireEvent(OnCardsPlayed, playedCards, normalizedLetters);
-        
-        // Store last played sequence für Anzeige
-        LastPlayedSequence = normalizedLetters;
-
-        // Update persistent combo
-        string testCombo = _currentCombo + normalizedLetters;
-        
-        // Try exact match with new combo
-        if (TryMatchSpell(testCombo, playedCards))
-        {
-            // Spell gefunden - zeige kurz als "Completed"
-            SetComboState(testCombo, ComboState.Completed);
-            
-            // Nach kurzer Verzögerung combo clearen
-            StartCoroutine(DelayedComboClear(0.5f));
-            return;
-        }
-
-        // Try partial matches with new combo
-        var partialMatches = FindPartialMatches(testCombo);
-        if (partialMatches.Count > 0)
-        {
-            var bestMatch = partialMatches.OrderByDescending(s => s.LetterCode.Length).First();
-            
-            // Spell gefunden - zeige als "Completed"
-            SetComboState(bestMatch.LetterCode, ComboState.Completed);
-            ExecuteSpell(bestMatch, playedCards, bestMatch.LetterCode);
-            
-            // Nach kurzer Verzögerung combo clearen
-            StartCoroutine(DelayedComboClear(0.5f));
-            return;
-        }
-        
-        // Check if new combo has potential future matches
-        if (HasPotentialMatch(testCombo))
-        {
-            // Store the combo and continue building
-            _currentCombo = testCombo;
-            SetComboState(_currentCombo, ComboState.Potential);
-            Debug.Log($"[SpellcastManager] Building combo: {_currentCombo}");
-        }
-        else
-        {
-            // NEUE LOGIK: Combo bleibt sichtbar aber als Invalid markiert
-            _currentCombo = testCombo; // Behalte die Combo für Anzeige
-            SetComboState(_currentCombo, ComboState.Invalid);
-            
-            // Fire spell not found event
-            FireEvent(OnSpellNotFound, normalizedLetters);
-            Debug.Log($"[SpellcastManager] Invalid combo: {_currentCombo}");
-            
-            // Nach kurzer Zeit zurück zu Empty (aber Combo bleibt sichtbar)
-            StartCoroutine(DelayedComboStateReset(2f));
-        }
-    }
-    
-    // NEUE Hilfsmethoden für Combo-Zustand
     private void SetComboState(string combo, ComboState state)
     {
         _currentCombo = combo;
         CurrentComboState = state;
-        
-        // Feuere sowohl alte als auch neue Events für Kompatibilität
-        FireEvent(OnComboUpdated, combo);
-        FireEvent(OnComboStateChanged, combo, state);
-        
-        Debug.Log($"[SpellcastManager] Combo state: {combo} -> {state}");
+        OnComboStateChanged?.Invoke(combo, state);
     }
     
-    private IEnumerator DelayedComboClear(float delay)
+    private bool HasExactSpell(string sequence)
     {
-        yield return new WaitForSeconds(delay);
-        ClearCombo();
+        string key = caseSensitive ? sequence : sequence.ToUpper();
+        return _spellCache.ContainsKey(key);
     }
     
-    private IEnumerator DelayedComboStateReset(float delay)
+    private bool HasPotentialMatch(string sequence)
     {
-        yield return new WaitForSeconds(delay);
+        if (string.IsNullOrEmpty(sequence)) return false;
         
-        // Nur State zurücksetzen, Combo bleibt für Anzeige
-        CurrentComboState = ComboState.Empty;
-        FireEvent(OnComboStateChanged, _currentCombo, CurrentComboState);
+        string searchSequence = caseSensitive ? sequence : sequence.ToUpper();
+        
+        // Check if any spell starts with this sequence
+        return _spellCache.Keys.Any(key => key.StartsWith(searchSequence));
     }
     
-    private bool TryMatchSpell(string letterSequence, List<Card> sourceCards)
-    {
-        string key = caseSensitive ? letterSequence : letterSequence.ToUpper();
-        
-        if (_spellCache.TryGetValue(key, out SpellAsset spell))
-        {
-            ExecuteSpell(spell, sourceCards, letterSequence);
-            return true;
-        }
-        
-        return false;
-    }
-    
-    private List<SpellAsset> FindPartialMatches(string letterSequence)
+    private List<SpellAsset> FindAllPartialMatches(string sequence)
     {
         var matches = new List<SpellAsset>();
-        string searchSequence = caseSensitive ? letterSequence : letterSequence.ToUpper();
+        string searchSequence = caseSensitive ? sequence : sequence.ToUpper();
         
         foreach (var kvp in _spellCache)
         {
@@ -328,314 +382,74 @@ public class SpellcastManager : SingletonBehaviour<SpellcastManager>, IGameManag
         return matches;
     }
     
-    private void ExecuteSpell(SpellAsset spell, List<Card> sourceCards, string usedLetters)
+    private IEnumerator DelayedComboClear(float delay)
     {
-        if (spell?.IsValid != true)
-        {
-            Debug.LogError($"[SpellcastManager] Invalid spell: {spell?.SpellName ?? "null"}");
-            return;
-        }
-        
-        Debug.Log($"[SpellcastManager] Casting '{spell.SpellName}' with sequence: {usedLetters}");
-        
-        // Events in korrekter Reihenfolge für UI
-        FireEvent(OnSpellFound, spell, usedLetters);
-        FireEvent(OnSpellCast, spell, sourceCards);
-        
-        ExecuteSpellEffects(spell);
-        
-        if (_cardManager != null)
-        {
-            _cardManager.ClearSelection();
-        }
-    }
-    
-    private void ExecuteSpellEffects(SpellAsset spell)
-    {
-        foreach (var effect in spell.Effects)
-        {
-            if (effect != null)
-            {
-                TriggerSpellEffect(effect);
-            }
-        }
-    }
-    
-    public void TriggerSpellEffect(SpellEffect effect)
-    {
-        FireEvent(OnSpellEffectTriggered, effect);
-        
-        if (_combatManager == null)
-        {
-            Debug.LogWarning("[SpellcastManager] CombatManager not available for effect execution");
-            return;
-        }
-        
-        switch (effect.effectType)
-        {
-            case SpellEffectType.Damage:
-                ApplyDamageEffect(effect);
-                break;
-            case SpellEffectType.Heal:
-                ApplyHealEffect(effect);
-                break;
-            case SpellEffectType.Buff:
-                ApplyBuffEffect(effect);
-                break;
-            case SpellEffectType.Debuff:
-                ApplyDebuffEffect(effect);
-                break;
-            default:
-                Debug.Log($"[SpellcastManager] Custom effect: {effect.effectName}");
-                break;
-        }
-    }
-    
-    private void ApplyDamageEffect(SpellEffect effect)
-    {
-        // Auto-target falls keine Targets gesetzt sind
-        if (_combatManager?.CurrentTargets?.Count == 0)
-        {
-            AutoTargetFirstEnemy();
-        }
-    
-        if (_combatManager?.CurrentTargets?.Count > 0)
-        {
-            _combatManager.DealDamageToTargets(Mathf.RoundToInt(effect.value));
-            Debug.Log($"[SpellcastManager] Applied {effect.value} damage to {_combatManager.CurrentTargets.Count} target(s)");
-        }
-        else
-        {
-            Debug.LogWarning("[SpellcastManager] No enemies available for damage spell");
-        }
-    }
-
-    private void ApplyDebuffEffect(SpellEffect effect)
-    {
-        if (_combatManager != null)
-        {
-            foreach (var target in _combatManager.CurrentTargets)
-            {
-                if (target != null && target.IsAlive)
-                {
-                    Debug.Log($"[SpellcastManager] Applied debuff {effect.effectName} to {target.EntityName}");
-                }
-            }
-        }
-    }
-    
-    private void ApplyHealEffect(SpellEffect effect)
-    {
-        _combatManager.ModifyLife(Mathf.RoundToInt(effect.value));
-        Debug.Log($"[SpellcastManager] Healed player for {effect.value}");
-    }
-    
-    private void ApplyBuffEffect(SpellEffect effect)
-    {
-        if (effect.effectName.ToLower().Contains("creativity"))
-        {
-            _combatManager.ModifyCreativity(Mathf.RoundToInt(effect.value));
-        }
-        
-        Debug.Log($"[SpellcastManager] Applied buff: {effect.effectName}");
-    }
-    
-    // ÜBERARBEITETE ClearCombo Methode
-    public void ClearCombo()
-    {
-        if (!string.IsNullOrEmpty(_currentCombo))
-        {
-            string oldCombo = _currentCombo;
-            _currentCombo = "";
-            CurrentComboState = ComboState.Empty;
-            
-            // Events feuern
-            FireEvent(OnComboCleared);
-            FireEvent(OnComboUpdated, _currentCombo);
-            FireEvent(OnComboStateChanged, _currentCombo, CurrentComboState);
-            
-            Debug.Log($"[SpellcastManager] Combo cleared from: {oldCombo}");
-        }
-    }
-    
-    // NEUE Methode für manuelles Combo-Reset (z.B. durch Button)
-    public void ResetComboDisplay()
-    {
+        yield return new WaitForSeconds(delay);
         ClearCombo();
-        LastPlayedSequence = "";
     }
     
-    public bool HasSpell(string letterCode)
+    // UI Support Methods
+    public void DrawCard()
     {
-        string key = caseSensitive ? letterCode : letterCode.ToUpper();
-        return _spellCache.ContainsKey(key);
-    }
-    
-    public SpellAsset FindSpell(string letterCode)
-    {
-        string key = caseSensitive ? letterCode : letterCode.ToUpper();
-        return _spellCache.TryGetValue(key, out SpellAsset spell) ? spell : null;
-    }
-    
-    public bool HasPotentialMatch(string sequence)
-    {
-        if (string.IsNullOrEmpty(sequence)) return false;
+        if (!CanDraw()) return;
         
-        string searchSequence = caseSensitive ? sequence : sequence.ToUpper();
-        
-        foreach (var key in _spellCache.Keys)
+        var drawnCard = DeckManager.Instance.DrawCard();
+        if (drawnCard != null)
         {
-            if (key.StartsWith(searchSequence) || searchSequence.Contains(key))
-                return true;
+            CardManager.Instance.SpawnCard(drawnCard, null, true);
         }
-        
-        return false;
     }
     
-    private void AutoTargetFirstEnemy()
+    public void ClearSelection()
     {
-        if (EnemyManager.HasInstance && _combatManager != null)
+        if (CardManager.HasInstance)
         {
-            var firstEnemy = EnemyManager.Instance.AliveEnemies.FirstOrDefault();
-            if (firstEnemy != null)
-            {
-                _combatManager.AddTarget(firstEnemy);
-                Debug.Log($"[SpellcastManager] Auto-targeted: {firstEnemy.EntityName}");
-            }
+            CardManager.Instance.ClearSelection();
         }
     }
     
-    // OPTIMIERT: Bessere Event-Performance mit Error Handling
-    private void FireEvent<T>(System.Action<T> eventAction, T parameter)
+    private bool CanDraw()
     {
-        try
-        {
-            eventAction?.Invoke(parameter);
-        }
-        catch (System.Exception e)
-        {
-            Debug.LogError($"[SpellcastManager] Event error: {e.Message}");
-        }
+        return CardManager.HasInstance && !CardManager.Instance.IsHandFull && 
+               DeckManager.HasInstance && !DeckManager.Instance.IsDeckEmpty;
     }
     
-    private void FireEvent<T1, T2>(System.Action<T1, T2> eventAction, T1 param1, T2 param2)
-    {
-        try
-        {
-            eventAction?.Invoke(param1, param2);
-        }
-        catch (System.Exception e)
-        {
-            Debug.LogError($"[SpellcastManager] Event error: {e.Message}");
-        }
-    }
-    
-    private void FireEvent(System.Action eventAction)
-    {
-        try
-        {
-            eventAction?.Invoke();
-        }
-        catch (System.Exception e)
-        {
-            Debug.LogError($"[SpellcastManager] Event error: {e.Message}");
-        }
-    }
-    
-    // Public Check Methods for Drop Areas
-    public bool CanPlayCards(List<Card> cards = null)
-    {
-        // Use provided cards or current selection
-        var cardsToCheck = cards ?? (_cardManager?.SelectedCards ?? new List<Card>());
-        
-        if (cardsToCheck.Count == 0)
-            return false;
-            
-        // Check if it's player's turn
-        if (_combatManager != null && !_combatManager.IsPlayerTurn)
-            return false;
-            
-        // Check if we're in combat
-        if (_combatManager != null && !_combatManager.IsInCombat)
-            return false;
-            
-        return true;
-    }
-    
-    public bool CanDiscardCard(Card card = null)
-    {
-        // Check if we have a card to discard
-        if (card == null && (_cardManager?.SelectedCards?.Count ?? 0) == 0)
-            return false;
-            
-        // Check if it's player's turn
-        if (_combatManager != null && !_combatManager.IsPlayerTurn)
-            return false;
-            
-        // Check if we have enough creativity
-        if (_combatManager != null && !_combatManager.CanSpendCreativity(1))
-            return false;
-            
-        // Check if deck has cards to draw
-        if (_deckManager != null && _deckManager.GetTotalAvailableCards() == 0)
-            return false;
-            
-        return true;
-    }
-    
-    // Static helper methods for easy access
+    // Drop area support
     public static bool CheckCanPlayCards(List<Card> cards = null)
     {
-        return HasInstance && Instance.CanPlayCards(cards);
+        if (!HasInstance || !CombatManager.HasInstance) return false;
+        
+        var cardsToCheck = cards ?? CardManager.Instance?.SelectedCards ?? new List<Card>();
+        
+        return cardsToCheck.Count > 0 && 
+               CombatManager.Instance.IsInCombat && 
+               CombatManager.Instance.IsPlayerTurn;
     }
     
     public static bool CheckCanDiscardCard(Card card = null)
     {
-        return HasInstance && Instance.CanDiscardCard(card);
+        if (!HasInstance || !CombatManager.HasInstance || !DeckManager.HasInstance) return false;
+        
+        return CombatManager.Instance.IsPlayerTurn && 
+               CombatManager.Instance.CanSpendCreativity(1) &&
+               DeckManager.Instance.GetTotalAvailableCards() > 0;
     }
-    
+
 #if UNITY_EDITOR
     [ContextMenu("Log Available Spells")]
     public void LogAvailableSpells()
     {
         Debug.Log($"[SpellcastManager] Available Spells ({availableSpells.Count}):");
-        
-        foreach (var spell in availableSpells)
+        foreach (var spell in availableSpells.Where(s => s != null))
         {
-            if (spell != null)
-            {
-                Debug.Log($"  - {spell.SpellName}: '{spell.LetterCode}' ({spell.Type}, {spell.Effects.Count} effects)");
-            }
+            Debug.Log($"  - {spell.SpellName}: '{spell.LetterCode}'");
         }
     }
     
-    [ContextMenu("Clear Combo")]
-    public void DebugClearCombo()
+    [ContextMenu("Cast Current Combo")]
+    public void DebugCastCombo()
     {
-        ClearCombo();
-    }
-    
-    [ContextMenu("Reset Combo Display")]
-    public void DebugResetComboDisplay()
-    {
-        ResetComboDisplay();
-    }
-    
-    [ContextMenu("Test Spell Cast")]
-    public void DebugTestSpellCast()
-    {
-        if (_cardManager != null)
-        {
-            var selectedCards = _cardManager.SelectedCards;
-            if (selectedCards.Count > 0)
-            {
-                TryPlayCards(selectedCards);
-            }
-            else
-            {
-                Debug.Log("[SpellcastManager] No cards selected for test cast");
-            }
-        }
+        TryCastCurrentCombo();
     }
 #endif
 }

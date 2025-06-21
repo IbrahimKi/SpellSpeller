@@ -69,14 +69,12 @@ public class CardManager : SingletonBehaviour<CardManager>, IGameManager
     {
         Card.OnCardSelected += HandleCardSelected;
         Card.OnCardDeselected += HandleCardDeselected;
-        Card.OnCardPlayTriggered += HandleCardPlayTriggered;
     }
     
     private void OnDisable()
     {
         Card.OnCardSelected -= HandleCardSelected;
         Card.OnCardDeselected -= HandleCardDeselected;
-        Card.OnCardPlayTriggered -= HandleCardPlayTriggered;
     }
     
     private void InitializePool()
@@ -238,8 +236,8 @@ public class CardManager : SingletonBehaviour<CardManager>, IGameManager
     {
         if (card == null || !_selectedCards.Contains(card)) return;
         
-        if (SpellcastManager.HasInstance)
-            SpellcastManager.Instance.TryPlayCards(_selectedCards);
+        //  if (SpellcastManager.HasInstance)
+        //  SpellcastManager.Instance.TryPlayCards(_selectedCards);
     }
     
     private GameObject GetCardObject()
