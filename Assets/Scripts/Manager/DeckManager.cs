@@ -290,21 +290,6 @@ public class DeckManager : SingletonBehaviour<DeckManager>, IGameManager
     }
 
 // Add this method to add cards to bottom of deck (for played cards)
-    public void AddCardToBottom(CardData cardData)
-    {
-        if (cardData == null) return;
-    
-        // Convert to list, add at end, rebuild queue
-        var deckList = _deck.ToList();
-        deckList.Add(cardData);
-    
-        _deck.Clear();
-        foreach (var card in deckList)
-            _deck.Enqueue(card);
-    
-        OnDeckSizeChanged?.Invoke(DeckSize);
-        LogDebug($"[DeckManager] Added {cardData.cardName} to bottom of deck");
-    }
     
     public void ForceInitialization()
     {
@@ -344,5 +329,20 @@ public class DeckManager : SingletonBehaviour<DeckManager>, IGameManager
     public List<CardData> GetDiscardPileContents()
     {
         return new List<CardData>(_discardPile);
+    }
+    public void AddCardToBottom(CardData cardData)
+    {
+        if (cardData == null) return;
+
+        // Convert to list, add at end, rebuild queue
+        var deckList = _deck.ToList();
+        deckList.Add(cardData);
+
+        _deck.Clear();
+        foreach (var card in deckList)
+            _deck.Enqueue(card);
+
+        OnDeckSizeChanged?.Invoke(DeckSize);
+        LogDebug($"[DeckManager] Added {cardData.cardName} to bottom of deck");
     }
 }

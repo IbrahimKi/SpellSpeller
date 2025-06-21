@@ -2,6 +2,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 using UnityEngine.EventSystems;
+using System.Collections.Generic;
 
 public enum CardState
 {
@@ -106,10 +107,42 @@ public class Card : MonoBehaviour, IPointerClickHandler, IPointerEnterHandler, I
     
     public void OnPointerClick(PointerEventData eventData)
     {
-        if (!isInteractable || eventData.button != PointerEventData.InputButton.Left) 
-            return;
+        if (!isInteractable) return;
         
-        ToggleSelection();
+        // Check for double click
+        if (eventData.clickCount == 2 && eventData.button == PointerEventData.InputButton.Left)
+        {
+            // Double click = instant play
+            if (!isSelected) Select();
+            
+            if (SpellcastManager.HasInstance && CardManager.HasInstance)
+            {
+                var cardList = new List<Card> { this };
+                SpellcastManager.Instance.ProcessCardPlay(cardList);
+            }
+            return;
+        }
+        
+        // Check for CTRL+Click
+        if (eventData.button == PointerEventData.InputButton.Left && 
+            (Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl)))
+        {
+            // CTRL+Click = instant play
+            if (!isSelected) Select();
+            
+            if (SpellcastManager.HasInstance && CardManager.HasInstance)
+            {
+                var cardList = new List<Card> { this };
+                SpellcastManager.Instance.ProcessCardPlay(cardList);
+            }
+            return;
+        }
+        
+        // Normal click = toggle selection
+        if (eventData.button == PointerEventData.InputButton.Left)
+        {
+            ToggleSelection();
+        }
     }
     
     public void OnPointerEnter(PointerEventData eventData)

@@ -243,9 +243,9 @@ RectTransform:
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
+  - {fileID: 8062157150955652142}
   - {fileID: 8061170319694174372}
   - {fileID: 9183312033878339392}
-  - {fileID: 8062157150955652142}
   m_Father: {fileID: 9134740343749226285}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
@@ -287,15 +287,17 @@ MonoBehaviour:
   playButton: {fileID: 465878426382701876}
   clearButton: {fileID: 3177224240062393604}
   drawButton: {fileID: 4019691440242680710}
-  discardButton: {fileID: 2940027433462443176}
+  castComboButton: {fileID: 0}
   endTurnButton: {fileID: 1775706576368608604}
   turnText: {fileID: 5546441992038875495}
   turnPhaseText: {fileID: 0}
-  showPercentages: 1
   healthLowColor: {r: 1, g: 0, b: 0, a: 1}
   healthNormalColor: {r: 1, g: 1, b: 1, a: 1}
   healthLowThreshold: 0.25
-  discardCost: 1
+  comboEmptyColor: {r: 0.5, g: 0.5, b: 0.5, a: 1}
+  comboBuildingColor: {r: 1, g: 0.92156863, b: 0.015686275, a: 1}
+  comboReadyColor: {r: 0, g: 1, b: 0, a: 1}
+  comboInvalidColor: {r: 1, g: 0, b: 0, a: 1}
 --- !u!1 &926533629280130320
 GameObject:
   m_ObjectHideFlags: 0
@@ -653,6 +655,7 @@ GameObject:
   m_Component:
   - component: {fileID: 8061170319694174372}
   - component: {fileID: 9110910959325880325}
+  - component: {fileID: 231760370437563110}
   m_Layer: 5
   m_Name: HandContainer
   m_TagString: Untagged
@@ -692,35 +695,49 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   cardSpacing: 120
-  handScaleMultiplier: 0.75
+  handScale: 1
+  cardPreferredSize: {x: 120, y: 180}
   enableDynamicScaling: 0
-  minScaleReduction: 0.8
-  maxCardsForFullScale: 5
-  animationDuration: 0.05
-  animationCurve:
-    serializedVersion: 2
-    m_Curve:
-    - serializedVersion: 3
-      time: 0
-      value: 0
-      inSlope: 0
-      outSlope: 0
-      tangentMode: 0
-      weightedMode: 0
-      inWeight: 0
-      outWeight: 0
-    - serializedVersion: 3
-      time: 1
-      value: 1
-      inSlope: 0
-      outSlope: 0
-      tangentMode: 0
-      weightedMode: 0
-      inWeight: 0
-      outWeight: 0
-    m_PreInfinity: 2
-    m_PostInfinity: 2
-    m_RotationOrder: 4
+  maxHandWidth: 800
+  enableHandScaling: 0
+  handScaleMultiplier: 0.75
+  childForceExpandWidth: 0
+  childForceExpandHeight: 0
+  childControlWidth: 1
+  childControlHeight: 1
+  childScaleWidth: 0
+  childScaleHeight: 0
+  childAlignment: 4
+  paddingLeft: 10
+  paddingRight: 10
+  paddingTop: 10
+  paddingBottom: 10
+--- !u!114 &231760370437563110
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1304337436432252826}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 30649d3a9faa99c48a7b1166b86bf2a0, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  m_Padding:
+    m_Left: 0
+    m_Right: 0
+    m_Top: 0
+    m_Bottom: 0
+  m_ChildAlignment: 0
+  m_Spacing: 0
+  m_ChildForceExpandWidth: 1
+  m_ChildForceExpandHeight: 1
+  m_ChildControlWidth: 0
+  m_ChildControlHeight: 0
+  m_ChildScaleWidth: 0
+  m_ChildScaleHeight: 0
+  m_ReverseArrangement: 0
 --- !u!1 &1582321506213330385
 GameObject:
   m_ObjectHideFlags: 0
@@ -1520,12 +1537,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3e44fd0ce7336224ea5722e020942350, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  areaType: 0
-  highlightImage: {fileID: 0}
   normalColor: {r: 1, g: 1, b: 1, a: 0.1}
-  hoverColor: {r: 0, g: 0.5081763, b: 1, a: 0.3}
-  validDropColor: {r: 1, g: 0.11058705, b: 0, a: 0.60784316}
-  invalidDropColor: {r: 0, g: 0, b: 0, a: 0.7176471}
+  highlightColor: {r: 0, g: 1, b: 0, a: 0.3}
+  invalidColor: {r: 1, g: 0, b: 0, a: 0.3}
 --- !u!1 &3181308360914361374
 GameObject:
   m_ObjectHideFlags: 0
@@ -1772,12 +1786,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3e44fd0ce7336224ea5722e020942350, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  areaType: 1
-  highlightImage: {fileID: 0}
   normalColor: {r: 1, g: 1, b: 1, a: 0.1}
-  hoverColor: {r: 0, g: 0.66962576, b: 1, a: 0.3}
-  validDropColor: {r: 0, g: 1, b: 0.93630385, a: 0.6313726}
-  invalidDropColor: {r: 0, g: 0, b: 0, a: 0.78431374}
+  highlightColor: {r: 0, g: 1, b: 0, a: 0.3}
+  invalidColor: {r: 1, g: 0, b: 0, a: 0.3}
 --- !u!1 &4082564174892169672
 GameObject:
   m_ObjectHideFlags: 0
@@ -3717,11 +3728,7 @@ MonoBehaviour:
   playButton: {fileID: 465878426382701876}
   clearButton: {fileID: 3177224240062393604}
   drawButton: {fileID: 4019691440242680710}
-  maxHistoryEntries: 5
-  cardsPerDraw: 1
-  autoUpdateLayout: 1
   initialHandSize: 5
-  managerTimeout: 5
 --- !u!1 &8821163011549396463
 GameObject:
   m_ObjectHideFlags: 0

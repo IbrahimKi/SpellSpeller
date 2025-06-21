@@ -20,7 +20,7 @@ public class GameUIHandler : MonoBehaviour
     [SerializeField] private Button playButton;
     [SerializeField] private Button clearButton;
     [SerializeField] private Button drawButton;
-    [SerializeField] private Button castComboButton; // NEUER Button für Combo-Cast
+    [SerializeField] private Button castComboButton;
     
     [Header("Combat UI")]
     [SerializeField] private Button endTurnButton;
@@ -38,6 +38,8 @@ public class GameUIHandler : MonoBehaviour
     [SerializeField] private Color comboReadyColor = Color.green;
     [SerializeField] private Color comboInvalidColor = Color.red;
     
+    private bool _managersReady = false;
+    
     private void Start()
     {
         StartCoroutine(WaitForManagersAndSetup());
@@ -50,8 +52,48 @@ public class GameUIHandler : MonoBehaviour
             yield return new WaitForSeconds(0.1f);
         }
         
+        _managersReady = true;
         SetupEventListeners();
+        SetupButtons();
         RefreshAllDisplays();
+    }
+    
+    private void SetupButtons()
+    {
+        // Combat buttons
+        if (endTurnButton != null)
+        {
+            endTurnButton.onClick.RemoveAllListeners();
+            endTurnButton.onClick.AddListener(EndTurn);
+        }
+        
+        // Card action buttons - alle über SpellcastManager
+        if (playButton != null)
+        {
+            playButton.onClick.RemoveAllListeners();
+            playButton.onClick.AddListener(PlaySelectedCards);
+        }
+        
+        if (clearButton != null)
+        {
+            clearButton.onClick.RemoveAllListeners();
+            clearButton.onClick.AddListener(ClearSelection);
+        }
+        
+        if (drawButton != null)
+        {
+            drawButton.onClick.RemoveAllListeners();
+            drawButton.onClick.AddListener(DrawCard);
+        }
+        
+        if (castComboButton != null)
+        {
+            castComboButton.onClick.RemoveAllListeners();
+            castComboButton.onClick.AddListener(CastCombo);
+        }
+        
+        // Initial button state
+        UpdateAllButtons();
     }
     
     private void SetupEventListeners()
@@ -70,6 +112,7 @@ public class GameUIHandler : MonoBehaviour
         if (CardManager.HasInstance)
         {
             CardManager.OnSelectionChanged += OnCardSelectionChanged;
+            CardManager.OnHandUpdated += OnHandUpdated;
         }
         
         // Spellcast Events
@@ -79,47 +122,6 @@ public class GameUIHandler : MonoBehaviour
             SpellcastManager.OnSpellFound += OnSpellFound;
             SpellcastManager.OnSpellNotFound += OnSpellNotFound;
             SpellcastManager.OnComboCleared += OnComboCleared;
-        }
-        
-        SetupButtonListeners();
-    }
-    
-    private void SetupButtonListeners()
-    {
-        // Combat buttons
-        if (endTurnButton != null)
-        {
-            endTurnButton.onClick.RemoveAllListeners();
-            endTurnButton.onClick.AddListener(() => {
-                if (CombatManager.HasInstance && CombatManager.Instance.CanEndTurn)
-                    CombatManager.Instance.EndPlayerTurn();
-            });
-        }
-        
-        // Card buttons
-        if (playButton != null && SpellcastManager.HasInstance)
-        {
-            playButton.onClick.RemoveAllListeners();
-            playButton.onClick.AddListener(() => SpellcastManager.Instance.PlaySelectedCards());
-        }
-        
-        if (clearButton != null && SpellcastManager.HasInstance)
-        {
-            clearButton.onClick.RemoveAllListeners();
-            clearButton.onClick.AddListener(() => SpellcastManager.Instance.ClearSelection());
-        }
-        
-        if (drawButton != null && SpellcastManager.HasInstance)
-        {
-            drawButton.onClick.RemoveAllListeners();
-            drawButton.onClick.AddListener(() => SpellcastManager.Instance.DrawCard());
-        }
-        
-        // NEUER Cast Combo Button
-        if (castComboButton != null && SpellcastManager.HasInstance)
-        {
-            castComboButton.onClick.RemoveAllListeners();
-            castComboButton.onClick.AddListener(() => SpellcastManager.Instance.TryCastCurrentCombo());
         }
     }
     
@@ -138,6 +140,7 @@ public class GameUIHandler : MonoBehaviour
         if (CardManager.HasInstance)
         {
             CardManager.OnSelectionChanged -= OnCardSelectionChanged;
+            CardManager.OnHandUpdated -= OnHandUpdated;
         }
         
         if (SpellcastManager.HasInstance)
@@ -149,7 +152,91 @@ public class GameUIHandler : MonoBehaviour
         }
     }
     
-    // Resource Displays
+    // ===== BUTTON ACTIONS =====
+    private void PlaySelectedCards()
+    {
+        if (!_managersReady || !SpellcastManager.HasInstance) return;
+        SpellcastManager.Instance.PlaySelectedCards();
+    }
+    
+    private void ClearSelection()
+    {
+        if (!_managersReady || !SpellcastManager.HasInstance) return;
+        SpellcastManager.Instance.ClearSelection();
+    }
+    
+    private void DrawCard()
+    {
+        if (!_managersReady || !SpellcastManager.HasInstance) return;
+        
+        Debug.Log("[GameUIHandler] Draw button clicked");
+        
+        // Zusätzliche Checks für Debug
+        if (!CanDraw())
+        {
+            Debug.LogWarning("[GameUIHandler] Cannot draw - conditions not met");
+            return;
+        }
+        
+        SpellcastManager.Instance.DrawCard();
+    }
+    
+    private void CastCombo()
+    {
+        if (!_managersReady || !SpellcastManager.HasInstance) return;
+        SpellcastManager.Instance.TryCastCurrentCombo();
+    }
+    
+    private void EndTurn()
+    {
+        if (!_managersReady || !CombatManager.HasInstance) return;
+        if (CombatManager.Instance.CanEndTurn)
+            CombatManager.Instance.EndPlayerTurn();
+    }
+    
+    // ===== DRAW LOGIC =====
+    private bool CanDraw()
+    {
+        if (!_managersReady) 
+        {
+            Debug.Log("[GameUIHandler] Managers not ready");
+            return false;
+        }
+        
+        if (!CombatManager.HasInstance || !CombatManager.Instance.IsPlayerTurn)
+        {
+            Debug.Log("[GameUIHandler] Not player turn");
+            return false;
+        }
+        
+        if (!CardManager.HasInstance)
+        {
+            Debug.Log("[GameUIHandler] CardManager missing");
+            return false;
+        }
+        
+        if (CardManager.Instance.IsHandFull)
+        {
+            Debug.Log("[GameUIHandler] Hand is full");
+            return false;
+        }
+        
+        if (!DeckManager.HasInstance)
+        {
+            Debug.Log("[GameUIHandler] DeckManager missing");
+            return false;
+        }
+        
+        if (DeckManager.Instance.IsDeckEmpty)
+        {
+            Debug.Log("[GameUIHandler] Deck is empty");
+            return false;
+        }
+        
+        return true;
+    }
+    
+    // ===== RESOURCE DISPLAYS =====
     private void UpdateLifeDisplay(Resource life)
     {
         if (lifeText != null)
@@ -214,7 +301,7 @@ public class GameUIHandler : MonoBehaviour
         UpdateAllButtons();
     }
     
-    // Combo Display
+    // ===== COMBO DISPLAY =====
     private void UpdateComboDisplay(string combo, ComboState state)
     {
         if (comboText == null) return;
@@ -253,14 +340,18 @@ public class GameUIHandler : MonoBehaviour
         comboText.text = displayText;
         comboText.color = displayColor;
         
-        // Update cast button
         UpdateCastComboButton(state == ComboState.Ready);
     }
     
-    // Card Selection
+    // ===== CARD SELECTION =====
     private void OnCardSelectionChanged(List<Card> selectedCards)
     {
         UpdateCardPlayUI(selectedCards);
+        UpdateAllButtons();
+    }
+    
+    private void OnHandUpdated(List<Card> handCards)
+    {
         UpdateAllButtons();
     }
     
@@ -279,18 +370,23 @@ public class GameUIHandler : MonoBehaviour
         }
     }
     
-    // Button Updates
+    // ===== BUTTON UPDATES =====
     private void UpdateAllButtons()
     {
+        if (!_managersReady) return;
+        
         bool isPlayerTurn = CombatManager.HasInstance && CombatManager.Instance.IsPlayerTurn;
         bool hasSelectedCards = CardManager.HasInstance && CardManager.Instance.SelectedCards?.Count > 0;
         
+        // Play button
         if (playButton != null) 
             playButton.interactable = hasSelectedCards && isPlayerTurn;
             
+        // Clear button
         if (clearButton != null) 
             clearButton.interactable = hasSelectedCards;
             
+        // Draw and end turn buttons
         UpdateDrawButton();
         UpdateEndTurnButton();
     }
@@ -311,14 +407,27 @@ public class GameUIHandler : MonoBehaviour
     
     private void UpdateDrawButton()
     {
-        if (drawButton != null)
+        if (drawButton == null) return;
+        
+        bool canDraw = CanDraw();
+        drawButton.interactable = canDraw;
+        
+        // Debug info im Editor
+        #if UNITY_EDITOR
+        var buttonText = drawButton.GetComponentInChildren<TextMeshProUGUI>();
+        if (buttonText != null && !canDraw)
         {
-            bool canDraw = CardManager.HasInstance && !CardManager.Instance.IsHandFull &&
-                          DeckManager.HasInstance && !DeckManager.Instance.IsDeckEmpty;
-            bool isPlayerTurn = CombatManager.HasInstance && CombatManager.Instance.IsPlayerTurn;
-            
-            drawButton.interactable = canDraw && isPlayerTurn;
+            if (!_managersReady) buttonText.text = "Draw (Wait)";
+            else if (CardManager.HasInstance && CardManager.Instance.IsHandFull) buttonText.text = "Draw (Full)";
+            else if (DeckManager.HasInstance && DeckManager.Instance.IsDeckEmpty) buttonText.text = "Draw (Empty)";
+            else if (!CombatManager.HasInstance || !CombatManager.Instance.IsPlayerTurn) buttonText.text = "Draw (Turn)";
+            else buttonText.text = "Draw (?)";
         }
+        else if (buttonText != null)
+        {
+            buttonText.text = "Draw Card";
+        }
+        #endif
     }
     
     private void UpdateEndTurnButton()
@@ -335,7 +444,7 @@ public class GameUIHandler : MonoBehaviour
         }
     }
     
-    // Event Handlers
+    // ===== EVENT HANDLERS =====
     private void OnSpellFound(SpellAsset spell, string usedLetters)
     {
         if (statusText != null)
@@ -367,6 +476,8 @@ public class GameUIHandler : MonoBehaviour
     
     private void RefreshAllDisplays()
     {
+        if (!_managersReady) return;
+        
         if (CombatManager.HasInstance)
         {
             var combat = CombatManager.Instance;
