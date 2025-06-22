@@ -10,8 +10,8 @@ public class HandLayoutManager : SingletonBehaviour<HandLayoutManager>, IGameMan
 {
     [Header("Card Settings")]
     [SerializeField] private float cardSpacing = 20f;
-    [SerializeField] private float handScale = 1f; // Geändert zu 1f für normale Größe
-    [SerializeField] private Vector2 cardPreferredSize = new Vector2(120f, 180f); // Explizite Kartengröße
+    [SerializeField] private float handScale = 1f;
+    [SerializeField] private Vector2 cardPreferredSize = new Vector2(120f, 180f);
     
     [Header("Layout Optimization")]
     [SerializeField] private bool enableDynamicScaling = false;
@@ -22,7 +22,7 @@ public class HandLayoutManager : SingletonBehaviour<HandLayoutManager>, IGameMan
     [Header("Layout Group Settings")]
     [SerializeField] private bool childForceExpandWidth = false;
     [SerializeField] private bool childForceExpandHeight = false;
-    [SerializeField] private bool childControlWidth = true; // Wichtig für Kartengröße-Kontrolle
+    [SerializeField] private bool childControlWidth = true;
     [SerializeField] private bool childControlHeight = true;
     [SerializeField] private bool childScaleWidth = false;
     [SerializeField] private bool childScaleHeight = false;
@@ -37,16 +37,14 @@ public class HandLayoutManager : SingletonBehaviour<HandLayoutManager>, IGameMan
     // Components
     private HorizontalLayoutGroup _layoutGroup;
     private RectTransform _rectTransform;
-    private ContentSizeFitter _contentSizeFitter; // Für automatische Größenanpassung
+    private ContentSizeFitter _contentSizeFitter;
     
-    // Optimization
-    private bool _layoutUpdatePending = false;
-    private float _lastLayoutUpdate = 0f;
-    private const float LAYOUT_UPDATE_THROTTLE = 0.016f; // ~60fps
+    // PERFORMANCE FIX: Batch Layout Updates statt redundante Updates
+    private bool _layoutDirty = false;
+    private List<Card> _trackedCards = new List<Card>();
     
     // State
     private bool _isReady = false;
-    private List<Card> _trackedCards = new List<Card>();
     
     public bool IsReady => _isReady;
     
@@ -68,7 +66,6 @@ public class HandLayoutManager : SingletonBehaviour<HandLayoutManager>, IGameMan
             Debug.Log("[HandLayoutManager] Added HorizontalLayoutGroup component");
         }
         
-        // ContentSizeFitter für automatische Container-Größe
         _contentSizeFitter = GetComponent<ContentSizeFitter>();
         if (_contentSizeFitter == null)
         {
@@ -82,11 +79,8 @@ public class HandLayoutManager : SingletonBehaviour<HandLayoutManager>, IGameMan
     {
         if (_layoutGroup == null) return;
         
-        // KRITISCH: Layout Group Konfiguration für optimale Performance
         _layoutGroup.spacing = cardSpacing;
         _layoutGroup.padding = new RectOffset(paddingLeft, paddingRight, paddingTop, paddingBottom);
-        
-        // Child Control Settings - WICHTIG für Kartengröße
         _layoutGroup.childForceExpandWidth = childForceExpandWidth;
         _layoutGroup.childForceExpandHeight = childForceExpandHeight;
         _layoutGroup.childControlWidth = childControlWidth;
@@ -98,9 +92,18 @@ public class HandLayoutManager : SingletonBehaviour<HandLayoutManager>, IGameMan
         Debug.Log("[HandLayoutManager] HorizontalLayoutGroup configured optimally");
     }
     
+    // PERFORMANCE FIX: LateUpdate statt Coroutine für Layout-Updates
+    private void LateUpdate()
+    {
+        if (_layoutDirty)
+        {
+            PerformLayoutUpdate();
+            _layoutDirty = false;
+        }
+    }
+    
     private void OnEnable()
     {
-        // Subscribe to CardManager events with proper error handling
         SubscribeToCardManager();
     }
     
@@ -115,7 +118,6 @@ public class HandLayoutManager : SingletonBehaviour<HandLayoutManager>, IGameMan
         {
             CardManager.OnHandUpdated += OnHandUpdated;
             CardManager.OnCardSpawned += OnCardSpawned;
-            CardManager.OnCardDestroyed += OnCardDestroyed;
         }
         else
         {
@@ -129,7 +131,6 @@ public class HandLayoutManager : SingletonBehaviour<HandLayoutManager>, IGameMan
         {
             CardManager.OnHandUpdated -= OnHandUpdated;
             CardManager.OnCardSpawned -= OnCardSpawned;
-            CardManager.OnCardDestroyed -= OnCardDestroyed;
         }
         CardManager.OnCardManagerInitialized -= DelayedSubscribe;
     }
@@ -139,11 +140,11 @@ public class HandLayoutManager : SingletonBehaviour<HandLayoutManager>, IGameMan
         SubscribeToCardManager();
     }
     
-    // EVENT HANDLERS - Optimiert für Performance
+    // EVENT HANDLERS - OPTIMIERT: Nur dirty flag setzen
     private void OnHandUpdated(List<Card> handCards)
     {
         UpdateTrackedCards(handCards);
-        RequestLayoutUpdate();
+        MarkLayoutDirty();
     }
     
     private void OnCardSpawned(Card card)
@@ -151,60 +152,28 @@ public class HandLayoutManager : SingletonBehaviour<HandLayoutManager>, IGameMan
         if (card != null && card.transform.parent == transform)
         {
             SetupNewCard(card);
-            RequestLayoutUpdate();
+            MarkLayoutDirty();
         }
     }
     
-    private void OnCardDestroyed(Card card)
-    {
-        _trackedCards.Remove(card);
-        RequestLayoutUpdate();
-    }
-    
-    // OPTIMIZED LAYOUT SYSTEM
-    private void RequestLayoutUpdate()
-    {
-        if (_layoutUpdatePending) return;
-        
-        _layoutUpdatePending = true;
-        StartCoroutine(DelayedLayoutUpdate());
-    }
-    
-    private IEnumerator DelayedLayoutUpdate()
-    {
-        // Throttle updates für bessere Performance
-        float timeSinceLastUpdate = Time.unscaledTime - _lastLayoutUpdate;
-        if (timeSinceLastUpdate < LAYOUT_UPDATE_THROTTLE)
-        {
-            yield return new WaitForSecondsRealtime(LAYOUT_UPDATE_THROTTLE - timeSinceLastUpdate);
-        }
-        
-        PerformLayoutUpdate();
-        
-        _layoutUpdatePending = false;
-        _lastLayoutUpdate = Time.unscaledTime;
-    }
+    // PERFORMANCE FIX: Dirty Flag Pattern
+    private void MarkLayoutDirty() => _layoutDirty = true;
     
     private void PerformLayoutUpdate()
     {
         if (_layoutGroup == null) return;
         
-        // 1. Update card configurations FIRST
         ConfigureAllCards();
         
-        // 2. Apply dynamic scaling if enabled
         if (enableDynamicScaling)
         {
             ApplyDynamicScaling();
         }
         
-        // 3. Force layout recalculation
         LayoutRebuilder.ForceRebuildLayoutImmediate(_rectTransform);
-        
-        Debug.Log($"[HandLayoutManager] Layout updated - {_trackedCards.Count} cards");
     }
     
-    // CARD CONFIGURATION - Das löst das Größenproblem!
+    // CARD CONFIGURATION - Verbessert ohne LayoutElement Manipulation
     private void SetupNewCard(Card card)
     {
         if (card == null) return;
@@ -212,35 +181,27 @@ public class HandLayoutManager : SingletonBehaviour<HandLayoutManager>, IGameMan
         var rectTransform = card.GetComponent<RectTransform>();
         if (rectTransform == null) return;
         
-        // KRITISCH: Setze explizite Kartengröße
         var layoutElement = card.GetComponent<LayoutElement>();
         if (layoutElement == null)
         {
             layoutElement = card.gameObject.AddComponent<LayoutElement>();
         }
         
-        // LÖSUNG: Explizite Größe statt Scale
         layoutElement.preferredWidth = cardPreferredSize.x * handScale;
         layoutElement.preferredHeight = cardPreferredSize.y * handScale;
         layoutElement.flexibleWidth = 0f;
         layoutElement.flexibleHeight = 0f;
         
-        // WICHTIG: Anchors für UI-Layout
         rectTransform.anchorMin = new Vector2(0.5f, 0.5f);
         rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
         rectTransform.pivot = new Vector2(0.5f, 0.5f);
-        
-        // Reset Position und Scale
         rectTransform.anchoredPosition = Vector2.zero;
-        rectTransform.localScale = Vector3.one; // Keine Scale-Manipulation!
+        rectTransform.localScale = Vector3.one;
         
-        // Track the card
         if (!_trackedCards.Contains(card))
         {
             _trackedCards.Add(card);
         }
-        
-        Debug.Log($"[HandLayoutManager] Card setup: {card.name} - Size: {layoutElement.preferredWidth}x{layoutElement.preferredHeight}");
     }
     
     private void ConfigureAllCards()
@@ -264,22 +225,18 @@ public class HandLayoutManager : SingletonBehaviour<HandLayoutManager>, IGameMan
         }
     }
     
-    // DYNAMIC SCALING - Optional für große Hands
     private void ApplyDynamicScaling()
     {
         if (!enableHandScaling || _trackedCards.Count == 0) return;
         
         float requiredWidth = CalculateRequiredWidth();
-        float containerWidth = _rectTransform.rect.width;
         
         if (requiredWidth > maxHandWidth)
         {
             float scaleMultiplier = maxHandWidth / requiredWidth;
-            scaleMultiplier = Mathf.Max(scaleMultiplier, 0.5f); // Minimum scale
+            scaleMultiplier = Mathf.Max(scaleMultiplier, 0.5f);
             
             ApplyScaleToAllCards(scaleMultiplier * handScaleMultiplier);
-            
-            Debug.Log($"[HandLayoutManager] Applied dynamic scaling: {scaleMultiplier:F2}");
         }
         else
         {
@@ -315,7 +272,7 @@ public class HandLayoutManager : SingletonBehaviour<HandLayoutManager>, IGameMan
     // PUBLIC API
     public void UpdateLayout()
     {
-        RequestLayoutUpdate();
+        MarkLayoutDirty();
     }
     
     public void ForceImmediateLayout()
@@ -329,20 +286,20 @@ public class HandLayoutManager : SingletonBehaviour<HandLayoutManager>, IGameMan
         if (_layoutGroup != null)
         {
             _layoutGroup.spacing = spacing;
-            RequestLayoutUpdate();
+            MarkLayoutDirty();
         }
     }
     
     public void SetHandScale(float scale)
     {
         handScale = Mathf.Max(0.1f, scale);
-        RequestLayoutUpdate();
+        MarkLayoutDirty();
     }
     
     public void SetCardSize(Vector2 size)
     {
         cardPreferredSize = size;
-        RequestLayoutUpdate();
+        MarkLayoutDirty();
     }
     
     public void SetPadding(int left, int right, int top, int bottom)
@@ -355,7 +312,7 @@ public class HandLayoutManager : SingletonBehaviour<HandLayoutManager>, IGameMan
         if (_layoutGroup != null)
         {
             _layoutGroup.padding = new RectOffset(left, right, top, bottom);
-            RequestLayoutUpdate();
+            MarkLayoutDirty();
         }
     }
     
@@ -363,30 +320,7 @@ public class HandLayoutManager : SingletonBehaviour<HandLayoutManager>, IGameMan
     {
         _trackedCards.Remove(card);
     }
-    
-    // PERFORMANCE MONITORING
-    private void Update()
-    {
-        // Occasional validation in editor
-        if (Application.isEditor && Time.frameCount % 60 == 0)
-        {
-            ValidateCardSetup();
-        }
-    }
-    
-    private void ValidateCardSetup()
-    {
-        int childCount = transform.childCount;
-        int trackedCount = _trackedCards.Count;
-        
-        if (childCount != trackedCount)
-        {
-            Debug.LogWarning($"[HandLayoutManager] Mismatch - Children: {childCount}, Tracked: {trackedCount}");
-            // Auto-fix
-            RequestLayoutUpdate();
-        }
-    }
-    
+
 #if UNITY_EDITOR
     [ContextMenu("Force Layout Update")]
     public void DebugForceLayout()
@@ -412,15 +346,6 @@ public class HandLayoutManager : SingletonBehaviour<HandLayoutManager>, IGameMan
         Debug.Log($"  Dynamic Scaling: {enableDynamicScaling}");
         Debug.Log($"  Tracked Cards: {_trackedCards.Count}");
         Debug.Log($"  Child Count: {transform.childCount}");
-        
-        foreach (Transform child in transform)
-        {
-            var layoutElement = child.GetComponent<LayoutElement>();
-            if (layoutElement != null)
-            {
-                Debug.Log($"    {child.name}: {layoutElement.preferredWidth}x{layoutElement.preferredHeight}");
-            }
-        }
     }
     
     private void OnValidate()
@@ -428,10 +353,9 @@ public class HandLayoutManager : SingletonBehaviour<HandLayoutManager>, IGameMan
         if (Application.isPlaying && _layoutGroup != null)
         {
             ConfigureLayoutGroup();
-            RequestLayoutUpdate();
+            MarkLayoutDirty();
         }
         
-        // Clamp values
         handScale = Mathf.Max(0.1f, handScale);
         cardSpacing = Mathf.Max(0f, cardSpacing);
         cardPreferredSize.x = Mathf.Max(50f, cardPreferredSize.x);

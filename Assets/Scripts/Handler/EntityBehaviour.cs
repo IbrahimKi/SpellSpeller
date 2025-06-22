@@ -18,7 +18,9 @@ public class EntityBehaviour : MonoBehaviour, IPointerClickHandler, IPointerEnte
     // Cached components
     private Collider targetCollider;
     private Canvas worldCanvas;
-    private Material[] originalMaterials; // Store originals for cleanup
+    
+    // PERFORMANCE FIX: Use PropertyBlock instead of material instances
+    private MaterialPropertyBlock _propBlock;
     
     // Events
     public static event System.Action<EntityBehaviour> OnEntityTargeted;
@@ -51,35 +53,21 @@ public class EntityBehaviour : MonoBehaviour, IPointerClickHandler, IPointerEnte
         targetCollider = GetComponent<Collider>();
         if (targetCollider == null)
         {
-            // Add default collider if none exists
             var boxCollider = gameObject.AddComponent<BoxCollider>();
             boxCollider.size = Vector3.one * 2f;
             boxCollider.center = Vector3.up;
             targetCollider = boxCollider;
         }
         
-        // Find existing world canvas (don't create one automatically)
         worldCanvas = GetComponentInChildren<Canvas>();
         
-        // Only setup if canvas already exists in prefab
         if (worldCanvas != null && worldCanvas.renderMode == RenderMode.WorldSpace)
         {
             worldCanvas.transform.localScale = Vector3.one * 0.01f;
-            worldCanvas.sortingOrder = 10; // Ensure proper sorting
+            worldCanvas.sortingOrder = 10;
         }
         
-        // Cache renderers
         renderers = GetComponentsInChildren<Renderer>();
-        
-        // Store original materials for cleanup
-        if (renderers.Length > 0)
-        {
-            originalMaterials = new Material[renderers.Length];
-            for (int i = 0; i < renderers.Length; i++)
-            {
-                originalMaterials[i] = renderers[i].sharedMaterial;
-            }
-        }
     }
     
     public void Initialize(EntityAsset asset)
@@ -94,19 +82,17 @@ public class EntityBehaviour : MonoBehaviour, IPointerClickHandler, IPointerEnte
         maxHealth = asset.BaseHealth;
         currentHealth = maxHealth;
         
-        // Apply tint color
+        // PERFORMANCE FIX: Use PropertyBlock for tint color
         if (asset.TintColor != Color.white)
         {
             ApplyTintColor(asset.TintColor);
         }
         
-        // Setup targeting
         if (targetCollider != null)
         {
             targetCollider.enabled = asset.IsTargetable;
         }
         
-        // Register with appropriate manager
         RegisterWithManager();
     }
     
@@ -127,10 +113,6 @@ public class EntityBehaviour : MonoBehaviour, IPointerClickHandler, IPointerEnte
     
     private void OnDestroy()
     {
-        // Clean up instanced materials
-        CleanupMaterials();
-        
-        // Unregister from manager
         switch (Type)
         {
             case EntityType.Enemy:
@@ -182,14 +164,11 @@ public class EntityBehaviour : MonoBehaviour, IPointerClickHandler, IPointerEnte
     
     private void Die()
     {
-        // TODO: Death animation, effects, etc.
         Destroy(gameObject, 0.1f);
     }
     
-    // In EntityBehaviour.cs - BEHALTEN:
     public void TakeDamage(int amount, DamageType damageType = DamageType.Normal)
     {
-        // Future: Apply damage resistances based on type
         Damage(amount);
     }
     
@@ -214,7 +193,6 @@ public class EntityBehaviour : MonoBehaviour, IPointerClickHandler, IPointerEnte
     {
         if (!IsTargetable || !IsAlive) return;
         
-        // Notify the appropriate manager about the click
         switch (Type)
         {
             case EntityType.Enemy:
@@ -248,36 +226,17 @@ public class EntityBehaviour : MonoBehaviour, IPointerClickHandler, IPointerEnte
         OnEntityUnhovered?.Invoke(this);
     }
     
-    // Visual utilities - FIXED: Creates instance materials instead of modifying shared ones
+    // PERFORMANCE FIX: Use PropertyBlock instead of creating material instances
     private void ApplyTintColor(Color color)
     {
+        if (_propBlock == null) _propBlock = new MaterialPropertyBlock();
+        
         for (int i = 0; i < renderers.Length; i++)
         {
             if (renderers[i] != null && renderers[i].sharedMaterial != null)
             {
-                // Create instance material to avoid affecting other objects
-                Material instanceMaterial = new Material(renderers[i].sharedMaterial);
-                instanceMaterial.color = color;
-                renderers[i].material = instanceMaterial;
-            }
-        }
-    }
-    
-    private void CleanupMaterials()
-    {
-        // Destroy instanced materials to prevent memory leaks
-        if (renderers != null)
-        {
-            foreach (var renderer in renderers)
-            {
-                if (renderer != null && renderer.material != null)
-                {
-                    // Only destroy if it's not the original shared material
-                    if (renderer.material != renderer.sharedMaterial)
-                    {
-                        DestroyImmediate(renderer.material);
-                    }
-                }
+                _propBlock.SetColor("_Color", color);
+                renderers[i].SetPropertyBlock(_propBlock);
             }
         }
     }

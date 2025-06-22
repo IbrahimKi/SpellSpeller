@@ -38,6 +38,8 @@ public class GameUIHandler : MonoBehaviour
     [SerializeField] private Color comboReadyColor = Color.green;
     [SerializeField] private Color comboInvalidColor = Color.red;
     
+    // PERFORMANCE FIX: Button Update Throttling
+    private float _lastButtonUpdate = 0f;
     private bool _managersReady = false;
     
     private void Start()
@@ -60,14 +62,12 @@ public class GameUIHandler : MonoBehaviour
     
     private void SetupButtons()
     {
-        // Combat buttons
         if (endTurnButton != null)
         {
             endTurnButton.onClick.RemoveAllListeners();
             endTurnButton.onClick.AddListener(EndTurn);
         }
         
-        // Card action buttons - alle über SpellcastManager
         if (playButton != null)
         {
             playButton.onClick.RemoveAllListeners();
@@ -92,13 +92,11 @@ public class GameUIHandler : MonoBehaviour
             castComboButton.onClick.AddListener(CastCombo);
         }
         
-        // Initial button state
-        UpdateAllButtons();
+        UpdateButtonsThrottled();
     }
     
     private void SetupEventListeners()
     {
-        // Combat Events
         if (CombatManager.HasInstance)
         {
             CombatManager.OnLifeChanged += UpdateLifeDisplay;
@@ -108,14 +106,12 @@ public class GameUIHandler : MonoBehaviour
             CombatManager.OnTurnPhaseChanged += UpdateTurnPhaseDisplay;
         }
         
-        // Card Events
         if (CardManager.HasInstance)
         {
             CardManager.OnSelectionChanged += OnCardSelectionChanged;
             CardManager.OnHandUpdated += OnHandUpdated;
         }
         
-        // Spellcast Events
         if (SpellcastManager.HasInstance)
         {
             SpellcastManager.OnComboStateChanged += UpdateComboDisplay;
@@ -127,7 +123,6 @@ public class GameUIHandler : MonoBehaviour
     
     private void OnDestroy()
     {
-        // Unsubscribe events
         if (CombatManager.HasInstance)
         {
             CombatManager.OnLifeChanged -= UpdateLifeDisplay;
@@ -169,9 +164,6 @@ public class GameUIHandler : MonoBehaviour
     {
         if (!_managersReady || !SpellcastManager.HasInstance) return;
         
-        Debug.Log("[GameUIHandler] Draw button clicked");
-        
-        // Zusätzliche Checks für Debug
         if (!CanDraw())
         {
             Debug.LogWarning("[GameUIHandler] Cannot draw - conditions not met");
@@ -194,44 +186,13 @@ public class GameUIHandler : MonoBehaviour
             CombatManager.Instance.EndPlayerTurn();
     }
     
-    // ===== DRAW LOGIC =====
     private bool CanDraw()
     {
-        if (!_managersReady) 
-        {
-            Debug.Log("[GameUIHandler] Managers not ready");
-            return false;
-        }
+        if (!_managersReady) return false;
         
-        if (!CombatManager.HasInstance || !CombatManager.Instance.IsPlayerTurn)
-        {
-            Debug.Log("[GameUIHandler] Not player turn");
-            return false;
-        }
-        
-        if (!CardManager.HasInstance)
-        {
-            Debug.Log("[GameUIHandler] CardManager missing");
-            return false;
-        }
-        
-        if (CardManager.Instance.IsHandFull)
-        {
-            Debug.Log("[GameUIHandler] Hand is full");
-            return false;
-        }
-        
-        if (!DeckManager.HasInstance)
-        {
-            Debug.Log("[GameUIHandler] DeckManager missing");
-            return false;
-        }
-        
-        if (DeckManager.Instance.IsDeckEmpty)
-        {
-            Debug.Log("[GameUIHandler] Deck is empty");
-            return false;
-        }
+        if (!CombatManager.HasInstance || !CombatManager.Instance.IsPlayerTurn) return false;
+        if (!CardManager.HasInstance || CardManager.Instance.IsHandFull) return false;
+        if (!DeckManager.HasInstance || DeckManager.Instance.IsDeckEmpty) return false;
         
         return true;
     }
@@ -266,7 +227,7 @@ public class GameUIHandler : MonoBehaviour
             deckText.text = $"Deck: {deckSize} | Discard: {discardSize}";
         }
         
-        UpdateDrawButton();
+        UpdateButtonsThrottled();
     }
     
     private void UpdateTurnDisplay(int turn)
@@ -298,7 +259,7 @@ public class GameUIHandler : MonoBehaviour
             };
         }
         
-        UpdateAllButtons();
+        UpdateButtonsThrottled();
     }
     
     // ===== COMBO DISPLAY =====
@@ -347,12 +308,12 @@ public class GameUIHandler : MonoBehaviour
     private void OnCardSelectionChanged(List<Card> selectedCards)
     {
         UpdateCardPlayUI(selectedCards);
-        UpdateAllButtons();
+        UpdateButtonsThrottled();
     }
     
     private void OnHandUpdated(List<Card> handCards)
     {
-        UpdateAllButtons();
+        UpdateButtonsThrottled();
     }
     
     private void UpdateCardPlayUI(List<Card> selectedCards)
@@ -370,7 +331,14 @@ public class GameUIHandler : MonoBehaviour
         }
     }
     
-    // ===== BUTTON UPDATES =====
+    // PERFORMANCE FIX: Throttle Button Updates
+    private void UpdateButtonsThrottled()
+    {
+        if (Time.unscaledTime - _lastButtonUpdate < 0.1f) return;
+        UpdateAllButtons();
+        _lastButtonUpdate = Time.unscaledTime;
+    }
+    
     private void UpdateAllButtons()
     {
         if (!_managersReady) return;
@@ -378,15 +346,12 @@ public class GameUIHandler : MonoBehaviour
         bool isPlayerTurn = CombatManager.HasInstance && CombatManager.Instance.IsPlayerTurn;
         bool hasSelectedCards = CardManager.HasInstance && CardManager.Instance.SelectedCards?.Count > 0;
         
-        // Play button
         if (playButton != null) 
             playButton.interactable = hasSelectedCards && isPlayerTurn;
             
-        // Clear button
         if (clearButton != null) 
             clearButton.interactable = hasSelectedCards;
             
-        // Draw and end turn buttons
         UpdateDrawButton();
         UpdateEndTurnButton();
     }
@@ -412,7 +377,6 @@ public class GameUIHandler : MonoBehaviour
         bool canDraw = CanDraw();
         drawButton.interactable = canDraw;
         
-        // Debug info im Editor
         #if UNITY_EDITOR
         var buttonText = drawButton.GetComponentInChildren<TextMeshProUGUI>();
         if (buttonText != null && !canDraw)

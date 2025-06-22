@@ -7,10 +7,10 @@ using System.Collections;
 
 public enum ComboState
 {
-    Empty,          // Keine Combo
-    Building,       // Combo wird aufgebaut
-    Ready,          // Combo kann gecastet werden
-    Invalid         // Keine weiteren Spells möglich
+    Empty,
+    Building,
+    Ready,
+    Invalid
 }
 
 public class SpellcastManager : SingletonBehaviour<SpellcastManager>, IGameManager
@@ -20,12 +20,11 @@ public class SpellcastManager : SingletonBehaviour<SpellcastManager>, IGameManag
     [SerializeField] private bool caseSensitive = false;
     
     [Header("Combo Settings")]
-    [SerializeField] private bool autoCastOnInvalid = true;
     [SerializeField] private float comboClearDelay = 0.5f;
     
     private string _currentCombo = "";
     private Dictionary<string, SpellAsset> _spellCache = new Dictionary<string, SpellAsset>();
-    private List<CardData> _comboCardData = new List<CardData>(); // Nur CardData speichern
+    private List<CardData> _comboCardData = new List<CardData>();
     
     private bool _isReady = false;
     public bool IsReady => _isReady;
@@ -52,7 +51,6 @@ public class SpellcastManager : SingletonBehaviour<SpellcastManager>, IGameManag
     
     private void Update()
     {
-        // Leertaste für Combo-Cast
         if (Input.GetKeyDown(KeyCode.Space) && CanCastCombo)
         {
             TryCastCurrentCombo();
@@ -73,18 +71,17 @@ public class SpellcastManager : SingletonBehaviour<SpellcastManager>, IGameManag
         Debug.Log($"[SpellcastManager] Initialized {_spellCache.Count} spells");
     }
     
-    // HAUPTMETHODE: Karten spielen (von UI oder Drag&Drop)
+    // SIMPLIFIED: ProcessCardPlay ohne komplexe Auto-Cast Logik
     public void ProcessCardPlay(List<Card> playedCards)
     {
         if (playedCards == null || playedCards.Count == 0) return;
         
-        string letterSequence = ExtractLettersFromCards(playedCards);
+        string letterSequence = CardManager.GetLetterSequenceFromCards(playedCards);
         if (string.IsNullOrEmpty(letterSequence)) return;
         
-        // Normalisiere Buchstaben
         string normalizedLetters = caseSensitive ? letterSequence : letterSequence.ToUpper();
         
-        // Karten sofort aus der Hand entfernen und zur Combo hinzufügen
+        // Karten aus Hand entfernen und zur Combo hinzufügen
         foreach (var card in playedCards)
         {
             if (card?.CardData != null)
@@ -95,17 +92,14 @@ public class SpellcastManager : SingletonBehaviour<SpellcastManager>, IGameManag
             }
         }
         
-        // Combo erweitern
         _currentCombo += normalizedLetters;
-        
-        // Combo-Status prüfen
         UpdateComboState();
         
         OnCardsPlayed?.Invoke(playedCards, normalizedLetters);
-        
         Debug.Log($"[SpellcastManager] Added '{normalizedLetters}' to combo. Current: '{_currentCombo}'");
     }
     
+    // SIMPLIFIED: Combo State Update ohne Auto-Cast Komplexität
     private void UpdateComboState()
     {
         if (string.IsNullOrEmpty(_currentCombo))
@@ -114,7 +108,6 @@ public class SpellcastManager : SingletonBehaviour<SpellcastManager>, IGameManag
             return;
         }
         
-        // Prüfe auf exakte Übereinstimmung
         if (HasExactSpell(_currentCombo))
         {
             SetComboState(ComboState.Ready);
@@ -122,7 +115,6 @@ public class SpellcastManager : SingletonBehaviour<SpellcastManager>, IGameManag
             return;
         }
         
-        // Prüfe auf potentielle Übereinstimmung
         if (HasPotentialMatch(_currentCombo))
         {
             SetComboState(ComboState.Building);
@@ -130,22 +122,12 @@ public class SpellcastManager : SingletonBehaviour<SpellcastManager>, IGameManag
             return;
         }
         
-        // Keine Übereinstimmung möglich
         SetComboState(ComboState.Invalid);
         Debug.Log($"[SpellcastManager] Invalid combo: {_currentCombo}");
-        
-        if (autoCastOnInvalid)
-        {
-            TryAutoCastBestMatch();
-        }
-        else
-        {
-            OnSpellNotFound?.Invoke(_currentCombo);
-            StartCoroutine(DelayedComboClear(comboClearDelay));
-        }
+        OnSpellNotFound?.Invoke(_currentCombo);
+        StartCoroutine(DelayedComboClear(comboClearDelay));
     }
     
-    // Manual combo cast (via Space or UI button)
     public void TryCastCurrentCombo()
     {
         if (!CanCastCombo) return;
@@ -157,69 +139,6 @@ public class SpellcastManager : SingletonBehaviour<SpellcastManager>, IGameManag
         }
     }
     
-    // Auto-cast bei invalider Combo - finde besten Match
-    private void TryAutoCastBestMatch()
-    {
-        string bestMatch = "";
-        List<CardData> bestMatchCards = new List<CardData>();
-        
-        // Suche längsten gültigen Spell von links nach rechts
-        for (int length = _currentCombo.Length; length > 0; length--)
-        {
-            string testCombo = _currentCombo.Substring(0, length);
-            if (HasExactSpell(testCombo))
-            {
-                bestMatch = testCombo;
-                bestMatchCards = GetCardDataForLength(length);
-                break;
-            }
-        }
-        
-        if (!string.IsNullOrEmpty(bestMatch) && _spellCache.TryGetValue(bestMatch, out SpellAsset spell))
-        {
-            // Cast besten Match
-            ExecuteSpell(spell, bestMatchCards, bestMatch);
-            
-            // Entferne verwendete Buchstaben und Karten
-            string remainingCombo = _currentCombo.Substring(bestMatch.Length);
-            var remainingCards = _comboCardData.Skip(bestMatchCards.Count).ToList();
-            
-            // Setze Combo mit verbleibenden Elementen fort
-            _currentCombo = remainingCombo;
-            _comboCardData = remainingCards;
-            
-            if (!string.IsNullOrEmpty(_currentCombo))
-            {
-                UpdateComboState(); // Prüfe verbleibende Combo
-            }
-            else
-            {
-                ClearCombo();
-            }
-        }
-        else
-        {
-            // Kein gültiger Spell gefunden
-            OnSpellNotFound?.Invoke(_currentCombo);
-            StartCoroutine(DelayedComboClear(comboClearDelay));
-        }
-    }
-    
-    private List<CardData> GetCardDataForLength(int targetLength)
-    {
-        var result = new List<CardData>();
-        int currentLength = 0;
-        
-        foreach (var cardData in _comboCardData)
-        {
-            if (currentLength >= targetLength) break;
-            result.Add(cardData);
-            currentLength += cardData.letterValues.Length;
-        }
-        
-        return result;
-    }
-    
     private void ExecuteSpell(SpellAsset spell, List<CardData> sourceCardData, string usedLetters)
     {
         Debug.Log($"[SpellcastManager] Casting '{spell.SpellName}' with sequence: {usedLetters}");
@@ -227,13 +146,11 @@ public class SpellcastManager : SingletonBehaviour<SpellcastManager>, IGameManag
         OnSpellFound?.Invoke(spell, usedLetters);
         OnSpellCast?.Invoke(spell, sourceCardData);
         
-        // Execute spell effects
         foreach (var effect in spell.Effects)
         {
             TriggerSpellEffect(effect);
         }
         
-        // Karten unter das Deck legen
         if (DeckManager.HasInstance)
         {
             foreach (var cardData in sourceCardData)
@@ -242,7 +159,6 @@ public class SpellcastManager : SingletonBehaviour<SpellcastManager>, IGameManag
             }
         }
         
-        // Clear selection falls noch vorhanden
         CardManager.Instance?.ClearSelection();
     }
     
@@ -271,7 +187,6 @@ public class SpellcastManager : SingletonBehaviour<SpellcastManager>, IGameManag
     {
         var combat = CombatManager.Instance;
         
-        // Auto-target if needed
         if (combat.CurrentTargets.Count == 0 && EnemyManager.HasInstance)
         {
             var firstEnemy = EnemyManager.Instance.AliveEnemies.FirstOrDefault();
@@ -295,19 +210,6 @@ public class SpellcastManager : SingletonBehaviour<SpellcastManager>, IGameManag
         
         OnComboCleared?.Invoke();
         Debug.Log("[SpellcastManager] Combo cleared");
-    }
-    
-    // Helper methods
-    private string ExtractLettersFromCards(List<Card> cards)
-    {
-        if (cards == null || cards.Count == 0) return "";
-        
-        var sb = new StringBuilder(cards.Count * 2);
-        foreach (var card in cards.Where(c => c?.CardData != null))
-        {
-            sb.Append(card.CardData.letterValues);
-        }
-        return sb.ToString();
     }
     
     private void SetComboState(ComboState state)
