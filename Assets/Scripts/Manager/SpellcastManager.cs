@@ -71,35 +71,36 @@ public class SpellcastManager : SingletonBehaviour<SpellcastManager>, IGameManag
         Debug.Log($"[SpellcastManager] Initialized {_spellCache.Count} spells");
     }
     
-    // SIMPLIFIED: ProcessCardPlay ohne komplexe Auto-Cast Logik
+    // INTEGRATION: ProcessCardPlay with CardExtensions + ManagerExtensions
     public void ProcessCardPlay(List<Card> playedCards)
     {
-        if (playedCards == null || playedCards.Count == 0) return;
+        // INTEGRATION: Use CardExtensions for validation
+        if (!playedCards.HasValidCards()) return;
         
-        string letterSequence = CardManager.GetLetterSequenceFromCards(playedCards);
+        // INTEGRATION: Use CardExtensions for letter sequence
+        string letterSequence = playedCards.GetLetterSequence();
         if (string.IsNullOrEmpty(letterSequence)) return;
         
         string normalizedLetters = caseSensitive ? letterSequence : letterSequence.ToUpper();
         
-        // Karten aus Hand entfernen und zur Combo hinzufügen
-        foreach (var card in playedCards)
+        // INTEGRATION: Safe card processing using CardExtensions + ManagerExtensions
+        foreach (var card in playedCards.GetValidCards())
         {
-            if (card?.CardData != null)
+            this.TryWithManager<CardManager>(cm => 
             {
-                CardManager.Instance?.RemoveCardFromHand(card);
-                _comboCardData.Add(card.CardData);
-                CardManager.Instance?.DestroyCard(card);
-            }
+                cm.RemoveCardFromHand(card);
+                cm.DestroyCard(card);
+            });
+            _comboCardData.Add(card.CardData);
         }
         
         _currentCombo += normalizedLetters;
         UpdateComboState();
         
-        OnCardsPlayed?.Invoke(playedCards, normalizedLetters);
+        OnCardsPlayed?.Invoke(playedCards.GetValidCards().ToList(), normalizedLetters);
         Debug.Log($"[SpellcastManager] Added '{normalizedLetters}' to combo. Current: '{_currentCombo}'");
     }
     
-    // SIMPLIFIED: Combo State Update ohne Auto-Cast Komplexität
     private void UpdateComboState()
     {
         if (string.IsNullOrEmpty(_currentCombo))
@@ -151,54 +152,144 @@ public class SpellcastManager : SingletonBehaviour<SpellcastManager>, IGameManag
             TriggerSpellEffect(effect);
         }
         
-        if (DeckManager.HasInstance)
+        // INTEGRATION: Safe deck operations using ManagerExtensions
+        this.TryWithManager<DeckManager>(dm => 
         {
             foreach (var cardData in sourceCardData)
             {
-                DeckManager.Instance.AddCardToBottom(cardData);
+                dm.AddCardToBottom(cardData);
             }
-        }
+        });
         
-        CardManager.Instance?.ClearSelection();
+        this.TryWithManager<CardManager>(cm => cm.ClearSelection());
     }
     
+    // INTEGRATION: Enhanced spell effect triggering with ResourceExtensions
     public void TriggerSpellEffect(SpellEffect effect)
     {
         OnSpellEffectTriggered?.Invoke(effect);
         
-        if (!CombatManager.HasInstance) return;
-        
-        switch (effect.effectType)
+        // INTEGRATION: Safe combat operations using ManagerExtensions + ResourceExtensions
+        this.TryWithManager<CombatManager>(cm => 
         {
-            case SpellEffectType.Damage:
-                ApplyDamageEffect(effect);
-                break;
-            case SpellEffectType.Heal:
-                CombatManager.Instance.ModifyLife(Mathf.RoundToInt(effect.value));
-                break;
-            case SpellEffectType.Buff:
-                if (effect.effectName.ToLower().Contains("creativity"))
-                    CombatManager.Instance.ModifyCreativity(Mathf.RoundToInt(effect.value));
-                break;
-        }
+            switch (effect.effectType)
+            {
+                case SpellEffectType.Damage:
+                    ApplyDamageEffect(effect, cm);
+                    break;
+                case SpellEffectType.Heal:
+                    ApplyHealEffect(effect, cm);
+                    break;
+                case SpellEffectType.Buff:
+                    ApplyBuffEffect(effect, cm);
+                    break;
+            }
+        });
     }
     
-    private void ApplyDamageEffect(SpellEffect effect)
+    // INTEGRATION: Enhanced damage effect with EntityExtensions
+    private void ApplyDamageEffect(SpellEffect effect, CombatManager combat)
     {
-        var combat = CombatManager.Instance;
-        
-        if (combat.CurrentTargets.Count == 0 && EnemyManager.HasInstance)
+        // INTEGRATION: Safe enemy targeting using ManagerExtensions + EntityExtensions
+        if (combat.CurrentTargets.Count == 0)
         {
-            var firstEnemy = EnemyManager.Instance.AliveEnemies.FirstOrDefault();
-            if (firstEnemy != null)
+            this.TryWithManager<EnemyManager>(em => 
             {
-                combat.AddTarget(firstEnemy);
-            }
+                // INTEGRATION: Use EntityExtensions for smart target selection
+                var optimalTarget = em.AliveEnemies.GetWeakest();
+                if (optimalTarget != null)
+                {
+                    combat.AddTarget(optimalTarget);
+                    Debug.Log($"[SpellcastManager] Auto-targeted weakest enemy: {optimalTarget.EntityName}");
+                }
+            });
         }
         
         if (combat.CurrentTargets.Count > 0)
         {
-            combat.DealDamageToTargets(Mathf.RoundToInt(effect.value));
+            int damage = Mathf.RoundToInt(effect.value);
+            
+            // INTEGRATION: Enhanced damage application using EntityExtensions
+            foreach (var target in combat.CurrentTargets.ToList())
+            {
+                if (target.IsValidTarget())
+                {
+                    var result = target.TryDamageWithEffects(damage, DamageType.Normal, true);
+                    if (result.Success)
+                    {
+                        Debug.Log($"[SpellcastManager] Spell damage: {result.DamageDealt} to {target.EntityName}");
+                        
+                        // Check for elimination
+                        if (result.WasKilled)
+                        {
+                            Debug.Log($"[SpellcastManager] {target.EntityName} eliminated by spell!");
+                        }
+                        else if (target.IsCriticalHealth())
+                        {
+                            Debug.Log($"[SpellcastManager] {target.EntityName} is in critical condition!");
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    private void ApplyHealEffect(SpellEffect effect, CombatManager combat)
+    {
+        int healAmount = Mathf.RoundToInt(effect.value);
+        
+        // INTEGRATION: Use ResourceExtensions for smart healing
+        var lifeHealth = combat.Life.GetResourceHealth();
+        
+        if (lifeHealth <= ResourceHealth.Critical)
+        {
+            // Emergency healing - apply full amount
+            combat.ModifyLife(healAmount);
+            Debug.Log($"[SpellcastManager] Emergency heal: +{healAmount} life");
+        }
+        else if (lifeHealth <= ResourceHealth.Low)
+        {
+            // Standard healing
+            combat.ModifyLife(healAmount);
+            Debug.Log($"[SpellcastManager] Heal: +{healAmount} life");
+        }
+        else
+        {
+            // Overheal protection - reduce healing if nearly full
+            int optimalHeal = combat.Life.GetOptimalRecovery(healAmount);
+            if (optimalHeal > 0)
+            {
+                combat.ModifyLife(optimalHeal);
+                Debug.Log($"[SpellcastManager] Optimal heal: +{optimalHeal} life (reduced from {healAmount})");
+            }
+        }
+    }
+    
+    private void ApplyBuffEffect(SpellEffect effect, CombatManager combat)
+    {
+        if (effect.effectName.ToLower().Contains("creativity"))
+        {
+            int creativityGain = Mathf.RoundToInt(effect.value);
+            
+            // INTEGRATION: Use ResourceExtensions for smart creativity management
+            var creativityHealth = combat.Creativity.GetResourceHealth();
+            
+            if (creativityHealth <= ResourceHealth.Critical)
+            {
+                // Emergency creativity boost
+                combat.ModifyCreativity(creativityGain);
+                Debug.Log($"[SpellcastManager] Emergency creativity boost: +{creativityGain}");
+            }
+            else
+            {
+                // Normal creativity gain with overflow protection
+                int optimalGain = combat.Creativity.GetOptimalRecovery(creativityGain);
+                if (optimalGain > 0)
+                {
+                    combat.ModifyCreativity(optimalGain);
+                    Debug.Log($"[SpellcastManager] Creativity gain: +{optimalGain}");
+                }
+            }
         }
     }
     
@@ -239,58 +330,160 @@ public class SpellcastManager : SingletonBehaviour<SpellcastManager>, IGameManag
         ClearCombo();
     }
     
-    // UI Support Methods
+    // UI Support Methods - INTEGRATION with ManagerExtensions
     public void PlaySelectedCards()
     {
-        if (!CardManager.HasInstance) return;
-        var selectedCards = CardManager.Instance.SelectedCards;
-        if (selectedCards?.Count > 0)
+        this.TryWithManager<CardManager>(cm => 
         {
-            ProcessCardPlay(selectedCards);
-        }
+            var selectedCards = cm.SelectedCards;
+            if (selectedCards?.Count > 0)
+            {
+                ProcessCardPlay(selectedCards);
+            }
+        });
     }
     
     public void DrawCard()
     {
         if (!CanDraw()) return;
         
-        var drawnCard = DeckManager.Instance.DrawCard();
-        if (drawnCard != null)
+        this.TryWithManager<DeckManager>(dm => 
         {
-            CardManager.Instance.SpawnCard(drawnCard, null, true);
-        }
+            var drawnCard = dm.DrawCard();
+            if (drawnCard != null)
+            {
+                this.TryWithManager<CardManager>(cm => 
+                    cm.SpawnCard(drawnCard, null, true));
+            }
+        });
     }
     
     public void ClearSelection()
     {
-        CardManager.Instance?.ClearSelection();
+        this.TryWithManager<CardManager>(cm => cm.ClearSelection());
     }
     
     private bool CanDraw()
     {
-        return CardManager.HasInstance && !CardManager.Instance.IsHandFull && 
-               DeckManager.HasInstance && !DeckManager.Instance.IsDeckEmpty;
+        return this.TryWithManager<CardManager, bool>(cm => !cm.IsHandFull) && 
+               this.TryWithManager<DeckManager, bool>(dm => !dm.IsDeckEmpty);
     }
     
-    // Drop area support
+    // Drop area support - INTEGRATION with CombatExtensions
     public static bool CheckCanPlayCards(List<Card> cards = null)
     {
-        if (!HasInstance || !CombatManager.HasInstance) return false;
+        if (!HasInstance) return false;
         
-        var cardsToCheck = cards ?? CardManager.Instance?.SelectedCards ?? new List<Card>();
-        
-        return cardsToCheck.Count > 0 && 
-               CombatManager.Instance.IsInCombat && 
-               CombatManager.Instance.IsPlayerTurn;
+        return Instance.TryWithManager<CombatManager, bool>(cm => 
+        {
+            var cardsToCheck = cards ?? Instance.TryWithManager<CardManager, List<Card>>(
+                cardManager => cardManager.SelectedCards) ?? new List<Card>();
+            
+            return cardsToCheck.Count > 0 && 
+                   cm.IsInCombat && 
+                   cm.CanPerformPlayerAction(PlayerActionType.PlayCards);
+        });
     }
     
     public static bool CheckCanDiscardCard(Card card = null)
     {
-        if (!HasInstance || !CombatManager.HasInstance || !DeckManager.HasInstance) return false;
+        if (!HasInstance) return false;
         
-        return CombatManager.Instance.IsPlayerTurn && 
-               CombatManager.Instance.CanSpendCreativity(1) &&
-               DeckManager.Instance.GetTotalAvailableCards() > 0;
+        return Instance.TryWithManager<CombatManager, bool>(cm => 
+        {
+            return cm.CanPerformPlayerAction(PlayerActionType.DiscardCard) && 
+                   cm.CanSpendCreativity(1) &&
+                   Instance.TryWithManager<DeckManager, bool>(dm => 
+                       dm.GetTotalAvailableCards() > 0);
+        });
+    }
+    
+    // INTEGRATION: New spell recommendation methods using CardExtensions
+    
+    /// <summary>
+    /// Get spell recommendations based on current hand
+    /// </summary>
+    public List<SpellRecommendation> GetSpellRecommendations()
+    {
+        var recommendations = new List<SpellRecommendation>();
+        
+        this.TryWithManager<CardManager>(cm => 
+        {
+            var handAnalysis = cm.GetHandAnalysis();
+            var spellPotential = cm.GetHandSpellPotential();
+            
+            foreach (var spell in availableSpells.Where(s => s?.IsValid == true))
+            {
+                if (cm.CanBuildSpell(spell.LetterCode))
+                {
+                    var rec = new SpellRecommendation
+                    {
+                        Spell = spell,
+                        CanCast = true,
+                        RequiredCards = cm.FindCardsForSpell(spell.LetterCode),
+                        Effectiveness = CalculateSpellEffectiveness(spell)
+                    };
+                    recommendations.Add(rec);
+                }
+            }
+            
+            // Sort by effectiveness
+            recommendations = recommendations.OrderByDescending(r => r.Effectiveness).ToList();
+        });
+        
+        return recommendations;
+    }
+    
+    private float CalculateSpellEffectiveness(SpellAsset spell)
+    {
+        float effectiveness = 1f;
+        
+        // Analyze based on current situation using CombatExtensions
+        this.TryWithManager<CombatManager>(cm => 
+        {
+            var situation = cm.GetCombatSituation();
+            
+            foreach (var effect in spell.Effects)
+            {
+                switch (effect.effectType)
+                {
+                    case SpellEffectType.Heal:
+                        if (situation.HealthStatus <= HealthStatus.Low)
+                            effectiveness *= 2f; // Double effectiveness when health is low
+                        break;
+                        
+                    case SpellEffectType.Damage:
+                        if (situation.EnemyThreat >= ThreatLevel.High)
+                            effectiveness *= 1.5f; // Higher priority when enemies are threatening
+                        break;
+                        
+                    case SpellEffectType.Buff:
+                        if (effect.effectName.ToLower().Contains("creativity") && 
+                            situation.CreativityStatus <= ResourceStatus.Low)
+                            effectiveness *= 1.8f; // High priority when creativity is low
+                        break;
+                }
+            }
+        });
+        
+        return effectiveness;
+    }
+    
+    /// <summary>
+    /// Auto-select optimal spell based on situation
+    /// </summary>
+    public void AutoSelectOptimalSpell()
+    {
+        var recommendations = GetSpellRecommendations();
+        if (recommendations.Count == 0) return;
+        
+        var bestSpell = recommendations.First();
+        
+        this.TryWithManager<CardManager>(cm => 
+        {
+            cm.TrySelectCards(bestSpell.RequiredCards);
+            Debug.Log($"[SpellcastManager] Auto-selected cards for spell: {bestSpell.Spell.SpellName}");
+        });
     }
 
 #if UNITY_EDITOR
@@ -315,5 +508,32 @@ public class SpellcastManager : SingletonBehaviour<SpellcastManager>, IGameManag
     {
         ClearCombo();
     }
+    
+    [ContextMenu("Get Spell Recommendations")]
+    public void DebugSpellRecommendations()
+    {
+        var recommendations = GetSpellRecommendations();
+        Debug.Log($"[SpellcastManager] Spell Recommendations:");
+        foreach (var rec in recommendations)
+        {
+            Debug.Log($"  - {rec.Spell.SpellName}: Effectiveness {rec.Effectiveness:F2}");
+        }
+    }
+    
+    [ContextMenu("Auto Select Optimal Spell")]
+    public void DebugAutoSelect()
+    {
+        AutoSelectOptimalSpell();
+    }
 #endif
+}
+
+// INTEGRATION: Supporting class for spell recommendations
+[System.Serializable]
+public class SpellRecommendation
+{
+    public SpellAsset Spell;
+    public bool CanCast;
+    public List<Card> RequiredCards;
+    public float Effectiveness;
 }

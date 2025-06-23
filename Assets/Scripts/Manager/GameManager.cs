@@ -33,6 +33,7 @@ public class GameManager : SingletonBehaviour<GameManager>
     
     // Properties
     public bool IsInitialized => _isInitialized;
+    public bool IsReady => _isInitialized; // IGameManager implementation
     public IReadOnlyDictionary<ManagerType, IGameManager> Managers => _managers;
     
     protected override void OnAwakeInitialize()
@@ -50,7 +51,7 @@ public class GameManager : SingletonBehaviour<GameManager>
     {
         Debug.Log("[GameManager] Starting initialization sequence...");
         
-        // Step 1: Discover all managers
+        // Step 1: Discover all managers using ManagerExtensions
         DiscoverManagers();
         
         // Step 2: Initialize in order
@@ -62,8 +63,8 @@ public class GameManager : SingletonBehaviour<GameManager>
             yield return new WaitForSeconds(initStepDelay);
         }
         
-        // Step 3: Verify all critical managers
-        if (!VerifyCriticalManagers())
+        // Step 3: Verify all critical managers using ManagerExtensions
+        if (!this.AreAllCriticalManagersReady())
         {
             OnInitializationError?.Invoke("Critical managers missing!");
             yield break;
@@ -74,33 +75,38 @@ public class GameManager : SingletonBehaviour<GameManager>
         OnAllManagersReady?.Invoke();
         Debug.Log("[GameManager] All managers initialized successfully!");
         
+        // Log status using ManagerExtensions
+        ManagerExtensions.LogManagerPerformance();
+        
         // Step 5: Auto-start combat if enabled
         if (autoStartCombat)
         {
             yield return new WaitForSeconds(0.1f);
-            StartCombat();
+            this.TryStartCombat();
         }
     }
     
     private void DiscoverManagers()
     {
-        // Find all manager instances - use HasInstance check
-        if (CardManager.HasInstance)
-            RegisterManager(ManagerType.Card, CardManager.Instance);
-        if (DeckManager.HasInstance)
-            RegisterManager(ManagerType.Deck, DeckManager.Instance);
-        if (HandLayoutManager.HasInstance)
-            RegisterManager(ManagerType.HandLayout, HandLayoutManager.Instance);
-        if (SpellcastManager.HasInstance)
-            RegisterManager(ManagerType.Spellcast, SpellcastManager.Instance);
-        if (CombatManager.HasInstance)
-            RegisterManager(ManagerType.Combat, CombatManager.Instance);
-        if (EnemyManager.HasInstance)
-            RegisterManager(ManagerType.Enemy, EnemyManager.Instance);
-        if (UnitManager.HasInstance)
-            RegisterManager(ManagerType.Unit, UnitManager.Instance);
+        // Use ManagerExtensions for safer discovery
+        RegisterManagerSafely(ManagerType.Card, ManagerExtensions.TryGetManager<CardManager>());
+        RegisterManagerSafely(ManagerType.Deck, ManagerExtensions.TryGetManager<DeckManager>());
+        RegisterManagerSafely(ManagerType.HandLayout, ManagerExtensions.TryGetManager<HandLayoutManager>());
+        RegisterManagerSafely(ManagerType.Spellcast, ManagerExtensions.TryGetManager<SpellcastManager>());
+        RegisterManagerSafely(ManagerType.Combat, ManagerExtensions.TryGetManager<CombatManager>());
+        RegisterManagerSafely(ManagerType.Enemy, ManagerExtensions.TryGetManager<EnemyManager>());
+        RegisterManagerSafely(ManagerType.Unit, ManagerExtensions.TryGetManager<UnitManager>());
             
         Debug.Log($"[GameManager] Discovered {_managers.Count} managers");
+    }
+    
+    private void RegisterManagerSafely(ManagerType type, MonoBehaviour manager)
+    {
+        if (manager != null && manager is IGameManager gameManager)
+        {
+            _managers[type] = gameManager;
+            Debug.Log($"[GameManager] Registered {type} manager");
+        }
     }
     
     private void RegisterManager(ManagerType type, MonoBehaviour manager)
@@ -115,6 +121,7 @@ public class GameManager : SingletonBehaviour<GameManager>
     private IEnumerator InitializeManager(ManagerType type)
     {
         Debug.Log($"[GameManager] Starting initialization of {type} manager");
+        
         // Try to find manager if not registered yet
         if (!_managers.ContainsKey(type))
         {
@@ -150,71 +157,25 @@ public class GameManager : SingletonBehaviour<GameManager>
         }
     }
     
-    private bool VerifyCriticalManagers()
-    {
-        var criticalTypes = new[] { ManagerType.Card, ManagerType.Deck, ManagerType.Combat };
-        
-        Debug.Log("[GameManager] Verifying critical managers...");
-        
-        foreach (var type in criticalTypes)
-        {
-            if (!_managers.TryGetValue(type, out var manager))
-            {
-                Debug.LogError($"[GameManager] Critical manager {type} not found in registry!");
-                return false;
-            }
-            
-            if (manager == null)
-            {
-                Debug.LogError($"[GameManager] Critical manager {type} is null!");
-                return false;
-            }
-            
-            if (!manager.IsReady)
-            {
-                Debug.LogError($"[GameManager] Critical manager {type} not ready! (Instance exists: {manager != null})");
-                
-                // Spezial-Check für CombatManager
-                if (type == ManagerType.Combat && manager is CombatManager cm)
-                {
-                    Debug.LogError($"  CombatManager._isReady = {cm.IsReady}");
-                    Debug.LogError($"  CombatManager instance = {cm.GetInstanceID()}");
-                }
-                
-                return false;
-            }
-            
-            Debug.Log($"[GameManager] {type} manager verified ✓");
-        }
-        
-        return true;
-    }
-    
     public void StartCombat()
     {
-        if (!_isInitialized)
-        {
-            Debug.LogWarning("[GameManager] Cannot start combat - not initialized");
-            return;
-        }
-        
-        if (_managers.TryGetValue(ManagerType.Combat, out var combatManager))
-        {
-            (combatManager as CombatManager)?.StartCombat();
-        }
+        // Use ManagerExtensions for safer combat start
+        this.TryStartCombat();
     }
-    
     
     public T GetManager<T>(ManagerType type) where T : class, IGameManager
     {
         return _managers.TryGetValue(type, out var manager) ? manager as T : null;
     }
     
-    // Quick access properties
+    // Quick access properties using ManagerExtensions pattern
     public CardManager CardManager => GetManager<CardManager>(ManagerType.Card);
     public DeckManager DeckManager => GetManager<DeckManager>(ManagerType.Deck);
     public CombatManager CombatManager => GetManager<CombatManager>(ManagerType.Combat);
     public SpellcastManager SpellcastManager => GetManager<SpellcastManager>(ManagerType.Spellcast);
+    public EnemyManager EnemyManager => GetManager<EnemyManager>(ManagerType.Enemy);
+    public UnitManager UnitManager => GetManager<UnitManager>(ManagerType.Unit);
+    public HandLayoutManager HandLayoutManager => GetManager<HandLayoutManager>(ManagerType.HandLayout);
     
 #if UNITY_EDITOR
     [ContextMenu("Force Reinitialize")]
@@ -229,7 +190,10 @@ public class GameManager : SingletonBehaviour<GameManager>
     [ContextMenu("Log Manager Status")]
     public void LogManagerStatus()
     {
-        Debug.Log($"[GameManager] Status - Initialized: {_isInitialized}");
+        // Use ManagerExtensions for comprehensive status
+        ManagerExtensions.LogManagerPerformance();
+        
+        Debug.Log($"[GameManager] Detailed Status - Initialized: {_isInitialized}");
         foreach (var kvp in _managers)
         {
             Debug.Log($"  {kvp.Key}: {(kvp.Value?.IsReady ?? false ? "Ready" : "Not Ready")}");

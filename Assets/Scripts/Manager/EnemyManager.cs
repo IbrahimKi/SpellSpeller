@@ -37,12 +37,12 @@ public class EnemyManager : SingletonBehaviour<EnemyManager>, IGameManager
     public static event System.Action<EntityBehaviour> OnEnemyKilled;
     public static event System.Action OnAllEnemiesDefeated;
     
-    // Properties
+    // Properties - INTEGRATION: Enhanced with EntityExtensions
     public int EnemyCount => _enemies.Count;
-    public int AliveEnemyCount => _enemies.Values.Count(e => e != null && e.IsAlive);
+    public int AliveEnemyCount => _enemies.Values.Count(e => e.IsValidTarget());
     public bool HasEnemies => AliveEnemyCount > 0;
     public IReadOnlyList<EntityBehaviour> AllEnemies => _enemies.Values.Where(e => e != null).ToList();
-    public IReadOnlyList<EntityBehaviour> AliveEnemies => _enemies.Values.Where(e => e != null && e.IsAlive).ToList();
+    public IReadOnlyList<EntityBehaviour> AliveEnemies => _enemies.Values.Where(e => e.IsValidTarget()).ToList();
     public IReadOnlyList<EntityBehaviour> TargetedEnemies => _targetedEnemies.AsReadOnly();
     public EntityBehaviour PrimaryTarget => _targetedEnemies.FirstOrDefault();
     
@@ -147,7 +147,7 @@ public class EnemyManager : SingletonBehaviour<EnemyManager>, IGameManager
     // Registration (called by EntityBehaviour)
     public void RegisterEnemy(EntityBehaviour enemy)
     {
-        if (enemy == null || enemy.Type != EntityType.Enemy) return;
+        if (enemy == null || !enemy.IsEnemy()) return;
         
         int id = _nextEnemyId++;
         _enemies[id] = enemy;
@@ -178,7 +178,7 @@ public class EnemyManager : SingletonBehaviour<EnemyManager>, IGameManager
     // Targeting
     public void HandleEntityClicked(EntityBehaviour enemy)
     {
-        if (enemy == null || !enemy.IsTargetable || !enemy.IsAlive) return;
+        if (!enemy.IsValidTarget()) return;
         
         if (_targetedEnemies.Contains(enemy))
         {
@@ -194,7 +194,7 @@ public class EnemyManager : SingletonBehaviour<EnemyManager>, IGameManager
     
     public void TargetEnemy(EntityBehaviour enemy)
     {
-        if (enemy == null || !enemy.IsTargetable || !enemy.IsAlive) return;
+        if (!enemy.IsValidTarget()) return;
         
         if (!allowMultiTarget)
         {
@@ -235,12 +235,16 @@ public class EnemyManager : SingletonBehaviour<EnemyManager>, IGameManager
         }
     }
     
-    // Damage dealing
+    // INTEGRATION: Enhanced damage dealing with EntityExtensions
     public void DamageAllEnemies(int damage)
     {
         foreach (var enemy in AliveEnemies)
         {
-            enemy.Damage(damage);
+            var result = enemy.TryDamageWithEffects(damage, DamageType.Normal, true);
+            if (result.Success)
+            {
+                Debug.Log($"[EnemyManager] Dealt {result.DamageDealt} damage to {enemy.EntityName}");
+            }
         }
     }
     
@@ -248,25 +252,73 @@ public class EnemyManager : SingletonBehaviour<EnemyManager>, IGameManager
     {
         foreach (var enemy in _targetedEnemies.ToList())
         {
-            if (enemy != null && enemy.IsAlive)
-                enemy.Damage(damage);
+            if (enemy.IsValidTarget())
+            {
+                var result = enemy.TryDamageWithEffects(damage, DamageType.Normal, true);
+                if (result.Success)
+                {
+                    Debug.Log($"[EnemyManager] Dealt {result.DamageDealt} damage to targeted enemy {enemy.EntityName}");
+                }
+            }
         }
     }
     
     public void DamageRandomEnemy(int damage)
     {
-        var aliveEnemies = AliveEnemies;
-        if (aliveEnemies.Count > 0)
+        var randomEnemy = AliveEnemies.GetRandom();
+        if (randomEnemy != null)
         {
-            var randomEnemy = aliveEnemies[Random.Range(0, aliveEnemies.Count)];
-            randomEnemy.Damage(damage);
+            var result = randomEnemy.TryDamageWithEffects(damage, DamageType.Normal, true);
+            if (result.Success)
+            {
+                Debug.Log($"[EnemyManager] Dealt {result.DamageDealt} damage to random enemy {randomEnemy.EntityName}");
+            }
         }
+    }
+    
+    // INTEGRATION: Smart targeting using EntityExtensions
+    public EntityBehaviour GetSmartTarget(TargetingStrategy strategy = TargetingStrategy.Optimal)
+    {
+        if (!HasEnemies) return null;
+        
+        return strategy switch
+        {
+            TargetingStrategy.Weakest => AliveEnemies.GetWeakest(),
+            TargetingStrategy.Strongest => AliveEnemies.GetStrongest(),
+            TargetingStrategy.Nearest => GetNearestEnemyToPlayer(),
+            TargetingStrategy.Priority => AliveEnemies.GetHighestPriority(),
+            TargetingStrategy.Random => AliveEnemies.GetRandom(),
+            _ => GetOptimalTarget()
+        };
+    }
+    
+    private EntityBehaviour GetNearestEnemyToPlayer()
+    {
+        // Assume player is at origin or get from CombatManager
+        Vector3 playerPosition = Vector3.zero;
+        return AliveEnemies.GetNearestTo(playerPosition);
+    }
+    
+    private EntityBehaviour GetOptimalTarget()
+    {
+        // Create smart targeting criteria
+        var criteria = new TargetingCriteria
+        {
+            PreferLowHealth = true,
+            PreferClose = true,
+            ReferencePosition = Vector3.zero,
+            HealthWeight = 1.5f,
+            DistanceWeight = 0.5f,
+            PriorityWeight = 0.8f
+        };
+        
+        return AliveEnemies.GetBestTarget(criteria);
     }
     
     // Event handlers
     private void HandleEntityHealthChanged(EntityBehaviour entity, int oldHealth, int newHealth)
     {
-        if (entity == null || entity.Type != EntityType.Enemy) return;
+        if (!entity.IsEnemy()) return;
         
         int damage = oldHealth - newHealth;
         if (damage > 0)
@@ -284,7 +336,7 @@ public class EnemyManager : SingletonBehaviour<EnemyManager>, IGameManager
     
     private void HandleEntityDestroyed(EntityBehaviour entity)
     {
-        if (entity == null || entity.Type != EntityType.Enemy) return;
+        if (!entity.IsEnemy()) return;
         UnregisterEnemy(entity);
     }
     
@@ -297,19 +349,74 @@ public class EnemyManager : SingletonBehaviour<EnemyManager>, IGameManager
         }
     }
     
-    // Utility methods
+    // INTEGRATION: Enhanced utility methods using EntityExtensions
     public EntityBehaviour GetNearestEnemy(Vector3 position)
     {
-        return AliveEnemies
-            .OrderBy(e => Vector3.Distance(e.transform.position, position))
-            .FirstOrDefault();
+        return AliveEnemies.GetNearestTo(position);
     }
     
     public List<EntityBehaviour> GetEnemiesInRadius(Vector3 center, float radius)
     {
-        return AliveEnemies
-            .Where(e => Vector3.Distance(e.transform.position, center) <= radius)
-            .ToList();
+        return AliveEnemies.GetInRadius(center, radius).ToList();
+    }
+    
+    // INTEGRATION: Advanced enemy queries using EntityExtensions
+    public List<EntityBehaviour> GetLowHealthEnemies(float threshold = 0.3f)
+    {
+        return AliveEnemies.FilterByHealth(threshold, HealthComparison.Below).ToList();
+    }
+    
+    public List<EntityBehaviour> GetCriticalEnemies()
+    {
+        return AliveEnemies.Where(e => e.IsCriticalHealth()).ToList();
+    }
+    
+    public List<EntityBehaviour> GetEliteEnemies()
+    {
+        return AliveEnemies.Where(e => e.IsElite()).ToList();
+    }
+    
+    public List<EntityBehaviour> GetBossEnemies()
+    {
+        return AliveEnemies.Where(e => e.IsBoss()).ToList();
+    }
+    
+    // INTEGRATION: Threat assessment using EntityExtensions
+    public ThreatAssessment GetThreatAssessment()
+    {
+        var assessment = new ThreatAssessment();
+        
+        assessment.TotalEnemies = AliveEnemyCount;
+        assessment.BossCount = GetBossEnemies().Count;
+        assessment.EliteCount = GetEliteEnemies().Count;
+        assessment.CriticalEnemies = GetCriticalEnemies().Count;
+        
+        if (AliveEnemies.Count > 0)
+        {
+            assessment.AverageHealth = AliveEnemies.Average(e => e.HealthPercentage);
+            assessment.LowestHealth = AliveEnemies.Min(e => e.HealthPercentage);
+            assessment.HighestHealth = AliveEnemies.Max(e => e.HealthPercentage);
+            
+            // Calculate threat level
+            float threatScore = assessment.TotalEnemies * 1f +
+                              assessment.EliteCount * 2f +
+                              assessment.BossCount * 5f;
+            
+            assessment.ThreatLevel = threatScore switch
+            {
+                >= 10f => ThreatLevel.Extreme,
+                >= 7f => ThreatLevel.High,
+                >= 4f => ThreatLevel.Medium,
+                >= 1f => ThreatLevel.Low,
+                _ => ThreatLevel.None
+            };
+        }
+        else
+        {
+            assessment.ThreatLevel = ThreatLevel.None;
+        }
+        
+        return assessment;
     }
     
     public void DespawnAllEnemies()
@@ -325,6 +432,43 @@ public class EnemyManager : SingletonBehaviour<EnemyManager>, IGameManager
         _targetedEnemies.Clear();
     }
     
+    // INTEGRATION: Smart multi-targeting using EntityExtensions
+    public List<EntityBehaviour> GetOptimalTargets(int count, TargetingStrategy strategy = TargetingStrategy.Optimal)
+    {
+        if (!HasEnemies || count <= 0) return new List<EntityBehaviour>();
+        
+        return strategy switch
+        {
+            TargetingStrategy.Weakest => AliveEnemies.SortBy(EntitySortCriteria.HealthPercentage).Take(count).ToList(),
+            TargetingStrategy.Strongest => AliveEnemies.SortBy(EntitySortCriteria.Health, false).Take(count).ToList(),
+            TargetingStrategy.Priority => AliveEnemies.SortBy(EntitySortCriteria.TargetPriority, false).Take(count).ToList(),
+            TargetingStrategy.Random => AliveEnemies.GetRandom(count).ToList(),
+            _ => GetOptimalTargetGroup(count)
+        };
+    }
+    
+    private List<EntityBehaviour> GetOptimalTargetGroup(int count)
+    {
+        // Balanced approach: mix of weak and high-priority targets
+        var weakTargets = AliveEnemies.GetWeakest();
+        var priorityTargets = AliveEnemies.GetHighestPriority();
+        var targets = new HashSet<EntityBehaviour>();
+        
+        if (weakTargets != null) targets.Add(weakTargets);
+        if (priorityTargets != null && priorityTargets != weakTargets) targets.Add(priorityTargets);
+        
+        // Fill remaining slots with sorted enemies
+        var remaining = AliveEnemies
+            .Where(e => !targets.Contains(e))
+            .SortBy(EntitySortCriteria.HealthPercentage)
+            .Take(count - targets.Count);
+        
+        foreach (var enemy in remaining)
+            targets.Add(enemy);
+        
+        return targets.Take(count).ToList();
+    }
+
 #if UNITY_EDITOR
     [ContextMenu("Log Enemy Status")]
     public void LogEnemyStatus()
@@ -336,8 +480,58 @@ public class EnemyManager : SingletonBehaviour<EnemyManager>, IGameManager
         
         foreach (var enemy in AllEnemies)
         {
-            Debug.Log($"  - {enemy.EntityName}: {enemy.CurrentHealth}/{enemy.MaxHealth} HP");
+            var healthStatus = enemy.GetHealthStatus();
+            Debug.Log($"  - {enemy.EntityName}: {enemy.CurrentHealth}/{enemy.MaxHealth} HP ({healthStatus})");
         }
     }
+    
+    [ContextMenu("Get Threat Assessment")]
+    public void LogThreatAssessment()
+    {
+        var assessment = GetThreatAssessment();
+        Debug.Log($"[EnemyManager] Threat Assessment:");
+        Debug.Log($"  Threat Level: {assessment.ThreatLevel}");
+        Debug.Log($"  Total Enemies: {assessment.TotalEnemies}");
+        Debug.Log($"  Bosses: {assessment.BossCount}");
+        Debug.Log($"  Elites: {assessment.EliteCount}");
+        Debug.Log($"  Critical: {assessment.CriticalEnemies}");
+        Debug.Log($"  Average Health: {assessment.AverageHealth:P0}");
+    }
+    
+    [ContextMenu("Target Weakest Enemy")]
+    public void DebugTargetWeakest()
+    {
+        var weakest = GetSmartTarget(TargetingStrategy.Weakest);
+        if (weakest != null)
+        {
+            TargetEnemy(weakest);
+            Debug.Log($"[EnemyManager] Targeted weakest: {weakest.EntityName} ({weakest.HealthPercentage:P0} HP)");
+        }
+    }
+    
+    [ContextMenu("Damage All Critical Enemies")]
+    public void DebugDamageCritical()
+    {
+        var criticalEnemies = GetCriticalEnemies();
+        foreach (var enemy in criticalEnemies)
+        {
+            enemy.TryDamageWithEffects(10, DamageType.True, true);
+        }
+        Debug.Log($"[EnemyManager] Damaged {criticalEnemies.Count} critical enemies");
+    }
 #endif
+}
+
+// INTEGRATION: Supporting class for threat assessment
+[System.Serializable]
+public class ThreatAssessment
+{
+    public int TotalEnemies;
+    public int BossCount;
+    public int EliteCount;
+    public int CriticalEnemies;
+    public float AverageHealth;
+    public float LowestHealth;
+    public float HighestHealth;
+    public ThreatLevel ThreatLevel;
 }

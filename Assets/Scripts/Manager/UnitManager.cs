@@ -41,12 +41,12 @@ public class UnitManager : SingletonBehaviour<UnitManager>, IGameManager
     public static event System.Action OnAllUnitsDefeated;
     public static event System.Action OnFormationUpdated;
     
-    // Properties
+    // Properties - INTEGRATION: Enhanced with EntityExtensions
     public int UnitCount => _units.Count;
-    public int AliveUnitCount => _units.Values.Count(u => u != null && u.IsAlive);
+    public int AliveUnitCount => _units.Values.Count(u => u.IsValidTarget());
     public bool HasUnits => AliveUnitCount > 0;
-    public IReadOnlyList<EntityBehaviour> AllUnits => _units.Values.Where(u => u != null).ToList();
-    public IReadOnlyList<EntityBehaviour> AliveUnits => _units.Values.Where(u => u != null && u.IsAlive).ToList();
+    public IReadOnlyList<EntityBehaviour> AllUnits => _units.Values.Where(u => u.IsValidEntity()).ToList();
+    public IReadOnlyList<EntityBehaviour> AliveUnits => _units.Values.Where(u => u.IsValidTarget()).ToList();
     public EntityBehaviour SelectedUnit => _selectedUnit;
     public bool HasSelectedUnit => _selectedUnit != null && _selectedUnit.IsAlive;
     
@@ -81,7 +81,7 @@ public class UnitManager : SingletonBehaviour<UnitManager>, IGameManager
     // Unit spawning
     public EntityBehaviour SpawnUnit(EntityAsset unitAsset, Vector3 position = default, Quaternion rotation = default)
     {
-        if (unitAsset == null || unitAsset.Type != EntityType.Unit)
+        if (unitAsset == null || !unitAsset.IsUnit())
         {
             Debug.LogError("[UnitManager] Invalid unit asset");
             return null;
@@ -146,7 +146,7 @@ public class UnitManager : SingletonBehaviour<UnitManager>, IGameManager
     // Registration (called by EntityBehaviour)
     public void RegisterUnit(EntityBehaviour unit)
     {
-        if (unit == null || unit.Type != EntityType.Unit) return;
+        if (unit == null || !unit.IsUnit()) return;
         
         int id = _nextUnitId++;
         _units[id] = unit;
@@ -179,7 +179,7 @@ public class UnitManager : SingletonBehaviour<UnitManager>, IGameManager
     // Selection
     public void HandleEntityClicked(EntityBehaviour unit)
     {
-        if (unit == null || !unit.IsAlive || !allowUnitSelection) return;
+        if (!unit.IsValidTarget() || !allowUnitSelection) return;
         
         if (_selectedUnit == unit)
         {
@@ -195,7 +195,7 @@ public class UnitManager : SingletonBehaviour<UnitManager>, IGameManager
     
     public void SelectUnit(EntityBehaviour unit)
     {
-        if (unit == null || unit.Type != EntityType.Unit || !unit.IsAlive) return;
+        if (!unit.IsValidTarget() || !unit.IsUnit()) return;
         
         // Deselect current unit
         if (_selectedUnit != null)
@@ -299,12 +299,16 @@ public class UnitManager : SingletonBehaviour<UnitManager>, IGameManager
             unit.transform.position = targetPosition;
     }
     
-    // Combat utilities
+    // INTEGRATION: Enhanced healing with EntityExtensions
     public void HealAllUnits(int amount)
     {
         foreach (var unit in AliveUnits)
         {
-            unit.Heal(amount);
+            var result = unit.TryHeal(amount, true);
+            if (result.Success)
+            {
+                Debug.Log($"[UnitManager] Healed {unit.EntityName} for {result.HealingDone} HP");
+            }
         }
     }
     
@@ -312,28 +316,61 @@ public class UnitManager : SingletonBehaviour<UnitManager>, IGameManager
     {
         if (_selectedUnit != null && _selectedUnit.IsAlive)
         {
-            _selectedUnit.Heal(amount);
+            var result = _selectedUnit.TryHeal(amount, true);
+            if (result.Success)
+            {
+                Debug.Log($"[UnitManager] Healed selected unit {_selectedUnit.EntityName} for {result.HealingDone} HP");
+            }
         }
     }
     
+    // INTEGRATION: Enhanced unit queries using EntityExtensions
     public EntityBehaviour GetLowestHealthUnit()
     {
-        return AliveUnits
-            .OrderBy(u => u.HealthPercentage)
-            .FirstOrDefault();
+        return AliveUnits.GetWeakest();
     }
     
     public EntityBehaviour GetHighestHealthUnit()
     {
+        return AliveUnits.GetStrongest();
+    }
+    
+    public List<EntityBehaviour> GetCriticalUnits()
+    {
+        return AliveUnits.Where(u => u.IsCriticalHealth()).ToList();
+    }
+    
+    public List<EntityBehaviour> GetHealthyUnits(float threshold = 0.8f)
+    {
+        return AliveUnits.FilterByHealth(threshold, HealthComparison.AboveOrEqual).ToList();
+    }
+    
+    // INTEGRATION: Smart unit selection using EntityExtensions
+    public EntityBehaviour GetBestHealTarget()
+    {
+        // Prioritize units in critical health, then lowest health percentage
+        var criticalUnits = GetCriticalUnits();
+        if (criticalUnits.Count > 0)
+        {
+            return criticalUnits.OrderBy(u => u.HealthPercentage).First();
+        }
+        
+        return GetLowestHealthUnit();
+    }
+    
+    public EntityBehaviour GetBestBuffTarget()
+    {
+        // Prioritize healthy units that can make best use of buffs
         return AliveUnits
-            .OrderByDescending(u => u.HealthPercentage)
+            .Where(u => u.HealthPercentage > 0.5f)
+            .OrderByDescending(u => u.TargetPriority)
             .FirstOrDefault();
     }
     
     // Event handlers
     private void HandleEntityHealthChanged(EntityBehaviour entity, int oldHealth, int newHealth)
     {
-        if (entity == null || entity.Type != EntityType.Unit) return;
+        if (!entity.IsUnit()) return;
         
         int damage = oldHealth - newHealth;
         if (damage > 0)
@@ -357,7 +394,7 @@ public class UnitManager : SingletonBehaviour<UnitManager>, IGameManager
     
     private void HandleEntityDestroyed(EntityBehaviour entity)
     {
-        if (entity == null || entity.Type != EntityType.Unit) return;
+        if (!entity.IsUnit()) return;
         UnregisterUnit(entity);
     }
     
@@ -393,6 +430,47 @@ public class UnitManager : SingletonBehaviour<UnitManager>, IGameManager
         }
     }
     
+    // INTEGRATION: Unit status assessment using EntityExtensions
+    public UnitStatusReport GetUnitStatusReport()
+    {
+        var report = new UnitStatusReport();
+        
+        report.TotalUnits = AliveUnitCount;
+        report.HealthyUnits = GetHealthyUnits().Count;
+        report.CriticalUnits = GetCriticalUnits().Count;
+        
+        if (AliveUnits.Count > 0)
+        {
+            report.AverageHealth = AliveUnits.Average(u => u.HealthPercentage);
+            report.LowestHealth = AliveUnits.Min(u => u.HealthPercentage);
+            report.HighestHealth = AliveUnits.Max(u => u.HealthPercentage);
+            
+            // Overall unit status
+            if (report.CriticalUnits > report.TotalUnits / 2)
+            {
+                report.OverallStatus = UnitGroupStatus.Critical;
+            }
+            else if (report.AverageHealth < 0.5f)
+            {
+                report.OverallStatus = UnitGroupStatus.Damaged;
+            }
+            else if (report.AverageHealth > 0.8f)
+            {
+                report.OverallStatus = UnitGroupStatus.Healthy;
+            }
+            else
+            {
+                report.OverallStatus = UnitGroupStatus.Moderate;
+            }
+        }
+        else
+        {
+            report.OverallStatus = UnitGroupStatus.None;
+        }
+        
+        return report;
+    }
+
 #if UNITY_EDITOR
     [ContextMenu("Log Unit Status")]
     public void LogUnitStatus()
@@ -404,7 +482,31 @@ public class UnitManager : SingletonBehaviour<UnitManager>, IGameManager
         
         foreach (var unit in AllUnits)
         {
-            Debug.Log($"  - {unit.EntityName}: {unit.CurrentHealth}/{unit.MaxHealth} HP");
+            var healthStatus = unit.GetHealthStatus();
+            Debug.Log($"  - {unit.EntityName}: {unit.CurrentHealth}/{unit.MaxHealth} HP ({healthStatus})");
+        }
+    }
+    
+    [ContextMenu("Get Status Report")]
+    public void LogStatusReport()
+    {
+        var report = GetUnitStatusReport();
+        Debug.Log($"[UnitManager] Unit Status Report:");
+        Debug.Log($"  Overall Status: {report.OverallStatus}");
+        Debug.Log($"  Total: {report.TotalUnits}");
+        Debug.Log($"  Healthy: {report.HealthyUnits}");
+        Debug.Log($"  Critical: {report.CriticalUnits}");
+        Debug.Log($"  Average Health: {report.AverageHealth:P0}");
+    }
+    
+    [ContextMenu("Heal Best Target")]
+    public void DebugHealBestTarget()
+    {
+        var target = GetBestHealTarget();
+        if (target != null)
+        {
+            target.TryHeal(50, true);
+            Debug.Log($"[UnitManager] Healed best target: {target.EntityName}");
         }
     }
     
@@ -437,4 +539,26 @@ public enum FormationType
     Circle,
     Grid,
     Custom
+}
+
+// INTEGRATION: Supporting class for unit status
+[System.Serializable]
+public class UnitStatusReport
+{
+    public int TotalUnits;
+    public int HealthyUnits;
+    public int CriticalUnits;
+    public float AverageHealth;
+    public float LowestHealth;
+    public float HighestHealth;
+    public UnitGroupStatus OverallStatus;
+}
+
+public enum UnitGroupStatus
+{
+    None,
+    Healthy,
+    Moderate,
+    Damaged,
+    Critical
 }
