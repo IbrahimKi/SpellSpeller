@@ -12,7 +12,6 @@ public class EnemyManager : SingletonBehaviour<EnemyManager>, IGameManager
     [Header("Targeting")]
     [SerializeField] private bool allowMultiTarget = false;
     [SerializeField] private int maxTargets = 1;
-    [SerializeField] private Color targetedTintColor = new Color(1f, 0.8f, 0.8f);
     
     [Header("Spawn Settings")]
     [SerializeField] private List<Transform> spawnPoints = new List<Transform>();
@@ -37,7 +36,7 @@ public class EnemyManager : SingletonBehaviour<EnemyManager>, IGameManager
     public static event System.Action<EntityBehaviour> OnEnemyKilled;
     public static event System.Action OnAllEnemiesDefeated;
     
-    // Properties - INTEGRATION: Enhanced with EntityExtensions
+    // Properties - Simplified using EntityExtensions
     public int EnemyCount => _enemies.Count;
     public int AliveEnemyCount => _enemies.Values.Count(e => e.IsValidTarget());
     public bool HasEnemies => AliveEnemyCount > 0;
@@ -77,17 +76,7 @@ public class EnemyManager : SingletonBehaviour<EnemyManager>, IGameManager
     // Enemy spawning
     public EntityBehaviour SpawnEnemy(EntityAsset enemyAsset, Vector3 position, Quaternion rotation = default)
     {
-        if (enemyAsset == null || enemyAsset.Type != EntityType.Enemy)
-        {
-            Debug.LogError("[EnemyManager] Invalid enemy asset");
-            return null;
-        }
-        
-        if (_enemies.Count >= maxEnemies)
-        {
-            Debug.LogWarning($"[EnemyManager] Max enemy limit reached ({maxEnemies})");
-            return null;
-        }
+        if (!ValidateSpawn(enemyAsset)) return null;
         
         if (rotation == default)
             rotation = Quaternion.identity;
@@ -102,11 +91,8 @@ public class EnemyManager : SingletonBehaviour<EnemyManager>, IGameManager
             return null;
         }
         
-        // Apply spawn animation if needed
         if (enemyAsset.SpawnWithAnimation)
-        {
             StartCoroutine(SpawnAnimation(enemy, enemyAsset.SpawnDelay));
-        }
         
         return enemy;
     }
@@ -114,13 +100,27 @@ public class EnemyManager : SingletonBehaviour<EnemyManager>, IGameManager
     public EntityBehaviour SpawnEnemyAtRandomPoint(EntityAsset enemyAsset)
     {
         if (spawnPoints.Count == 0)
-        {
-            Debug.LogWarning("[EnemyManager] No spawn points defined");
             return SpawnEnemy(enemyAsset, Vector3.zero);
-        }
         
         Transform spawnPoint = spawnPoints[Random.Range(0, spawnPoints.Count)];
         return SpawnEnemy(enemyAsset, spawnPoint.position, spawnPoint.rotation);
+    }
+    
+    private bool ValidateSpawn(EntityAsset enemyAsset)
+    {
+        if (enemyAsset == null || enemyAsset.Type != EntityType.Enemy)
+        {
+            Debug.LogError("[EnemyManager] Invalid enemy asset");
+            return false;
+        }
+        
+        if (_enemies.Count >= maxEnemies)
+        {
+            Debug.LogWarning($"[EnemyManager] Max enemy limit reached ({maxEnemies})");
+            return false;
+        }
+        
+        return true;
     }
     
     private IEnumerator SpawnAnimation(EntityBehaviour enemy, float delay)
@@ -128,7 +128,6 @@ public class EnemyManager : SingletonBehaviour<EnemyManager>, IGameManager
         if (delay > 0)
             yield return new WaitForSeconds(delay);
         
-        // Simple scale-in animation
         Vector3 originalScale = enemy.transform.localScale;
         enemy.transform.localScale = Vector3.zero;
         
@@ -144,7 +143,6 @@ public class EnemyManager : SingletonBehaviour<EnemyManager>, IGameManager
         enemy.transform.localScale = originalScale;
     }
     
-    // Registration (called by EntityBehaviour)
     public void RegisterEnemy(EntityBehaviour enemy)
     {
         if (enemy == null || !enemy.IsEnemy()) return;
@@ -153,7 +151,6 @@ public class EnemyManager : SingletonBehaviour<EnemyManager>, IGameManager
         _enemies[id] = enemy;
         
         OnEnemySpawned?.Invoke(enemy);
-        Debug.Log($"[EnemyManager] Enemy registered: {enemy.EntityName} (ID: {id})");
     }
     
     public void UnregisterEnemy(EntityBehaviour enemy)
@@ -181,15 +178,9 @@ public class EnemyManager : SingletonBehaviour<EnemyManager>, IGameManager
         if (!enemy.IsValidTarget()) return;
         
         if (_targetedEnemies.Contains(enemy))
-        {
-            // Already targeted - untarget
             UntargetEnemy(enemy);
-        }
         else
-        {
-            // Not targeted - target
             TargetEnemy(enemy);
-        }
     }
     
     public void TargetEnemy(EntityBehaviour enemy)
@@ -197,15 +188,9 @@ public class EnemyManager : SingletonBehaviour<EnemyManager>, IGameManager
         if (!enemy.IsValidTarget()) return;
         
         if (!allowMultiTarget)
-        {
-            // Clear existing targets
             ClearAllTargets();
-        }
         else if (_targetedEnemies.Count >= maxTargets)
-        {
-            // Remove oldest target
             UntargetEnemy(_targetedEnemies[0]);
-        }
         
         _targetedEnemies.Add(enemy);
         enemy.SetTargeted(true);
@@ -230,22 +215,14 @@ public class EnemyManager : SingletonBehaviour<EnemyManager>, IGameManager
     {
         var targets = _targetedEnemies.ToList();
         foreach (var enemy in targets)
-        {
             UntargetEnemy(enemy);
-        }
     }
     
-    // INTEGRATION: Enhanced damage dealing with EntityExtensions
+    // Damage dealing - simplified using EntityExtensions
     public void DamageAllEnemies(int damage)
     {
         foreach (var enemy in AliveEnemies)
-        {
-            var result = enemy.TryDamageWithEffects(damage, DamageType.Normal, true);
-            if (result.Success)
-            {
-                Debug.Log($"[EnemyManager] Dealt {result.DamageDealt} damage to {enemy.EntityName}");
-            }
-        }
+            enemy.TryDamageWithEffects(damage, DamageType.Normal, true);
     }
     
     public void DamageTargetedEnemies(int damage)
@@ -253,30 +230,17 @@ public class EnemyManager : SingletonBehaviour<EnemyManager>, IGameManager
         foreach (var enemy in _targetedEnemies.ToList())
         {
             if (enemy.IsValidTarget())
-            {
-                var result = enemy.TryDamageWithEffects(damage, DamageType.Normal, true);
-                if (result.Success)
-                {
-                    Debug.Log($"[EnemyManager] Dealt {result.DamageDealt} damage to targeted enemy {enemy.EntityName}");
-                }
-            }
+                enemy.TryDamageWithEffects(damage, DamageType.Normal, true);
         }
     }
     
     public void DamageRandomEnemy(int damage)
     {
         var randomEnemy = AliveEnemies.GetRandom();
-        if (randomEnemy != null)
-        {
-            var result = randomEnemy.TryDamageWithEffects(damage, DamageType.Normal, true);
-            if (result.Success)
-            {
-                Debug.Log($"[EnemyManager] Dealt {result.DamageDealt} damage to random enemy {randomEnemy.EntityName}");
-            }
-        }
+        randomEnemy?.TryDamageWithEffects(damage, DamageType.Normal, true);
     }
     
-    // INTEGRATION: Smart targeting using EntityExtensions
+    // Smart targeting using EntityExtensions
     public EntityBehaviour GetSmartTarget(TargetingStrategy strategy = TargetingStrategy.Optimal)
     {
         if (!HasEnemies) return null;
@@ -285,23 +249,15 @@ public class EnemyManager : SingletonBehaviour<EnemyManager>, IGameManager
         {
             TargetingStrategy.Weakest => AliveEnemies.GetWeakest(),
             TargetingStrategy.Strongest => AliveEnemies.GetStrongest(),
-            TargetingStrategy.Nearest => GetNearestEnemyToPlayer(),
+            TargetingStrategy.Nearest => AliveEnemies.GetNearestTo(Vector3.zero),
             TargetingStrategy.Priority => AliveEnemies.GetHighestPriority(),
             TargetingStrategy.Random => AliveEnemies.GetRandom(),
             _ => GetOptimalTarget()
         };
     }
     
-    private EntityBehaviour GetNearestEnemyToPlayer()
-    {
-        // Assume player is at origin or get from CombatManager
-        Vector3 playerPosition = Vector3.zero;
-        return AliveEnemies.GetNearestTo(playerPosition);
-    }
-    
     private EntityBehaviour GetOptimalTarget()
     {
-        // Create smart targeting criteria
         var criteria = new TargetingCriteria
         {
             PreferLowHealth = true,
@@ -322,9 +278,7 @@ public class EnemyManager : SingletonBehaviour<EnemyManager>, IGameManager
         
         int damage = oldHealth - newHealth;
         if (damage > 0)
-        {
             OnEnemyDamaged?.Invoke(entity, damage);
-        }
         
         if (newHealth <= 0)
         {
@@ -343,52 +297,23 @@ public class EnemyManager : SingletonBehaviour<EnemyManager>, IGameManager
     private void CheckAllEnemiesDefeated()
     {
         if (!HasEnemies)
-        {
             OnAllEnemiesDefeated?.Invoke();
-            Debug.Log("[EnemyManager] All enemies defeated!");
-        }
     }
     
-    // INTEGRATION: Enhanced utility methods using EntityExtensions
-    public EntityBehaviour GetNearestEnemy(Vector3 position)
-    {
-        return AliveEnemies.GetNearestTo(position);
-    }
-    
-    public List<EntityBehaviour> GetEnemiesInRadius(Vector3 center, float radius)
-    {
-        return AliveEnemies.GetInRadius(center, radius).ToList();
-    }
-    
-    // INTEGRATION: Advanced enemy queries using EntityExtensions
+    // Utility methods using EntityExtensions
     public List<EntityBehaviour> GetLowHealthEnemies(float threshold = 0.3f)
-    {
-        return AliveEnemies.FilterByHealth(threshold, HealthComparison.Below).ToList();
-    }
+        => AliveEnemies.FilterByHealth(threshold, HealthComparison.Below).ToList();
     
     public List<EntityBehaviour> GetCriticalEnemies()
-    {
-        return AliveEnemies.Where(e => e.IsCriticalHealth()).ToList();
-    }
+        => AliveEnemies.Where(e => e.IsCriticalHealth()).ToList();
     
-    public List<EntityBehaviour> GetEliteEnemies()
-    {
-        return AliveEnemies.Where(e => e.IsElite()).ToList();
-    }
-    
-    public List<EntityBehaviour> GetBossEnemies()
-    {
-        return AliveEnemies.Where(e => e.IsBoss()).ToList();
-    }
-    
-    // INTEGRATION: Threat assessment using EntityExtensions
     public ThreatAssessment GetThreatAssessment()
     {
         var assessment = new ThreatAssessment();
         
         assessment.TotalEnemies = AliveEnemyCount;
-        assessment.BossCount = GetBossEnemies().Count;
-        assessment.EliteCount = GetEliteEnemies().Count;
+        assessment.BossCount = AliveEnemies.Count(e => e.IsBoss());
+        assessment.EliteCount = AliveEnemies.Count(e => e.IsElite());
         assessment.CriticalEnemies = GetCriticalEnemies().Count;
         
         if (AliveEnemies.Count > 0)
@@ -397,7 +322,6 @@ public class EnemyManager : SingletonBehaviour<EnemyManager>, IGameManager
             assessment.LowestHealth = AliveEnemies.Min(e => e.HealthPercentage);
             assessment.HighestHealth = AliveEnemies.Max(e => e.HealthPercentage);
             
-            // Calculate threat level
             float threatScore = assessment.TotalEnemies * 1f +
                               assessment.EliteCount * 2f +
                               assessment.BossCount * 5f;
@@ -431,43 +355,6 @@ public class EnemyManager : SingletonBehaviour<EnemyManager>, IGameManager
         _enemies.Clear();
         _targetedEnemies.Clear();
     }
-    
-    // INTEGRATION: Smart multi-targeting using EntityExtensions
-    public List<EntityBehaviour> GetOptimalTargets(int count, TargetingStrategy strategy = TargetingStrategy.Optimal)
-    {
-        if (!HasEnemies || count <= 0) return new List<EntityBehaviour>();
-        
-        return strategy switch
-        {
-            TargetingStrategy.Weakest => AliveEnemies.SortBy(EntitySortCriteria.HealthPercentage).Take(count).ToList(),
-            TargetingStrategy.Strongest => AliveEnemies.SortBy(EntitySortCriteria.Health, false).Take(count).ToList(),
-            TargetingStrategy.Priority => AliveEnemies.SortBy(EntitySortCriteria.TargetPriority, false).Take(count).ToList(),
-            TargetingStrategy.Random => AliveEnemies.GetRandom(count).ToList(),
-            _ => GetOptimalTargetGroup(count)
-        };
-    }
-    
-    private List<EntityBehaviour> GetOptimalTargetGroup(int count)
-    {
-        // Balanced approach: mix of weak and high-priority targets
-        var weakTargets = AliveEnemies.GetWeakest();
-        var priorityTargets = AliveEnemies.GetHighestPriority();
-        var targets = new HashSet<EntityBehaviour>();
-        
-        if (weakTargets != null) targets.Add(weakTargets);
-        if (priorityTargets != null && priorityTargets != weakTargets) targets.Add(priorityTargets);
-        
-        // Fill remaining slots with sorted enemies
-        var remaining = AliveEnemies
-            .Where(e => !targets.Contains(e))
-            .SortBy(EntitySortCriteria.HealthPercentage)
-            .Take(count - targets.Count);
-        
-        foreach (var enemy in remaining)
-            targets.Add(enemy);
-        
-        return targets.Take(count).ToList();
-    }
 
 #if UNITY_EDITOR
     [ContextMenu("Log Enemy Status")]
@@ -497,32 +384,9 @@ public class EnemyManager : SingletonBehaviour<EnemyManager>, IGameManager
         Debug.Log($"  Critical: {assessment.CriticalEnemies}");
         Debug.Log($"  Average Health: {assessment.AverageHealth:P0}");
     }
-    
-    [ContextMenu("Target Weakest Enemy")]
-    public void DebugTargetWeakest()
-    {
-        var weakest = GetSmartTarget(TargetingStrategy.Weakest);
-        if (weakest != null)
-        {
-            TargetEnemy(weakest);
-            Debug.Log($"[EnemyManager] Targeted weakest: {weakest.EntityName} ({weakest.HealthPercentage:P0} HP)");
-        }
-    }
-    
-    [ContextMenu("Damage All Critical Enemies")]
-    public void DebugDamageCritical()
-    {
-        var criticalEnemies = GetCriticalEnemies();
-        foreach (var enemy in criticalEnemies)
-        {
-            enemy.TryDamageWithEffects(10, DamageType.True, true);
-        }
-        Debug.Log($"[EnemyManager] Damaged {criticalEnemies.Count} critical enemies");
-    }
 #endif
 }
 
-// INTEGRATION: Supporting class for threat assessment
 [System.Serializable]
 public class ThreatAssessment
 {

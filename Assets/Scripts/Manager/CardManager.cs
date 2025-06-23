@@ -1,9 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 using UnityEngine;
 using System.Collections;
-using UnityEngine.UI;
 
 public class CardManager : SingletonBehaviour<CardManager>, IGameManager
 {
@@ -45,7 +43,7 @@ public class CardManager : SingletonBehaviour<CardManager>, IGameManager
     public static event System.Action<List<Card>> OnSelectionChanged;
     public static event System.Action OnCardManagerInitialized;
     
-    // INTEGRATION: Enhanced properties using CardExtensions
+    // Properties - Simplified using CardExtensions
     public bool IsInitialized { get; private set; }
     public List<Card> SelectedCards => _selectedCards.GetValidCards().ToList();
     public List<Card> GetHandCards() => _handCards.GetValidCards().ToList();
@@ -115,12 +113,11 @@ public class CardManager : SingletonBehaviour<CardManager>, IGameManager
         
         RegisterCard(cardComponent);
         
-        // INTEGRATION: Use CardExtensions for safer hand addition
         if (addToHand && _handCards.GetValidCardCount() < maxHandSize)
         {
             _handCards.Add(cardComponent);
             RequestLayoutUpdate();
-            OnHandUpdated?.Invoke(_handCards.GetValidCards().ToList());
+            OnHandUpdated?.Invoke(GetHandCards());
         }
         
         OnCardSpawned?.Invoke(cardComponent);
@@ -134,36 +131,12 @@ public class CardManager : SingletonBehaviour<CardManager>, IGameManager
         
         cardComponent.SetCardData(cardData);
         
-        if (addToHand && handContainer != null)
-        {
-            cardObject.transform.SetParent(handContainer, false);
-            ConfigureCardForHand(cardObject);
-        }
-        else
-        {
-            Transform targetParent = parent ?? defaultSpawnParent ?? transform;
-            cardObject.transform.SetParent(targetParent, false);
-            ResetCardTransform(cardObject);
-        }
+        Transform targetParent = addToHand && handContainer != null ? handContainer : (parent ?? defaultSpawnParent ?? transform);
+        cardObject.transform.SetParent(targetParent, false);
+        ResetCardTransform(cardObject);
         
         cardObject.SetActive(true);
         return cardComponent;
-    }
-    
-    private void ConfigureCardForHand(GameObject cardObject)
-    {
-        var rectTransform = cardObject.GetComponent<RectTransform>();
-        if (rectTransform != null)
-        {
-            rectTransform.localPosition = Vector3.zero;
-            rectTransform.localRotation = Quaternion.identity;
-            rectTransform.localScale = Vector3.one;
-            
-            rectTransform.anchorMin = new Vector2(0.5f, 0.5f);
-            rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
-            rectTransform.pivot = new Vector2(0.5f, 0.5f);
-            rectTransform.anchoredPosition = Vector2.zero;
-        }
     }
     
     private void RegisterCard(Card card)
@@ -173,7 +146,6 @@ public class CardManager : SingletonBehaviour<CardManager>, IGameManager
         _cardToId[card] = cardId;
     }
     
-    // INTEGRATION: Enhanced discard logic with CardExtensions
     public bool DiscardCard(Card card)
     {
         if (!card.IsValid()) return false;
@@ -212,9 +184,8 @@ public class CardManager : SingletonBehaviour<CardManager>, IGameManager
     private void UpdateHandAndSelection()
     {
         RequestLayoutUpdate();
-        // INTEGRATION: Use CardExtensions for safer event firing
-        OnHandUpdated?.Invoke(_handCards.GetValidCards().ToList());
-        OnSelectionChanged?.Invoke(_selectedCards.GetValidCards().ToList());
+        OnHandUpdated?.Invoke(GetHandCards());
+        OnSelectionChanged?.Invoke(SelectedCards);
     }
     
     private void DestroyCardInternal(Card card)
@@ -269,44 +240,36 @@ public class CardManager : SingletonBehaviour<CardManager>, IGameManager
         ResetCardTransform(card.gameObject);
     }
     
-    // INTEGRATION: Enhanced card selection with CardExtensions
     private void HandleCardSelected(Card card)
     {
         if (!card.IsValid() || _selectedCards.Contains(card)) return;
         
         if (!allowMultiSelect)
         {
-            // INTEGRATION: Use CardExtensions for safer deselection
-            var cardsToDeselect = _selectedCards.GetValidCards().ToList();
-            foreach (var selectedCard in cardsToDeselect)
+            foreach (var selectedCard in _selectedCards.GetValidCards().ToList())
                 selectedCard.TryDeselect();
             _selectedCards.Clear();
         }
         else if (_selectedCards.GetValidCardCount() >= maxSelectedCards)
         {
             var oldestCard = _selectedCards.GetValidCards().FirstOrDefault();
-            if (oldestCard != null)
-            {
-                oldestCard.TryDeselect();
-                _selectedCards.Remove(oldestCard);
-            }
+            oldestCard?.TryDeselect();
+            _selectedCards.Remove(oldestCard);
         }
         
         _selectedCards.Add(card);
-        OnSelectionChanged?.Invoke(_selectedCards.GetValidCards().ToList());
+        OnSelectionChanged?.Invoke(SelectedCards);
     }
     
     private void HandleCardDeselected(Card card)
     {
         if (_selectedCards.Remove(card))
-            OnSelectionChanged?.Invoke(_selectedCards.GetValidCards().ToList());
+            OnSelectionChanged?.Invoke(SelectedCards);
     }
     
-    // INTEGRATION: Enhanced selection management with CardExtensions
     public void ClearSelection()
     {
-        var cardsToDeselect = _selectedCards.GetValidCards().ToList();
-        foreach (var card in cardsToDeselect)
+        foreach (var card in _selectedCards.GetValidCards().ToList())
             card.TryDeselect();
         _selectedCards.Clear();
         OnSelectionChanged?.Invoke(new List<Card>());
@@ -328,7 +291,6 @@ public class CardManager : SingletonBehaviour<CardManager>, IGameManager
         _layoutDirty = false;
     }
     
-    // INTEGRATION: Enhanced hand management with CardExtensions
     public bool AddCardToHand(Card card)
     {
         if (!card.IsValid() || _handCards.Contains(card) || IsHandFull)
@@ -339,17 +301,10 @@ public class CardManager : SingletonBehaviour<CardManager>, IGameManager
         
         _handCards.Add(card);
         RequestLayoutUpdate();
-        OnHandUpdated?.Invoke(_handCards.GetValidCards().ToList());
+        OnHandUpdated?.Invoke(GetHandCards());
         return true;
     }
     
-    // INTEGRATION: Enhanced letter sequence extraction using CardExtensions
-    public static string GetLetterSequenceFromCards(List<Card> cards)
-    {
-        return cards.GetLetterSequence();
-    }
-    
-    // INTEGRATION: Enhanced card removal with CardExtensions
     public bool RemoveCardFromHand(Card card)
     {
         if (!card.IsValid() || !_handCards.Remove(card))
@@ -359,8 +314,8 @@ public class CardManager : SingletonBehaviour<CardManager>, IGameManager
         _handLayoutManager?.CleanupCardReference(card);
         
         RequestLayoutUpdate();
-        OnHandUpdated?.Invoke(_handCards.GetValidCards().ToList());
-        OnSelectionChanged?.Invoke(_selectedCards.GetValidCards().ToList());
+        OnHandUpdated?.Invoke(GetHandCards());
+        OnSelectionChanged?.Invoke(SelectedCards);
         return true;
     }
     
@@ -374,43 +329,22 @@ public class CardManager : SingletonBehaviour<CardManager>, IGameManager
         return allCardData?.Count(card => card != null) ?? 0;
     }
     
-    // INTEGRATION: New methods using CardExtensions
+    // Extension method integrations
+    public static string GetLetterSequenceFromCards(List<Card> cards)
+        => cards.GetLetterSequence();
     
-    /// <summary>
-    /// Gets spell building potential of current hand
-    /// </summary>
     public SpellBuildingPotential GetHandSpellPotential()
-    {
-        return _handCards.GetSpellBuildingPotential();
-    }
+        => _handCards.GetSpellBuildingPotential();
     
-    /// <summary>
-    /// Find cards that can build a specific spell
-    /// </summary>
     public List<Card> FindCardsForSpell(string spellCode)
-    {
-        return _handCards.FindCardsForSpell(spellCode).ToList();
-    }
+        => _handCards.FindCardsForSpell(spellCode).ToList();
     
-    /// <summary>
-    /// Check if hand can build a specific spell
-    /// </summary>
     public bool CanBuildSpell(string spellCode)
-    {
-        return _handCards.CanBuildSpell(spellCode);
-    }
+        => _handCards.CanBuildSpell(spellCode);
     
-    /// <summary>
-    /// Get detailed hand analysis
-    /// </summary>
     public CollectionLetterAnalysis GetHandAnalysis()
-    {
-        return _handCards.GetCollectionLetterAnalysis();
-    }
+        => _handCards.GetCollectionLetterAnalysis();
     
-    /// <summary>
-    /// Select cards by criteria
-    /// </summary>
     public bool SelectCardsByCriteria(CardSortCriteria criteria, int maxCards = 1)
     {
         if (IsHandFull || maxCards <= 0) return false;
@@ -431,37 +365,20 @@ public class CardManager : SingletonBehaviour<CardManager>, IGameManager
         return anySelected;
     }
     
-    /// <summary>
-    /// Get cards filtered by type
-    /// </summary>
     public List<Card> GetCardsByType(CardType cardType)
-    {
-        return _handCards.FilterByType(cardType).ToList();
-    }
+        => _handCards.FilterByType(cardType).ToList();
     
-    /// <summary>
-    /// Get cards filtered by tier
-    /// </summary>
     public List<Card> GetCardsByTier(int tier)
-    {
-        return _handCards.FilterByTier(tier).ToList();
-    }
+        => _handCards.FilterByTier(tier).ToList();
     
-    /// <summary>
-    /// Auto-select optimal cards for spell building
-    /// </summary>
     public void AutoSelectForSpellBuilding()
     {
         var potential = GetHandSpellPotential();
         if (potential.OverallScore < 0.3f) return;
         
-        // Select cards with high letter diversity
         SelectCardsByCriteria(CardSortCriteria.LetterCount, 2);
     }
     
-    /// <summary>
-    /// Try to select cards safely
-    /// </summary>
     public bool TrySelectCards(IEnumerable<Card> cards)
     {
         if (cards == null) return false;
@@ -470,9 +387,7 @@ public class CardManager : SingletonBehaviour<CardManager>, IGameManager
         {
             ClearSelection();
             foreach (var card in cards.Where(c => c.IsValid()))
-            {
                 card.TrySelect();
-            }
             return true;
         }
         catch (System.Exception ex)
@@ -495,12 +410,6 @@ public class CardManager : SingletonBehaviour<CardManager>, IGameManager
         
         var potential = GetHandSpellPotential();
         Debug.Log($"  Spell Potential: {potential.OverallScore:P0}");
-    }
-    
-    [ContextMenu("Auto Select Cards")]
-    public void DebugAutoSelect()
-    {
-        AutoSelectForSpellBuilding();
     }
 #endif
 }
