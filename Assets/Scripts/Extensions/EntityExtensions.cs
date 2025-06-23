@@ -3,25 +3,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System;
 
-/// <summary>
-/// Entity Extensions für erweiterte Entity-Operations
-/// Bietet sichere Entity Management, Health Utilities, Targeting Logic und Collection Queries
-/// 
-/// USAGE:
-/// - entity.IsLowHealth() statt manuelle Percentage checks
-/// - entities.GetWeakest() für intelligente Targeting
-/// - entity.TryDamageWithEffects(damage) für erweiterte Schadens-Logic
-/// - entities.FilterByHealth(0.3f, HealthComparison.Below) für Health-basierte Queries
-/// </summary>
 public static class EntityExtensions
 {
-    // ===========================================
-    // HEALTH & STATUS EXTENSIONS
-    // ===========================================
-    
-    /// <summary>
-    /// Erweiterte Health-Status Prüfungen
-    /// </summary>
     public static EntityHealthStatus GetHealthStatus(this EntityBehaviour entity)
     {
         if (!entity.IsValidTarget()) return EntityHealthStatus.Invalid;
@@ -37,9 +20,6 @@ public static class EntityExtensions
         };
     }
     
-    /// <summary>
-    /// Detaillierte Health-Checks
-    /// </summary>
     public static bool IsHealthInRange(this EntityBehaviour entity, float min, float max)
     {
         if (!entity.IsValidTarget()) return false;
@@ -58,25 +38,15 @@ public static class EntityExtensions
     public static bool IsHealthy(this EntityBehaviour entity, float threshold = 0.8f)
         => entity.IsValidTarget() && entity.HealthPercentage >= threshold;
     
-    /// <summary>
-    /// Erweiterte Validierung
-    /// </summary>
     public static bool IsValidTarget(this EntityBehaviour entity)
         => entity != null && !entity.Equals(null) && entity.IsAlive && entity.IsTargetable;
     
     public static bool IsValidEntity(this EntityBehaviour entity)
-        => entity != null && !entity.Equals(null); // Unity's "fake null" check
+        => entity != null && !entity.Equals(null);
     
     public static bool IsActiveEntity(this EntityBehaviour entity)
         => entity.IsValidEntity() && entity.gameObject != null && entity.gameObject.activeInHierarchy;
     
-    // ===========================================
-    // DAMAGE & HEALING EXTENSIONS
-    // ===========================================
-    
-    /// <summary>
-    /// Erweiterte Schadens-Logik mit Results
-    /// </summary>
     public static DamageResult TryDamageWithEffects(this EntityBehaviour entity, int damage, 
         DamageType damageType = DamageType.Normal, bool showEffects = true)
     {
@@ -89,14 +59,10 @@ public static class EntityExtensions
         }
         
         int originalHealth = entity.CurrentHealth;
-        
-        // Apply damage modifiers based on type
         int finalDamage = CalculateFinalDamage(entity, damage, damageType);
         
-        // Apply damage
         entity.TakeDamage(finalDamage, damageType);
         
-        // Calculate results
         result.Success = true;
         result.DamageDealt = originalHealth - entity.CurrentHealth;
         result.FinalHealth = entity.CurrentHealth;
@@ -104,7 +70,6 @@ public static class EntityExtensions
         result.WasKilled = entity.CurrentHealth <= 0;
         result.DamageType = damageType;
         
-        // Show effects if requested
         if (showEffects && result.DamageDealt > 0)
         {
             Debug.Log($"[Damage] {result.DamageDealt} {damageType} damage to {entity.EntityName}");
@@ -113,9 +78,6 @@ public static class EntityExtensions
         return result;
     }
     
-    /// <summary>
-    /// Sichere Heilung mit Results
-    /// </summary>
     public static HealResult TryHeal(this EntityBehaviour entity, int healAmount, bool showEffects = true)
     {
         var result = new HealResult();
@@ -136,7 +98,6 @@ public static class EntityExtensions
         int maxPossibleHeal = entity.MaxHealth - originalHealth;
         int finalHeal = Mathf.Min(healAmount, maxPossibleHeal);
         
-        // Apply healing
         entity.Heal(finalHeal);
         
         result.Success = true;
@@ -153,13 +114,6 @@ public static class EntityExtensions
         return result;
     }
     
-    // ===========================================
-    // COLLECTION & QUERY EXTENSIONS
-    // ===========================================
-    
-    /// <summary>
-    /// Filtert Entities nach Health-Kriterien
-    /// </summary>
     public static IEnumerable<EntityBehaviour> FilterByHealth(this IEnumerable<EntityBehaviour> entities, 
         float threshold, HealthComparison comparison)
     {
@@ -176,9 +130,6 @@ public static class EntityExtensions
         });
     }
     
-    /// <summary>
-    /// Sortiert Entities nach verschiedenen Kriterien
-    /// </summary>
     public static IEnumerable<EntityBehaviour> SortBy(this IEnumerable<EntityBehaviour> entities, 
         EntitySortCriteria criteria, bool ascending = true)
     {
@@ -199,9 +150,6 @@ public static class EntityExtensions
         return ascending ? sorted : sorted.Reverse();
     }
     
-    /// <summary>
-    /// Findet näheste Entity zu Position
-    /// </summary>
     public static EntityBehaviour GetNearestTo(this IEnumerable<EntityBehaviour> entities, Vector3 position)
     {
         if (entities == null) return null;
@@ -212,9 +160,6 @@ public static class EntityExtensions
             .FirstOrDefault();
     }
     
-    /// <summary>
-    /// Findet Entity mit niedrigster Health
-    /// </summary>
     public static EntityBehaviour GetWeakest(this IEnumerable<EntityBehaviour> entities)
     {
         if (entities == null) return null;
@@ -225,9 +170,6 @@ public static class EntityExtensions
             .FirstOrDefault();
     }
     
-    /// <summary>
-    /// Findet Entity mit höchster Health
-    /// </summary>
     public static EntityBehaviour GetStrongest(this IEnumerable<EntityBehaviour> entities)
     {
         if (entities == null) return null;
@@ -238,9 +180,6 @@ public static class EntityExtensions
             .FirstOrDefault();
     }
     
-    /// <summary>
-    /// Findet Entity mit höchster Priorität
-    /// </summary>
     public static EntityBehaviour GetHighestPriority(this IEnumerable<EntityBehaviour> entities)
     {
         if (entities == null) return null;
@@ -251,9 +190,6 @@ public static class EntityExtensions
             .FirstOrDefault();
     }
     
-    /// <summary>
-    /// Findet Entities in Radius um Position
-    /// </summary>
     public static IEnumerable<EntityBehaviour> GetInRadius(this IEnumerable<EntityBehaviour> entities, 
         Vector3 center, float radius)
     {
@@ -263,9 +199,6 @@ public static class EntityExtensions
             .Where(e => e.IsValidTarget() && e.GetDistanceTo(center) <= radius);
     }
     
-    /// <summary>
-    /// Holt Random Entity aus Collection
-    /// </summary>
     public static EntityBehaviour GetRandom(this IEnumerable<EntityBehaviour> entities)
     {
         if (entities == null) return null;
@@ -274,9 +207,6 @@ public static class EntityExtensions
         return validEntities.Any() ? validEntities[UnityEngine.Random.Range(0, validEntities.Count)] : null;
     }
     
-    /// <summary>
-    /// Holt Random Entities aus Collection
-    /// </summary>
     public static IEnumerable<EntityBehaviour> GetRandom(this IEnumerable<EntityBehaviour> entities, int count)
     {
         if (entities == null || count <= 0) return Enumerable.Empty<EntityBehaviour>();
@@ -287,13 +217,6 @@ public static class EntityExtensions
         return validEntities.OrderBy(x => System.Guid.NewGuid()).Take(count);
     }
     
-    // ===========================================
-    // POSITION & DISTANCE EXTENSIONS
-    // ===========================================
-    
-    /// <summary>
-    /// Berechnet Distanz zu Position
-    /// </summary>
     public static float GetDistanceTo(this EntityBehaviour entity, Vector3 position)
     {
         if (!entity.IsValidEntity() || entity.transform == null) 
@@ -302,9 +225,6 @@ public static class EntityExtensions
         return Vector3.Distance(entity.transform.position, position);
     }
     
-    /// <summary>
-    /// Berechnet Distanz zu anderer Entity
-    /// </summary>
     public static float GetDistanceTo(this EntityBehaviour entity, EntityBehaviour other)
     {
         if (!entity.IsValidEntity() || !other.IsValidEntity() || 
@@ -314,9 +234,6 @@ public static class EntityExtensions
         return Vector3.Distance(entity.transform.position, other.transform.position);
     }
     
-    /// <summary>
-    /// Prüft ob Entity in Range ist
-    /// </summary>
     public static bool IsInRangeOf(this EntityBehaviour entity, Vector3 position, float range)
     {
         return entity.GetDistanceTo(position) <= range;
@@ -327,9 +244,6 @@ public static class EntityExtensions
         return entity.GetDistanceTo(other) <= range;
     }
     
-    /// <summary>
-    /// Holt Direction zu Position
-    /// </summary>
     public static Vector3 GetDirectionTo(this EntityBehaviour entity, Vector3 position)
     {
         if (!entity.IsValidEntity() || entity.transform == null) 
@@ -349,20 +263,12 @@ public static class EntityExtensions
         return direction.normalized;
     }
     
-    // ===========================================
-    // TARGETING UTILITIES
-    // ===========================================
-    
-    /// <summary>
-    /// Intelligente Target-Bewertung
-    /// </summary>
     public static float CalculateTargetScore(this EntityBehaviour entity, TargetingCriteria criteria)
     {
         if (!entity.IsValidTarget() || criteria == null) return float.MinValue;
         
         float score = 0f;
         
-        // Health-based scoring
         if (criteria.PreferLowHealth)
         {
             score += (1f - entity.HealthPercentage) * criteria.HealthWeight;
@@ -372,7 +278,6 @@ public static class EntityExtensions
             score += entity.HealthPercentage * criteria.HealthWeight;
         }
         
-        // Distance-based scoring
         if (criteria.ReferencePosition.HasValue)
         {
             float distance = entity.GetDistanceTo(criteria.ReferencePosition.Value);
@@ -384,10 +289,8 @@ public static class EntityExtensions
                 score += normalizedDistance * criteria.DistanceWeight;
         }
         
-        // Priority-based scoring
         score += entity.TargetPriority * criteria.PriorityWeight;
         
-        // Type-based scoring
         if (criteria.PreferredTypes != null && criteria.PreferredTypes.Contains(entity.Type))
         {
             score += criteria.TypeWeight;
@@ -396,9 +299,6 @@ public static class EntityExtensions
         return score;
     }
     
-    /// <summary>
-    /// Findet bestes Target basierend auf Kriterien
-    /// </summary>
     public static EntityBehaviour GetBestTarget(this IEnumerable<EntityBehaviour> entities, 
         TargetingCriteria criteria)
     {
@@ -410,13 +310,6 @@ public static class EntityExtensions
             .FirstOrDefault();
     }
     
-    // ===========================================
-    // STATUS EFFECTS & BUFFS
-    // ===========================================
-    
-    /// <summary>
-    /// Prüft Entity-Tags für erweiterte Logic
-    /// </summary>
     public static bool HasTag(this EntityBehaviour entity, string tag)
     {
         if (string.IsNullOrEmpty(tag)) return false;
@@ -435,9 +328,6 @@ public static class EntityExtensions
         return entity?.Asset?.HasAllTags(tags) ?? false;
     }
     
-    /// <summary>
-    /// Entity-Typ Checks
-    /// </summary>
     public static bool IsEnemy(this EntityBehaviour entity)
         => entity.IsValidEntity() && entity.Type == EntityType.Enemy;
     
@@ -447,9 +337,6 @@ public static class EntityExtensions
     public static bool IsNeutral(this EntityBehaviour entity)
         => entity.IsValidEntity() && entity.Type == EntityType.Neutral;
     
-    /// <summary>
-    /// Entity-Kategorie Checks
-    /// </summary>
     public static bool IsBoss(this EntityBehaviour entity)
         => entity?.Asset?.Category == EntityCategory.Boss;
     
@@ -459,17 +346,12 @@ public static class EntityExtensions
     public static bool IsMinion(this EntityBehaviour entity)
         => entity?.Asset?.Category == EntityCategory.Minion;
     
-    // ===========================================
-    // HELPER METHODS
-    // ===========================================
-    
     private static int CalculateFinalDamage(EntityBehaviour entity, int baseDamage, DamageType damageType)
     {
-        // Basic damage calculation
         float multiplier = damageType switch
         {
             DamageType.Fire => GetFireResistance(entity),
-            DamageType.True => 1.0f, // True damage ignores resistances
+            DamageType.True => 1.0f,
             _ => 1.0f
         };
         
@@ -478,19 +360,14 @@ public static class EntityExtensions
     
     private static float GetFireResistance(EntityBehaviour entity)
     {
-        // Check if entity has fire resistance
         if (entity.HasTag("FireResistant"))
-            return 0.5f; // 50% fire resistance
+            return 0.5f;
         if (entity.HasTag("FireVulnerable"))
-            return 1.5f; // 50% more fire damage
+            return 1.5f;
         
-        return 1.0f; // Normal damage
+        return 1.0f;
     }
 }
-
-// ===========================================
-// SUPPORTING ENUMS & CLASSES
-// ===========================================
 
 public enum EntityHealthStatus
 {
@@ -542,6 +419,22 @@ public class HealResult
     public string FailureReason { get; set; } = "";
 }
 
+public enum DamageType
+{
+    Normal,
+    Fire,
+    Ice,
+    Lightning,
+    True
+}
+
+public enum EntityType
+{
+    Unit,
+    Enemy,
+    Neutral
+}
+
 public class TargetingCriteria
 {
     public bool PreferLowHealth { get; set; } = true;
@@ -551,7 +444,6 @@ public class TargetingCriteria
     public float MaxDistance { get; set; } = 100f;
     public List<EntityType> PreferredTypes { get; set; } = new List<EntityType>();
     
-    // Weights for scoring
     public float HealthWeight { get; set; } = 1f;
     public float DistanceWeight { get; set; } = 0.5f;
     public float PriorityWeight { get; set; } = 0.3f;

@@ -3,65 +3,26 @@ using System.Collections.Generic;
 using System.Linq;
 using System;
 
-/// <summary>
-/// Resource Extensions für erweiterte Resource Management und Validation
-/// Bietet intelligente Resource Operations, Cost Calculations und Budget Management
-/// 
-/// USAGE:
-/// - resource.IsInCriticalState() für erweiterte Resource-Checks
-/// - resources.CanAffordCombined() für Multi-Resource Validation
-/// - resource.GetOptimalSpending() für intelligente Resource-Allocation
-/// - resource.PredictOutcome() für Resource-Planning
-/// </summary>
 public static class ResourceExtensions
 {
-    // ===========================================
-    // BASIC RESOURCE VALIDATION EXTENSIONS
-    // ===========================================
-    
-    /// <summary>
-    /// Erweiterte Resource State Detection
-    /// </summary>
     public static bool IsInCriticalState(this Resource resource, float criticalThreshold = 0.2f)
         => resource != null && resource.Percentage <= criticalThreshold && resource.CurrentValue > 0;
     
-    /// <summary>
-    /// Prüft ob Resource "gesund" ist
-    /// </summary>
     public static bool IsHealthy(this Resource resource, float healthyThreshold = 0.6f)
         => resource != null && resource.Percentage >= healthyThreshold;
     
-    /// <summary>
-    /// Prüft ob Resource vollständig aufgebraucht ist
-    /// </summary>
     public static bool IsExhausted(this Resource resource)
         => resource == null || resource.CurrentValue <= 0;
     
-    /// <summary>
-    /// Prüft ob Resource bei Maximum ist
-    /// </summary>
     public static bool IsAtMaximum(this Resource resource)
         => resource != null && resource.CurrentValue >= resource.MaxValue;
     
-    /// <summary>
-    /// Sichere Resource-Verfügbarkeit mit Minimum-Reserve
-    /// </summary>
     public static bool HasAvailable(this Resource resource, int amount, int reserve = 0)
         => resource != null && (resource.CurrentValue - reserve) >= amount;
     
-    /// <summary>
-    /// Berechnet verfügbare Menge unter Berücksichtigung einer Reserve
-    /// </summary>
     public static int GetAvailable(this Resource resource, int reserve = 0)
         => resource != null ? Mathf.Max(0, resource.CurrentValue - reserve) : 0;
     
-    // ===========================================
-    // ADVANCED RESOURCE STATUS EXTENSIONS
-    // ===========================================
-    
-    /// <summary>
-    /// Erweiterte Resource Status Analysis
-    /// </summary>
     public static ResourceHealth GetResourceHealth(this Resource resource)
     {
         if (resource == null || resource.IsExhausted())
@@ -78,9 +39,6 @@ public static class ResourceExtensions
         };
     }
     
-    /// <summary>
-    /// Resource Urgency für Prioritization
-    /// </summary>
     public static ResourceUrgency GetUrgency(this Resource resource)
     {
         var health = resource.GetResourceHealth();
@@ -95,9 +53,6 @@ public static class ResourceExtensions
         };
     }
     
-    /// <summary>
-    /// Resource Recovery Priority
-    /// </summary>
     public static int GetRecoveryPriority(this Resource resource)
     {
         return resource.GetUrgency() switch
@@ -110,9 +65,6 @@ public static class ResourceExtensions
         };
     }
     
-    /// <summary>
-    /// Berechnet optimale Recovery-Menge
-    /// </summary>
     public static int GetOptimalRecovery(this Resource resource, int maxRecovery)
     {
         if (resource == null) return 0;
@@ -129,28 +81,18 @@ public static class ResourceExtensions
         return Mathf.Min(recommended, maxRecovery);
     }
     
-    // ===========================================
-    // COST CALCULATION EXTENSIONS
-    // ===========================================
-    
-    /// <summary>
-    /// Kann Resource bestimmte Kosten decken?
-    /// </summary>
     public static bool CanAfford(this Resource resource, ResourceCost cost)
     {
         if (resource == null || cost == null) return false;
         
         return cost.ResourceType switch
         {
-            ResourceType.Life => resource.CurrentValue > cost.Amount, // Don't allow death
+            ResourceType.Life => resource.CurrentValue > cost.Amount,
             ResourceType.Creativity => resource.CurrentValue >= cost.Amount,
             _ => resource.CurrentValue >= cost.Amount
         };
     }
     
-    /// <summary>
-    /// Kann Resource mehrere Kosten gleichzeitig decken?
-    /// </summary>
     public static bool CanAffordMultiple(this Resource resource, IEnumerable<ResourceCost> costs)
     {
         if (resource == null || costs == null) return false;
@@ -161,9 +103,6 @@ public static class ResourceExtensions
         return resource.CanAfford(new ResourceCost { ResourceType = GetResourceType(resource), Amount = totalCost });
     }
     
-    /// <summary>
-    /// Berechnet Restkosten nach Partial Payment
-    /// </summary>
     public static ResourceCost CalculateRemainingCost(this Resource resource, ResourceCost originalCost, int paid)
     {
         if (originalCost == null) return null;
@@ -176,9 +115,6 @@ public static class ResourceExtensions
         };
     }
     
-    /// <summary>
-    /// Sichere Cost Application mit Validation
-    /// </summary>
     public static bool TryApplyCost(this Resource resource, ResourceCost cost, bool allowPartial = false)
     {
         if (resource == null || cost == null) return false;
@@ -192,19 +128,12 @@ public static class ResourceExtensions
         {
             int availableAmount = resource.GetAvailable();
             resource.ModifyBy(-availableAmount);
-            return false; // Partial payment
+            return false;
         }
         
         return false;
     }
     
-    // ===========================================
-    // RESOURCE OPTIMIZATION EXTENSIONS
-    // ===========================================
-    
-    /// <summary>
-    /// Berechnet optimale Spending-Strategy
-    /// </summary>
     public static SpendingStrategy GetOptimalSpending(this Resource resource, IEnumerable<ResourceCost> potentialCosts)
     {
         if (resource == null || potentialCosts == null)
@@ -245,9 +174,6 @@ public static class ResourceExtensions
         return strategy;
     }
     
-    /// <summary>
-    /// Resource Budget Planning
-    /// </summary>
     public static ResourceBudget CreateBudget(this Resource resource, int plannedSpending, int emergencyReserve = -1)
     {
         if (resource == null) return new ResourceBudget();
@@ -272,9 +198,6 @@ public static class ResourceExtensions
         return budget;
     }
     
-    /// <summary>
-    /// Predicts Resource state after planned operations
-    /// </summary>
     public static ResourceOutcome PredictOutcome(this Resource resource, IEnumerable<ResourceOperation> operations)
     {
         if (resource == null) return new ResourceOutcome();
@@ -291,7 +214,7 @@ public static class ResourceExtensions
         {
             if (operation != null && IsRelevantResourceType(resource, operation.ResourceType))
             {
-                projectedValue += operation.Amount; // Can be negative for costs
+                projectedValue += operation.Amount;
                 outcome.Operations.Add(operation);
             }
         }
@@ -302,7 +225,6 @@ public static class ResourceExtensions
         outcome.ProjectedPercentage = resource.MaxValue > 0 ? (float)projectedValue / resource.MaxValue : 0f;
         outcome.ProjectedHealth = GetHealthFromPercentage(outcome.ProjectedPercentage);
         
-        // FIX: Safe enum arithmetic
         int healthChange = (int)outcome.ProjectedHealth - (int)outcome.InitialHealth;
         outcome.HealthChange = healthChange;
         
@@ -312,13 +234,6 @@ public static class ResourceExtensions
         return outcome;
     }
     
-    // ===========================================
-    // MULTI-RESOURCE EXTENSIONS
-    // ===========================================
-    
-    /// <summary>
-    /// Combined Resource Affordability Check
-    /// </summary>
     public static bool CanAffordCombined(this IEnumerable<Resource> resources, IEnumerable<ResourceCost> costs)
     {
         if (resources == null || costs == null) return false;
@@ -334,16 +249,13 @@ public static class ResourceExtensions
             }
             else
             {
-                return false; // Required resource not available
+                return false;
             }
         }
         
         return true;
     }
     
-    /// <summary>
-    /// Multi-Resource Health Assessment
-    /// </summary>
     public static OverallResourceHealth GetOverallHealth(this IEnumerable<Resource> resources)
     {
         if (resources == null) return new OverallResourceHealth();
@@ -365,9 +277,6 @@ public static class ResourceExtensions
         };
     }
     
-    /// <summary>
-    /// Resource Portfolio Optimization
-    /// </summary>
     public static ResourcePortfolio OptimizePortfolio(this IEnumerable<Resource> resources, IEnumerable<ResourceCost> plannedCosts)
     {
         var portfolio = new ResourcePortfolio();
@@ -379,7 +288,6 @@ public static class ResourceExtensions
         portfolio.TotalValue = validResources.Sum(r => r.CurrentValue);
         portfolio.OverallHealth = validResources.GetOverallHealth();
         
-        // Group costs by resource type
         var costsByType = validCosts.GroupBy(c => c.ResourceType)
             .ToDictionary(g => g.Key, g => g.Sum(c => c.Amount));
         
@@ -402,27 +310,21 @@ public static class ResourceExtensions
         return portfolio;
     }
     
-    // ===========================================
-    // HELPER METHODS
-    // ===========================================
-    
     private static int GetRecommendedReserve(Resource resource)
     {
         return resource.GetResourceHealth() switch
         {
-            ResourceHealth.Excellent => resource.MaxValue / 10, // 10% reserve
-            ResourceHealth.Good => resource.MaxValue / 8,       // 12.5% reserve
-            ResourceHealth.Moderate => resource.MaxValue / 6,   // 16.7% reserve
-            ResourceHealth.Low => resource.MaxValue / 4,        // 25% reserve
-            _ => resource.MaxValue / 3                          // 33% reserve
+            ResourceHealth.Excellent => resource.MaxValue / 10,
+            ResourceHealth.Good => resource.MaxValue / 8,
+            ResourceHealth.Moderate => resource.MaxValue / 6,
+            ResourceHealth.Low => resource.MaxValue / 4,
+            _ => resource.MaxValue / 3
         };
     }
     
     private static ResourceType GetResourceType(Resource resource)
     {
-        // This would need to be implemented based on your specific Resource setup
-        // For now, returning a default - you'd implement this based on how you identify resource types
-        return ResourceType.Creativity; // Placeholder
+        return ResourceType.Creativity;
     }
     
     private static bool IsRelevantResourceType(Resource resource, ResourceType type)
@@ -461,10 +363,6 @@ public static class ResourceExtensions
             return ResourceAction.Maintain;
     }
 }
-
-// ===========================================
-// SUPPORTING ENUMS & CLASSES
-// ===========================================
 
 public enum ResourceHealth
 {
@@ -526,9 +424,9 @@ public class ResourceCost
 public class ResourceOperation
 {
     public ResourceType ResourceType { get; set; }
-    public int Amount { get; set; } // Positive for gains, negative for costs
+    public int Amount { get; set; }
     public string Description { get; set; } = "";
-    public float Probability { get; set; } = 1f; // For uncertain operations
+    public float Probability { get; set; } = 1f;
 }
 
 public class SpendingStrategy
@@ -566,7 +464,7 @@ public class ResourceOutcome
     public int ProjectedValue { get; set; }
     public float ProjectedPercentage { get; set; }
     public ResourceHealth ProjectedHealth { get; set; }
-    public int HealthChange { get; set; }  // FIX: Changed from ResourceHealth to int
+    public int HealthChange { get; set; }
     public bool IsImprovement { get; set; }
     public bool IsCriticalChange { get; set; }
     public List<ResourceOperation> Operations { get; set; } = new List<ResourceOperation>();
@@ -610,142 +508,3 @@ public class ResourcePortfolio
     public ResourceRecommendation GetHighestPriorityRecommendation()
         => Recommendations.OrderByDescending(r => r.Priority).FirstOrDefault();
 }
-
-// ===========================================
-// VERWENDUNGS-BEISPIELE
-// ===========================================
-
-/*
-// BASIC RESOURCE VALIDATION:
-public void CheckResourceHealth()
-{
-    var life = CombatManager.Instance.Life;
-    var creativity = CombatManager.Instance.Creativity;
-    
-    if (life.IsInCriticalState())
-    {
-        Debug.LogWarning("Life is critical!");
-        // Prioritize healing
-    }
-    
-    if (creativity.GetUrgency() >= ResourceUrgency.High)
-    {
-        Debug.LogWarning("Creativity needs attention!");
-        // Consider recovery actions
-    }
-}
-
-// COST MANAGEMENT:
-public bool TryExecuteAction(ActionCost actionCost)
-{
-    var resources = new[] { CombatManager.Instance.Life, CombatManager.Instance.Creativity };
-    var costs = actionCost.GetResourceCosts();
-    
-    if (resources.CanAffordCombined(costs))
-    {
-        // Execute action
-        foreach (var cost in costs)
-        {
-            var resource = GetResourceByType(cost.ResourceType);
-            resource.TryApplyCost(cost);
-        }
-        return true;
-    }
-    return false;
-}
-
-// RESOURCE PLANNING:
-public void PlanResourceUsage()
-{
-    var creativity = CombatManager.Instance.Creativity;
-    var plannedCosts = new[]
-    {
-        ResourceCost.Create(ResourceType.Creativity, 2, ResourcePriority.High),
-        ResourceCost.Create(ResourceType.Creativity, 1, ResourcePriority.Medium),
-        ResourceCost.Create(ResourceType.Creativity, 3, ResourcePriority.Low)
-    };
-    
-    var strategy = creativity.GetOptimalSpending(plannedCosts);
-    
-    Debug.Log($"Can afford {strategy.AffordableCosts.Count} actions");
-    Debug.Log($"Remaining funds: {strategy.RemainingFunds}");
-    
-    if (strategy.HasUnaffordableCritical)
-    {
-        Debug.LogWarning("Cannot afford critical actions!");
-    }
-}
-
-// RESOURCE OUTCOME PREDICTION:
-public void PredictTurnOutcome()
-{
-    var creativity = CombatManager.Instance.Creativity;
-    var operations = new[]
-    {
-        new ResourceOperation { ResourceType = ResourceType.Creativity, Amount = -2, Description = "Play Cards" },
-        new ResourceOperation { ResourceType = ResourceType.Creativity, Amount = -1, Description = "Draw Card" },
-        new ResourceOperation { ResourceType = ResourceType.Creativity, Amount = 3, Description = "Turn Reset" }
-    };
-    
-    var outcome = creativity.PredictOutcome(operations);
-    
-    Debug.Log($"Current: {outcome.InitialValue} -> Projected: {outcome.ProjectedValue}");
-    Debug.Log($"Health change: {outcome.HealthChange}");
-    
-    if (outcome.IsRisky)
-    {
-        Debug.LogWarning("This plan would put creativity in critical state!");
-    }
-}
-
-// MULTI-RESOURCE PORTFOLIO:
-public void AnalyzeResourcePortfolio()
-{
-    var resources = new[] 
-    { 
-        CombatManager.Instance.Life, 
-        CombatManager.Instance.Creativity 
-    };
-    
-    var plannedCosts = GetAllPlannedCosts();
-    var portfolio = resources.OptimizePortfolio(plannedCosts);
-    
-    Debug.Log($"Portfolio health score: {portfolio.OverallHealth.HealthScore:P0}");
-    
-    if (portfolio.OverallHealth.IsInCrisis)
-    {
-        Debug.LogError("Resource portfolio in crisis!");
-        
-        var priority = portfolio.GetHighestPriorityRecommendation();
-        Debug.Log($"Priority action: {priority.RecommendedAction} for {priority.ResourceType}");
-    }
-}
-
-// UI INTEGRATION:
-public void UpdateResourceUI()
-{
-    var life = CombatManager.Instance.Life;
-    var creativity = CombatManager.Instance.Creativity;
-    
-    // Health-based color coding
-    lifeBar.color = life.GetResourceHealth() switch
-    {
-        ResourceHealth.Critical or ResourceHealth.Dying => Color.red,
-        ResourceHealth.Low => Color.orange,
-        ResourceHealth.Moderate => Color.yellow,
-        _ => Color.green
-    };
-    
-    // Urgency indicators
-    if (creativity.GetUrgency() >= ResourceUrgency.High)
-    {
-        creativityAlert.SetActive(true);
-        creativityAlert.GetComponent<Text>().text = "LOW CREATIVITY!";
-    }
-    
-    // Budget display
-    var budget = creativity.CreateBudget(GetPlannedSpending());
-    budgetText.text = $"Budget: {budget.PlannedSpending}/{budget.AvailableForSpending}";
-    budgetText.color = budget.CanExecutePlan ? Color.green : Color.red;
-}
-*/

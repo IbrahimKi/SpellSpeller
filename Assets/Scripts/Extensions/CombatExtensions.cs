@@ -3,24 +3,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System;
 
-/// <summary>
-/// Combat Extensions für intelligente Combat State Management und Damage System
-/// Bietet erweiterte Combat Logic, Targeting Utilities und Resource Management
-/// 
-/// USAGE:
-/// - combat.IsInPlayerActionPhase() für präzise Turn-Checks
-/// - combat.GetCombatSituation() für AI/UI Decision Making
-/// - combat.TrySpendResources(cost) für sichere Resource Operations
-/// </summary>
 public static class CombatExtensions
 {
-    // ===========================================
-    // COMBAT STATE EXTENSIONS
-    // ===========================================
-    
-    /// <summary>
-    /// Erweiterte Combat Phase Detection
-    /// </summary>
     public static bool IsInPlayerActionPhase(this CombatManager combat)
     {
         if (!combat.IsManagerReady()) return false;
@@ -31,14 +15,10 @@ public static class CombatExtensions
                combat.Life.CurrentValue > 0;
     }
     
-    /// <summary>
-    /// Kann Turn beendet werden?
-    /// </summary>
     public static bool CanEndTurnSafely(this CombatManager combat)
     {
         if (!combat.IsInPlayerActionPhase()) return false;
         
-        // Check for pending effects or important states
         bool hasUnresolvedCombo = false;
         if (SpellcastManager.HasInstance && SpellcastManager.Instance.IsReady)
         {
@@ -49,9 +29,6 @@ public static class CombatExtensions
         return !hasUnresolvedCombo;
     }
     
-    /// <summary>
-    /// Combat Difficulty Assessment
-    /// </summary>
     public static CombatDifficulty GetCombatDifficulty(this CombatManager combat)
     {
         if (!combat.IsInCombat) return CombatDifficulty.None;
@@ -72,14 +49,10 @@ public static class CombatExtensions
         };
     }
     
-    /// <summary>
-    /// Combat Situation Analysis für AI/UI
-    /// </summary>
     public static CombatSituation GetCombatSituation(this CombatManager combat)
     {
         if (!combat.IsInCombat) return new CombatSituation();
         
-        // Get basic health status
         var healthStatus = GetHealthStatusFromPercentage(combat.Life.Percentage);
         var creativityStatus = GetResourceStatusFromPercentage(combat.Creativity.Percentage);
         var enemyThreat = GetEnemyThreatLevel(combat);
@@ -95,20 +68,12 @@ public static class CombatExtensions
             UrgencyLevel = GetUrgencyLevel(combat, healthStatus, creativityStatus, enemyThreat)
         };
         
-        // Add resource crisis detection
         situation.IsResourceCrisis = healthStatus <= HealthStatus.Critical || 
                                    creativityStatus <= ResourceStatus.Low;
         
         return situation;
     }
     
-    // ===========================================
-    // ADVANCED TURN MANAGEMENT
-    // ===========================================
-    
-    /// <summary>
-    /// Sichere Turn-Transition mit Validierung
-    /// </summary>
     public static bool TryEndTurn(this CombatManager combat, bool force = false)
     {
         if (!combat.IsManagerReady()) return false;
@@ -131,30 +96,23 @@ public static class CombatExtensions
         }
     }
     
-    /// <summary>
-    /// Erweiterte Resource Validation
-    /// </summary>
     public static bool CanAffordAction(this CombatManager combat, ActionCost cost)
     {
         if (!combat.IsManagerReady() || cost == null) return false;
         
         bool canAfford = true;
         
-        // Check creativity cost
         if (cost.CreativityCost > 0)
         {
             canAfford &= combat.Creativity.CurrentValue >= cost.CreativityCost;
-            // Don't spend if it would put us in critical state
             canAfford &= (combat.Creativity.CurrentValue - cost.CreativityCost) >= 0;
         }
         
-        // Check life cost (don't allow death)
         if (cost.LifeCost > 0)
         {
             canAfford &= combat.Life.CurrentValue > cost.LifeCost;
         }
         
-        // Check card requirements
         if (cost.RequiresCards > 0)
         {
             if (CardManager.HasInstance && CardManager.Instance.IsReady)
@@ -170,9 +128,6 @@ public static class CombatExtensions
         return canAfford;
     }
     
-    /// <summary>
-    /// Sichere Resource-Ausgabe mit Validation
-    /// </summary>
     public static bool TrySpendResources(this CombatManager combat, ActionCost cost)
     {
         if (!combat.CanAffordAction(cost)) return false;
@@ -194,13 +149,6 @@ public static class CombatExtensions
         }
     }
     
-    // ===========================================
-    // SMART HEALING SYSTEM
-    // ===========================================
-    
-    /// <summary>
-    /// Smart Healing mit Prioritization
-    /// </summary>
     public static bool TrySmartHeal(this CombatManager combat, int healAmount, HealingMode mode = HealingMode.Self)
     {
         if (!combat.IsManagerReady()) return false;
@@ -232,7 +180,6 @@ public static class CombatExtensions
                 return true;
                 
             case HealingMode.Critical:
-                // Heal only critical health units
                 if (UnitManager.HasInstance && UnitManager.Instance.IsReady)
                 {
                     var criticalUnits = UnitManager.Instance.AliveUnits
@@ -252,13 +199,6 @@ public static class CombatExtensions
         }
     }
     
-    // ===========================================
-    // TARGETING SYSTEM
-    // ===========================================
-    
-    /// <summary>
-    /// Intelligente Target-Auswahl
-    /// </summary>
     public static EntityBehaviour GetSmartTarget(this EnemyManager enemyManager, TargetingStrategy strategy = TargetingStrategy.Optimal)
     {
         if (!enemyManager.IsManagerReady()) return null;
@@ -277,9 +217,6 @@ public static class CombatExtensions
         };
     }
     
-    /// <summary>
-    /// Multi-Target Selection
-    /// </summary>
     public static List<EntityBehaviour> GetOptimalTargets(this EnemyManager enemyManager, int maxTargets = 3, TargetingStrategy strategy = TargetingStrategy.Optimal)
     {
         if (!enemyManager.IsManagerReady()) return new List<EntityBehaviour>();
@@ -296,10 +233,6 @@ public static class CombatExtensions
             _ => GetOptimalTargetGroup(enemies, maxTargets)
         };
     }
-    
-    // ===========================================
-    // HELPER METHODS
-    // ===========================================
     
     private static HealthStatus GetHealthStatusFromPercentage(float percentage)
     {
@@ -345,11 +278,9 @@ public static class CombatExtensions
     
     private static ActionType GetRecommendedAction(CombatManager combat, HealthStatus healthStatus, ResourceStatus creativityStatus, ThreatLevel threatLevel)
     {
-        // Priority: Life-threatening situations first
         if (healthStatus <= HealthStatus.Critical)
             return ActionType.Heal;
         
-        // Then creativity management
         if (creativityStatus <= ResourceStatus.Low)
         {
             bool handNotFull = true;
@@ -360,7 +291,6 @@ public static class CombatExtensions
                 return ActionType.DrawCard;
         }
         
-        // Combat actions based on threat
         return threatLevel switch
         {
             ThreatLevel.High or ThreatLevel.Extreme => ActionType.Attack,
@@ -371,15 +301,12 @@ public static class CombatExtensions
     
     private static UrgencyLevel GetUrgencyLevel(CombatManager combat, HealthStatus healthStatus, ResourceStatus creativityStatus, ThreatLevel threatLevel)
     {
-        // Health-based urgency
         if (healthStatus <= HealthStatus.Critical)
             return UrgencyLevel.Critical;
         
-        // Resource-based urgency
         if (creativityStatus <= ResourceStatus.Critical)
             return UrgencyLevel.High;
         
-        // Threat-based urgency
         return threatLevel switch
         {
             ThreatLevel.Extreme => UrgencyLevel.Critical,
@@ -392,26 +319,19 @@ public static class CombatExtensions
     
     private static EntityBehaviour GetNearestEnemy(IReadOnlyList<EntityBehaviour> enemies)
     {
-        // For now, just return first - would implement proper distance calculation
         return enemies.FirstOrDefault();
     }
     
     private static EntityBehaviour GetOptimalTarget(IReadOnlyList<EntityBehaviour> enemies)
     {
-        // Balanced targeting: prefer low health
         return enemies.OrderBy(e => e.HealthPercentage).FirstOrDefault();
     }
     
     private static List<EntityBehaviour> GetOptimalTargetGroup(IReadOnlyList<EntityBehaviour> enemies, int maxTargets)
     {
-        // Get mix of weak targets
         return enemies.OrderBy(e => e.HealthPercentage).Take(maxTargets).ToList();
     }
 }
-
-// ===========================================
-// SUPPORTING ENUMS & CLASSES
-// ===========================================
 
 public enum CombatDifficulty
 {
@@ -514,4 +434,13 @@ public class ActionCost
     public static ActionCost None => new ActionCost();
     public static ActionCost Draw => new ActionCost { CreativityCost = 1 };
     public static ActionCost Discard => new ActionCost { CreativityCost = 1, RequiresCards = 1 };
+}
+
+public enum DamageType
+{
+    Normal,
+    Fire,
+    Ice,
+    Lightning,
+    True
 }

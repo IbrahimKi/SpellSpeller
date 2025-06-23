@@ -4,10 +4,8 @@ using System.Linq;
 using System.Text;
 using System;
 
-
 public static class CardExtensions
 {
-    
     public static bool IsValid(this Card card)
         => card != null && !card.Equals(null) && card.CardData != null;
     
@@ -25,11 +23,9 @@ public static class CardExtensions
     
     public static string GetLetterValues(this Card card)
         => card.IsValid() ? (card.CardData.letterValues ?? "") : "";
-    
 
     public static string GetCardName(this Card card)
         => card.IsValid() ? (card.CardData.cardName ?? "Unknown") : "Invalid Card";
-    
 
     public static string GetDescription(this Card card)
         => card.IsValid() ? (card.CardData.description ?? "") : "";
@@ -86,7 +82,6 @@ public static class CardExtensions
     
     public static IEnumerable<Card> GetPlayableCards(this IEnumerable<Card> cards)
         => cards.GetValidCards().Where(c => c.IsPlayable());
-    
   
     public static IEnumerable<Card> GetSelectedCards(this IEnumerable<Card> cards)
         => cards.GetValidCards().Where(c => c.IsSelected);
@@ -94,37 +89,18 @@ public static class CardExtensions
     public static IEnumerable<Card> GetCardsInState(this IEnumerable<Card> cards, CardState state)
         => cards.GetValidCards().Where(c => c.IsInState(state));
     
-    /// <summary>
-    /// Prüft ob Collection gültige Cards hat
-    /// </summary>
     public static bool HasValidCards(this IEnumerable<Card> cards)
         => cards?.Any(c => c.IsValid()) ?? false;
     
-    /// <summary>
-    /// Prüft ob Collection spielbare Cards hat
-    /// </summary>
     public static bool HasPlayableCards(this IEnumerable<Card> cards)
         => cards.GetPlayableCards().Any();
     
-    /// <summary>
-    /// Zählt gültige Cards
-    /// </summary>
     public static int GetValidCardCount(this IEnumerable<Card> cards)
         => cards?.Count(c => c.IsValid()) ?? 0;
     
-    /// <summary>
-    /// Zählt spielbare Cards
-    /// </summary>
     public static int GetPlayableCardCount(this IEnumerable<Card> cards)
         => cards.GetPlayableCards().Count();
     
-    // ===========================================
-    // LETTER SEQUENCE EXTENSIONS
-    // ===========================================
-    
-    /// <summary>
-    /// Holt Letter Sequence aus Card Collection
-    /// </summary>
     public static string GetLetterSequence(this IEnumerable<Card> cards)
     {
         if (cards == null) return "";
@@ -137,15 +113,9 @@ public static class CardExtensions
         return letterBuilder.ToString();
     }
     
-    /// <summary>
-    /// Holt Letter Sequence nur von spielbaren Cards
-    /// </summary>
     public static string GetPlayableLetterSequence(this IEnumerable<Card> cards)
         => cards.GetPlayableCards().GetLetterSequence();
     
-    /// <summary>
-    /// Analysiert Letter-Verteilung in Collection
-    /// </summary>
     public static CollectionLetterAnalysis GetCollectionLetterAnalysis(this IEnumerable<Card> cards)
     {
         var analysis = new CollectionLetterAnalysis();
@@ -163,7 +133,6 @@ public static class CardExtensions
         analysis.Vowels = allLetters.Count(c => "AEIOU".Contains(c));
         analysis.Consonants = allLetters.Count(c => !"AEIOU".Contains(c));
         
-        // Card Type Analysis
         analysis.VowelCards = validCards.Count(c => c.GetCardType() == CardType.Vowel);
         analysis.ConsonantCards = validCards.Count(c => c.GetCardType() == CardType.Consonant);
         analysis.SpecialCards = validCards.Count(c => c.GetCardType() == CardType.Special);
@@ -171,13 +140,6 @@ public static class CardExtensions
         return analysis;
     }
     
-    // ===========================================
-    // SPELL BUILDING EXTENSIONS
-    // ===========================================
-    
-    /// <summary>
-    /// Findet Cards die für Spell verwendet werden können
-    /// </summary>
     public static IEnumerable<Card> FindCardsForSpell(this IEnumerable<Card> cards, string spellCode)
     {
         if (string.IsNullOrEmpty(spellCode))
@@ -199,9 +161,6 @@ public static class CardExtensions
         return selectedCards;
     }
     
-    /// <summary>
-    /// Prüft ob Collection genug Cards für Spell hat
-    /// </summary>
     public static bool CanBuildSpell(this IEnumerable<Card> cards, string spellCode)
     {
         if (string.IsNullOrEmpty(spellCode))
@@ -221,9 +180,6 @@ public static class CardExtensions
             availableLetters[req.Key] >= req.Value);
     }
     
-    /// <summary>
-    /// Findet mögliche Spell-Kombinationen
-    /// </summary>
     public static IEnumerable<string> FindPossibleSpells(this IEnumerable<Card> cards, 
         IEnumerable<string> knownSpells)
     {
@@ -234,9 +190,6 @@ public static class CardExtensions
         return knownSpells.Where(spell => playableCards.CanBuildSpell(spell));
     }
     
-    /// <summary>
-    /// Bewertet Spell-Building Potential
-    /// </summary>
     public static SpellBuildingPotential GetSpellBuildingPotential(this IEnumerable<Card> cards)
     {
         var potential = new SpellBuildingPotential();
@@ -247,54 +200,32 @@ public static class CardExtensions
         
         var analysis = playableCards.GetCollectionLetterAnalysis();
         
-        // Bewerte basierend auf Letter-Diversität
-        potential.LetterDiversity = (float)analysis.UniqueLetters / 26f; // Percentage of alphabet
+        potential.LetterDiversity = (float)analysis.UniqueLetters / 26f;
         potential.VowelConsonantBalance = Math.Min(analysis.Vowels, analysis.Consonants) / 
                                         (float)Math.Max(analysis.Vowels, analysis.Consonants);
         
-        // Bewerte Spell-Length Potential
         potential.ShortSpellPotential = analysis.UniqueLetters >= 3 ? 1f : analysis.UniqueLetters / 3f;
         potential.MediumSpellPotential = analysis.UniqueLetters >= 5 ? 1f : analysis.UniqueLetters / 5f;
         potential.LongSpellPotential = analysis.UniqueLetters >= 8 ? 1f : analysis.UniqueLetters / 8f;
         
-        // Overall Score
         potential.OverallScore = (potential.LetterDiversity + potential.VowelConsonantBalance + 
                                 potential.MediumSpellPotential) / 3f;
         
         return potential;
     }
     
-    // ===========================================
-    // CARD FILTERING & SORTING EXTENSIONS
-    // ===========================================
-    
-    /// <summary>
-    /// Filtert Cards nach Type
-    /// </summary>
     public static IEnumerable<Card> FilterByType(this IEnumerable<Card> cards, CardType cardType)
         => cards.GetValidCards().Where(c => c.GetCardType() == cardType);
     
-    /// <summary>
-    /// Filtert Cards nach SubType
-    /// </summary>
     public static IEnumerable<Card> FilterBySubType(this IEnumerable<Card> cards, CardSubType subType)
         => cards.GetValidCards().Where(c => c.GetCardSubType() == subType);
     
-    /// <summary>
-    /// Filtert Cards nach Tier
-    /// </summary>
     public static IEnumerable<Card> FilterByTier(this IEnumerable<Card> cards, int tier)
         => cards.GetValidCards().Where(c => c.GetTier() == tier);
     
-    /// <summary>
-    /// Filtert Cards nach Tier Range
-    /// </summary>
     public static IEnumerable<Card> FilterByTierRange(this IEnumerable<Card> cards, int minTier, int maxTier)
         => cards.GetValidCards().Where(c => c.GetTier() >= minTier && c.GetTier() <= maxTier);
     
-    /// <summary>
-    /// Sortiert Cards nach verschiedenen Kriterien
-    /// </summary>
     public static IEnumerable<Card> SortBy(this IEnumerable<Card> cards, CardSortCriteria criteria, 
         bool ascending = true)
     {
@@ -313,18 +244,12 @@ public static class CardExtensions
         return ascending ? sorted : sorted.Reverse();
     }
     
-    /// <summary>
-    /// Holt Random Card aus Collection
-    /// </summary>
     public static Card GetRandomCard(this IEnumerable<Card> cards)
     {
         var validCards = cards.GetValidCards().ToList();
         return validCards.Any() ? validCards[UnityEngine.Random.Range(0, validCards.Count)] : null;
     }
     
-    /// <summary>
-    /// Holt Random Cards aus Collection
-    /// </summary>
     public static IEnumerable<Card> GetRandomCards(this IEnumerable<Card> cards, int count)
     {
         var validCards = cards.GetValidCards().ToList();
@@ -334,13 +259,6 @@ public static class CardExtensions
         return validCards.OrderBy(x => Guid.NewGuid()).Take(count);
     }
     
-    // ===========================================
-    // CARD UTILITY EXTENSIONS
-    // ===========================================
-    
-    /// <summary>
-    /// Versucht Card sicher zu selektieren
-    /// </summary>
     public static bool TrySelect(this Card card)
     {
         if (!card.IsPlayable()) return false;
@@ -357,9 +275,6 @@ public static class CardExtensions
         }
     }
     
-    /// <summary>
-    /// Versucht Card sicher zu deselektieren
-    /// </summary>
     public static bool TryDeselect(this Card card)
     {
         if (!card.IsValid()) return false;
@@ -376,9 +291,6 @@ public static class CardExtensions
         }
     }
     
-    /// <summary>
-    /// Setzt Card State sicher
-    /// </summary>
     public static bool TrySetInteractable(this Card card, bool interactable)
     {
         if (!card.IsValid()) return false;
@@ -395,22 +307,12 @@ public static class CardExtensions
         }
     }
     
-    /// <summary>
-    /// Klont Card Data (für Backup/Undo Operations)
-    /// </summary>
     public static CardData CloneCardData(this Card card)
     {
         if (!card.IsValid()) return null;
-        
-        // Note: This would require CardData to implement ICloneable or custom cloning
-        // For now, return reference (would need proper implementation)
         return card.CardData;
     }
 }
-
-// ===========================================
-// SUPPORTING ENUMS & CLASSES
-// ===========================================
 
 public enum CardSortCriteria
 {
@@ -445,11 +347,10 @@ public class CollectionLetterAnalysis
 
 public class SpellBuildingPotential
 {
-    public float LetterDiversity { get; set; } // 0-1
-    public float VowelConsonantBalance { get; set; } // 0-1
-    public float ShortSpellPotential { get; set; } // 0-1 (3+ letters)
-    public float MediumSpellPotential { get; set; } // 0-1 (5+ letters)
-    public float LongSpellPotential { get; set; } // 0-1 (8+ letters)
-    public float OverallScore { get; set; } // 0-1
+    public float LetterDiversity { get; set; }
+    public float VowelConsonantBalance { get; set; }
+    public float ShortSpellPotential { get; set; }
+    public float MediumSpellPotential { get; set; }
+    public float LongSpellPotential { get; set; }
+    public float OverallScore { get; set; }
 }
-

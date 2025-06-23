@@ -2,45 +2,20 @@ using UnityEngine;
 using System.Collections.Generic;
 using System.Linq;
 
-/// <summary>
-/// Manager Extensions für sichere Singleton-Operations und häufige Manager-Checks
-/// Eliminiert 90% der HasInstance checks und bietet intelligente Manager-Validation
-/// 
-/// USAGE:
-/// - manager.IsManagerReady() statt HasInstance && Instance.IsReady
-/// - CombatManager.Instance.CanPerformPlayerAction() statt komplexe turn checks
-/// - manager.TryGetManager<T>() für sichere Manager-Access
-/// </summary>
 public static class ManagerExtensions
 {
-    // ===========================================
-    // SINGLETON SAFETY EXTENSIONS
-    // ===========================================
-    
-    /// <summary>
-    /// Sichere Prüfung ob Manager bereit ist (ersetzt HasInstance && IsReady)
-    /// </summary>
     public static bool IsManagerReady<T>(this T manager) where T : MonoBehaviour, IGameManager
         => manager != null && !manager.Equals(null) && manager.IsReady;
     
-    /// <summary>
-    /// Sichere Prüfung für SingletonBehaviour Manager
-    /// </summary>
     public static bool IsManagerReady<T>(this SingletonBehaviour<T> manager) where T : MonoBehaviour
     {
         if (manager == null || manager.Equals(null)) return false;
         return manager is IGameManager gameManager ? gameManager.IsReady : true;
     }
     
-    /// <summary>
-    /// Versucht Manager zu holen, falls verfügbar
-    /// </summary>
     public static T TryGetManager<T>() where T : SingletonBehaviour<T>
         => SingletonBehaviour<T>.HasInstance ? SingletonBehaviour<T>.Instance : null;
     
-    /// <summary>
-    /// Sichere Manager-Operation mit Callback
-    /// </summary>
     public static bool TryWithManager<T>(System.Action<T> action) where T : SingletonBehaviour<T>
     {
         var manager = TryGetManager<T>();
@@ -60,9 +35,6 @@ public static class ManagerExtensions
         return false;
     }
     
-    /// <summary>
-    /// Sichere Manager-Operation mit Return Value
-    /// </summary>
     public static TResult TryWithManager<T, TResult>(System.Func<T, TResult> func, TResult defaultValue = default) where T : SingletonBehaviour<T>
     {
         var manager = TryGetManager<T>();
@@ -81,13 +53,6 @@ public static class ManagerExtensions
         return defaultValue;
     }
     
-    // ===========================================
-    // COMBAT MANAGER EXTENSIONS
-    // ===========================================
-    
-    /// <summary>
-    /// Intelligente Combat Action Validation
-    /// </summary>
     public static bool CanPerformPlayerAction(this CombatManager combat, PlayerActionType actionType = PlayerActionType.General)
     {
         if (!combat.IsManagerReady()) return false;
@@ -110,15 +75,9 @@ public static class ManagerExtensions
         };
     }
     
-    /// <summary>
-    /// Erweiterte Combat State Checks
-    /// </summary>
     public static bool IsInValidCombatState(this CombatManager combat)
         => combat.IsManagerReady() && combat.IsInCombat && combat.Life.CurrentValue > 0;
     
-    /// <summary>
-    /// ENHANCED: Kann Ressource ausgeben? (now uses ResourceExtensions)
-    /// </summary>
     public static bool CanSpendResource(this CombatManager combat, ResourceType type, int amount)
     {
         if (!combat.IsManagerReady()) return false;
@@ -126,13 +85,9 @@ public static class ManagerExtensions
         var resource = combat.GetResourceByType(type);
         if (resource == null) return false;
         
-        // INTEGRATION: Use ResourceExtensions for advanced validation
         return resource.HasAvailable(amount) && !resource.IsInCriticalState();
     }
     
-    /// <summary>
-    /// ENHANCED: Sichere Resource Modification mit ResourceExtensions
-    /// </summary>
     public static bool TryModifyResource(this CombatManager combat, ResourceType type, int delta)
     {
         if (!combat.IsManagerReady()) return false;
@@ -142,7 +97,6 @@ public static class ManagerExtensions
         
         try
         {
-            // INTEGRATION: Use ResourceExtensions for cost validation if spending
             if (delta < 0)
             {
                 var cost = new ResourceCost { ResourceType = type, Amount = -delta };
@@ -150,7 +104,6 @@ public static class ManagerExtensions
             }
             else
             {
-                // Direct modification for gains
                 resource.ModifyBy(delta);
                 return true;
             }
@@ -162,9 +115,6 @@ public static class ManagerExtensions
         }
     }
     
-    /// <summary>
-    /// INTEGRATION: Get Resource by Type helper
-    /// </summary>
     public static Resource GetResourceByType(this CombatManager combat, ResourceType type)
     {
         if (!combat.IsManagerReady()) return null;
@@ -177,9 +127,6 @@ public static class ManagerExtensions
         };
     }
     
-    /// <summary>
-    /// INTEGRATION: Enhanced Resource Planning with ResourceExtensions
-    /// </summary>
     public static ResourcePortfolio GetResourcePortfolio(this CombatManager combat, IEnumerable<ResourceCost> plannedCosts = null)
     {
         if (!combat.IsManagerReady()) return new ResourcePortfolio();
@@ -188,9 +135,6 @@ public static class ManagerExtensions
         return resources.OptimizePortfolio(plannedCosts ?? Enumerable.Empty<ResourceCost>());
     }
     
-    /// <summary>
-    /// INTEGRATION: Smart Resource Recovery using ResourceExtensions
-    /// </summary>
     public static bool TryOptimalRecovery(this CombatManager combat, ResourceType type, int maxRecovery)
     {
         var resource = combat.GetResourceByType(type);
@@ -205,9 +149,6 @@ public static class ManagerExtensions
         return false;
     }
     
-    /// <summary>
-    /// INTEGRATION: Get all resources for portfolio analysis
-    /// </summary>
     public static IEnumerable<Resource> GetAllResources(this CombatManager combat)
     {
         if (!combat.IsManagerReady()) yield break;
@@ -216,13 +157,6 @@ public static class ManagerExtensions
         if (combat.Creativity != null) yield return combat.Creativity;
     }
     
-    // ===========================================
-    // CARD MANAGER EXTENSIONS
-    // ===========================================
-    
-    /// <summary>
-    /// Sichere Hand-Operations
-    /// </summary>
     public static bool TryDrawCard(this DeckManager deck)
     {
         if (!deck.IsManagerReady() || deck.IsDeckEmpty) return false;
@@ -240,9 +174,6 @@ public static class ManagerExtensions
         });
     }
     
-    /// <summary>
-    /// Kann Card draw performed werden?
-    /// </summary>
     public static bool CanDrawCard(this CardManager cardManager)
     {
         if (!cardManager.IsManagerReady()) return false;
@@ -252,9 +183,6 @@ public static class ManagerExtensions
                TryWithManager<CombatManager, bool>(cm => cm.IsPlayerTurn);
     }
     
-    /// <summary>
-    /// Sichere Card Selection Operations
-    /// </summary>
     public static bool TrySelectCards(this CardManager cardManager, IEnumerable<Card> cards)
     {
         if (!cardManager.IsManagerReady() || cards == null) return false;
@@ -275,13 +203,6 @@ public static class ManagerExtensions
         }
     }
     
-    // ===========================================
-    // SPELLCAST MANAGER EXTENSIONS
-    // ===========================================
-    
-    /// <summary>
-    /// Kann Spell gecastet werden?
-    /// </summary>
     public static bool CanCastSpells(this SpellcastManager spellcast)
     {
         if (!spellcast.IsManagerReady()) return false;
@@ -289,9 +210,6 @@ public static class ManagerExtensions
         return TryWithManager<CombatManager, bool>(cm => cm.CanPerformPlayerAction(PlayerActionType.CastSpell));
     }
     
-    /// <summary>
-    /// Sichere Spell Execution
-    /// </summary>
     public static bool TryProcessCards(this SpellcastManager spellcast, IEnumerable<Card> cards)
     {
         if (!spellcast.IsManagerReady() || cards == null) return false;
@@ -311,13 +229,6 @@ public static class ManagerExtensions
         }
     }
     
-    // ===========================================
-    // ENEMY/UNIT MANAGER EXTENSIONS
-    // ===========================================
-    
-    /// <summary>
-    /// Sichere Entity Spawning
-    /// </summary>
     public static T TrySpawnEntity<T>(this T manager, EntityAsset asset, Vector3 position = default) 
         where T : MonoBehaviour, IGameManager
     {
@@ -338,9 +249,6 @@ public static class ManagerExtensions
         return manager;
     }
     
-    /// <summary>
-    /// Sichere Target Operations
-    /// </summary>
     public static bool TrySetTarget(this EnemyManager enemyManager, EntityBehaviour target)
     {
         if (!enemyManager.IsManagerReady() || target == null) return false;
@@ -357,13 +265,6 @@ public static class ManagerExtensions
         }
     }
     
-    // ===========================================
-    // LAYOUT MANAGER EXTENSIONS
-    // ===========================================
-    
-    /// <summary>
-    /// Sichere Layout Updates
-    /// </summary>
     public static bool TryUpdateLayout(this HandLayoutManager layout)
     {
         if (!layout.IsManagerReady()) return false;
@@ -380,13 +281,6 @@ public static class ManagerExtensions
         }
     }
     
-    // ===========================================
-    // GAME MANAGER EXTENSIONS
-    // ===========================================
-    
-    /// <summary>
-    /// Prüft ob alle kritischen Manager bereit sind
-    /// </summary>
     public static bool AreAllCriticalManagersReady(this GameManager gameManager)
     {
         if (!gameManager.IsManagerReady()) return false;
@@ -401,9 +295,6 @@ public static class ManagerExtensions
         return critical.All(ready => ready);
     }
     
-    /// <summary>
-    /// Sichere Game State Operations
-    /// </summary>
     public static bool TryStartCombat(this GameManager gameManager)
     {
         if (!gameManager.AreAllCriticalManagersReady()) return false;
@@ -411,13 +302,6 @@ public static class ManagerExtensions
         return TryWithManager<CombatManager>(cm => cm.StartCombat());
     }
     
-    // ===========================================
-    // UTILITY EXTENSIONS
-    // ===========================================
-    
-    /// <summary>
-    /// Batch Manager Readiness Check
-    /// </summary>
     public static Dictionary<string, bool> GetManagerStatus()
     {
         return new Dictionary<string, bool>
@@ -433,9 +317,6 @@ public static class ManagerExtensions
         };
     }
     
-    /// <summary>
-    /// Performance Logging für Manager Status
-    /// </summary>
     public static void LogManagerPerformance()
     {
         var status = GetManagerStatus();
@@ -450,10 +331,6 @@ public static class ManagerExtensions
         }
     }
 }
-
-// ===========================================
-// SUPPORTING ENUMS
-// ===========================================
 
 public enum PlayerActionType
 {
@@ -475,115 +352,25 @@ public enum ResourceType
     Mana
 }
 
-// ===========================================
-// VERWENDUNGS-BEISPIELE
-// ===========================================
-
-/*
-// VORHER-NACHHER VERGLEICHE:
-
-// VORHER (12 Zeilen):
-bool isPlayerTurn = CombatManager.HasInstance && 
-                   CombatManager.Instance.IsReady &&
-                   CombatManager.Instance.IsInCombat && 
-                   CombatManager.Instance.IsPlayerTurn &&
-                   !CombatManager.Instance.IsProcessingTurn;
-                   
-bool hasSelectedCards = CardManager.HasInstance && 
-                       CardManager.Instance.IsReady &&
-                       CardManager.Instance.SelectedCards?.Count > 0;
-
-if (playButton != null) 
-    playButton.interactable = hasSelectedCards && isPlayerTurn;
-
-// NACHHER (3 Zeilen):
-bool canPlay = CombatManager.Instance.CanPerformPlayerAction(PlayerActionType.PlayCards);
-bool hasCards = CardManager.Instance.SelectedCards.HasValidCards();
-if (playButton != null) playButton.interactable = canPlay && hasCards;
-
-// ===================================
-
-// MANAGER OPERATIONS:
-
-// VORHER:
-if (CardManager.HasInstance && CardManager.Instance.IsReady)
+public enum EntityType
 {
-    if (DeckManager.HasInstance && !DeckManager.Instance.IsDeckEmpty)
-    {
-        var card = DeckManager.Instance.DrawCard();
-        if (card != null)
-            CardManager.Instance.SpawnCard(card, null, true);
-    }
+    Unit,
+    Enemy,
+    Neutral
 }
 
-// NACHHER:
-DeckManager.Instance.TryDrawCard();
-
-// ===================================
-
-// UI BUTTON STATES:
-
-// VORHER:
-public void UpdateButtons()
+public enum TurnPhase
 {
-    bool canDraw = CardManager.HasInstance && 
-                   CardManager.Instance.IsReady &&
-                   !CardManager.Instance.IsHandFull &&
-                   DeckManager.HasInstance &&
-                   DeckManager.Instance.IsReady &&
-                   !DeckManager.Instance.IsDeckEmpty &&
-                   CombatManager.HasInstance &&
-                   CombatManager.Instance.IsPlayerTurn;
-    
-    drawButton.interactable = canDraw;
+    PlayerTurn,
+    EnemyTurn,
+    Setup,
+    Cleanup
 }
 
-// NACHHER:
-public void UpdateButtons()
+public enum ComboState
 {
-    drawButton.interactable = CardManager.Instance.CanDrawCard();
+    None,
+    Building,
+    Ready,
+    Processing
 }
-
-// ===================================
-
-// SAFE OPERATIONS:
-
-// VORHER:
-try
-{
-    if (SpellcastManager.HasInstance && SpellcastManager.Instance.IsReady)
-    {
-        SpellcastManager.Instance.ProcessCardPlay(selectedCards);
-    }
-}
-catch (Exception ex) { Debug.LogError(ex); }
-
-// NACHHER:
-SpellcastManager.Instance.TryProcessCards(selectedCards);
-
-// ===================================
-
-// BATCH CHECKS:
-
-// VORHER:
-bool allReady = CardManager.HasInstance && CardManager.Instance.IsReady &&
-                DeckManager.HasInstance && DeckManager.Instance.IsReady &&
-                CombatManager.HasInstance && CombatManager.Instance.IsReady;
-
-// NACHHER:
-bool allReady = GameManager.Instance.AreAllCriticalManagersReady();
-
-// ===================================
-
-// RESOURCE OPERATIONS:
-
-// VORHER:
-if (CombatManager.HasInstance && 
-    CombatManager.Instance.Creativity.CurrentValue >= cost)
-{
-    CombatManager.Instance.ModifyCreativity(-cost);
-}
-
-// NACHHER:
-CombatManager.Instance.TryModifyResource(ResourceType.Creativity, -cost);
-*/
