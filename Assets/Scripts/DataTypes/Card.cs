@@ -3,13 +3,10 @@ using UnityEngine.UI;
 using TMPro;
 using UnityEngine.EventSystems;
 using System.Collections.Generic;
+using GameCore.Enums; // CRITICAL: SharedEnums import
+using GameCore.Extensions; // CRITICAL: CoreExtensions import
 
-public enum CardState
-{
-    Idle,
-    Selected,
-    Disabled
-}
+// REMOVED: CardState enum definition - now using SharedEnums.CardState
 
 public class Card : MonoBehaviour, IPointerClickHandler, IPointerEnterHandler, IPointerExitHandler
 {
@@ -77,8 +74,8 @@ public class Card : MonoBehaviour, IPointerClickHandler, IPointerEnterHandler, I
     
     private void OnDestroy()
     {
-        if (HandLayoutManager.HasInstance)
-            HandLayoutManager.Instance.CleanupCardReference(this);
+        // INTEGRATION: Use CoreExtensions for safer cleanup
+        this.TryWithManager<HandLayoutManager>(hlm => hlm.CleanupCardReference(this));
     }
     
     public void SetCardData(CardData data)
@@ -115,11 +112,12 @@ public class Card : MonoBehaviour, IPointerClickHandler, IPointerEnterHandler, I
             // Double click = instant play
             if (!isSelected) Select();
             
-            if (SpellcastManager.HasInstance && CardManager.HasInstance)
+            // INTEGRATION: Use CoreExtensions for safer instant play
+            this.TryWithManager<SpellcastManager>(sm => 
             {
                 var cardList = new List<Card> { this };
-                SpellcastManager.Instance.ProcessCardPlay(cardList);
-            }
+                sm.ProcessCardPlay(cardList);
+            });
             return;
         }
         
@@ -130,11 +128,12 @@ public class Card : MonoBehaviour, IPointerClickHandler, IPointerEnterHandler, I
             // CTRL+Click = instant play
             if (!isSelected) Select();
             
-            if (SpellcastManager.HasInstance && CardManager.HasInstance)
+            // INTEGRATION: Use CoreExtensions for safer instant play
+            this.TryWithManager<SpellcastManager>(sm => 
             {
                 var cardList = new List<Card> { this };
-                SpellcastManager.Instance.ProcessCardPlay(cardList);
-            }
+                sm.ProcessCardPlay(cardList);
+            });
             return;
         }
         
@@ -256,5 +255,39 @@ public class Card : MonoBehaviour, IPointerClickHandler, IPointerEnterHandler, I
         }
         
         UpdateVisuals();
+    }
+    
+    // INTEGRATION: Extension-friendly methods für CardExtensions
+    
+    /// <summary>
+    /// Safe selection using CoreExtensions pattern
+    /// </summary>
+    public bool TrySelect()
+    {
+        return this.SafeExecute(card => 
+        {
+            if (card.isInteractable && !card.isSelected)
+            {
+                card.Select();
+                return true;
+            }
+            return false;
+        });
+    }
+    
+    /// <summary>
+    /// Safe deselection using CoreExtensions pattern
+    /// </summary>
+    public bool TryDeselect()
+    {
+        return this.SafeExecute(card => 
+        {
+            if (card.isSelected)
+            {
+                card.Deselect();
+                return true;
+            }
+            return false;
+        });
     }
 }

@@ -3,6 +3,8 @@ using UnityEngine.EventSystems;
 using UnityEngine.UI;
 using System.Collections.Generic;
 using System.Linq;
+using GameCore.Enums; // CRITICAL: SharedEnums import
+using GameCore.Extensions; // CRITICAL: CoreExtensions import
 
 public class DropAreaHandler : MonoBehaviour, IDropHandler, IPointerEnterHandler, IPointerExitHandler
 {
@@ -71,14 +73,14 @@ public class DropAreaHandler : MonoBehaviour, IDropHandler, IPointerEnterHandler
             return;
         }
         
-        // INTEGRATION: Use ManagerExtensions for safer validation
+        // INTEGRATION: Use CoreExtensions for safer validation
         if (gameObject.CompareTag("PlayArea"))
         {
             // For play area - check if we can play cards
             var cardList = new List<Card> { cardComponent };
             canAcceptDrop = SpellcastManager.CheckCanPlayCards(cardList);
             
-            // Additional check with ManagerExtensions
+            // Additional check with CoreExtensions
             if (canAcceptDrop)
             {
                 canAcceptDrop = this.TryWithManager<CombatManager, bool>(cm => 

@@ -3,11 +3,12 @@ using System.Collections.Generic;
 using System.Linq;
 using GameCore.Enums;
 using GameCore.Data;
+// REMOVED: using GameCore.Extensions; - verursacht Zirkularität!
 
 /// <summary>
 /// ManagerExtensions - Zentrale Manager-Integration ohne Duplikate
-/// CRITICAL FIX: Alle redundanten TryWithManager Implementierungen entfernt
-/// DEPENDENCIES: CoreExtensions (verwendet dessen TryWithManager)
+/// CRITICAL FIX: Verwendet direkte CoreExtensions Calls ohne using GameCore.Extensions
+/// DEPENDENCIES: CoreExtensions (direkte Verwendung), SharedEnums
 /// </summary>
 public static class ManagerExtensions
 {
@@ -28,7 +29,7 @@ public static class ManagerExtensions
     /// </summary>
     public static bool CanPerformPlayerAction(this CombatManager combat, PlayerActionType actionType = PlayerActionType.General)
     {
-        if (!combat.IsManagerReady()) return false;
+        if (!CoreExtensions.IsManagerReady(combat)) return false;
         
         bool baseConditions = combat.IsInCombat && 
                              combat.IsPlayerTurn && 
@@ -62,7 +63,7 @@ public static class ManagerExtensions
     /// Combat ist in gültigem State
     /// </summary>
     public static bool IsInValidCombatState(this CombatManager combat)
-        => combat.IsManagerReady() && combat.IsInCombat && combat.Life.CurrentValue > 0;
+        => CoreExtensions.IsManagerReady(combat) && combat.IsInCombat && combat.Life.CurrentValue > 0;
     
     /// <summary>
     /// Resource kann ausgegeben werden
@@ -70,10 +71,10 @@ public static class ManagerExtensions
     /// </summary>
     public static bool CanSpendResource(this CombatManager combat, ResourceType type, int amount)
     {
-        if (!combat.IsManagerReady()) return false;
+        if (!CoreExtensions.IsManagerReady(combat)) return false;
         
         var resource = combat.GetResourceByType(type);
-        return resource.IsValidResource() && resource.HasAvailable(amount);
+        return CoreExtensions.IsValidResource(resource) && CoreExtensions.HasAvailable(resource, amount);
     }
     
     /// <summary>
@@ -81,7 +82,7 @@ public static class ManagerExtensions
     /// </summary>
     public static bool TryModifyResource(this CombatManager combat, ResourceType type, int delta)
     {
-        if (!combat.IsManagerReady()) return false;
+        if (!CoreExtensions.IsManagerReady(combat)) return false;
         
         try
         {
@@ -109,7 +110,7 @@ public static class ManagerExtensions
     /// </summary>
     public static Resource GetResourceByType(this CombatManager combat, ResourceType type)
     {
-        if (!combat.IsManagerReady()) return null;
+        if (!CoreExtensions.IsManagerReady(combat)) return null;
         
         return type switch
         {
@@ -127,7 +128,7 @@ public static class ManagerExtensions
     /// </summary>
     public static bool CanDrawCard(this CardManager cardManager)
     {
-        if (!cardManager.IsManagerReady()) return false;
+        if (!CoreExtensions.IsManagerReady(cardManager)) return false;
         
         return !cardManager.IsHandFull && 
                TryGetManager<DeckManager>()?.IsManagerReady() == true &&
@@ -140,14 +141,14 @@ public static class ManagerExtensions
     /// </summary>
     public static bool TrySelectCards(this CardManager cardManager, IEnumerable<Card> cards)
     {
-        if (!cardManager.IsManagerReady() || cards == null) return false;
+        if (!CoreExtensions.IsManagerReady(cardManager) || cards == null) return false;
         
         try
         {
             cardManager.ClearSelection();
-            foreach (var card in cards.Where(c => c.IsValid()))
+            foreach (var card in cards.Where(c => CardExtensions.IsValid(c)))
             {
-                if (!card.TrySelect()) return false;
+                if (!CardExtensions.TrySelect(card)) return false;
             }
             return true;
         }
@@ -166,19 +167,23 @@ public static class ManagerExtensions
     /// </summary>
     public static bool TryDrawCard(this DeckManager deck)
     {
-        if (!deck.IsManagerReady() || deck.IsDeckEmpty) return false;
+        if (!CoreExtensions.IsManagerReady(deck) || deck.IsDeckEmpty) return false;
         
-        return TryGetManager<CardManager>()?.TryWithManager<CardManager>(cm => 
+        var cardManager = TryGetManager<CardManager>();
+        if (cardManager != null && CoreExtensions.IsManagerReady(cardManager))
         {
-            if (!cm.IsHandFull)
+            if (!cardManager.IsHandFull)
             {
                 var cardData = deck.DrawCard();
                 if (cardData != null)
                 {
-                    cm.SpawnCard(cardData, null, true);
+                    cardManager.SpawnCard(cardData, null, true);
+                    return true;
                 }
             }
-        }) == true;
+        }
+        
+        return false;
     }
 
     // === SPELLCAST MANAGER INTEGRATION ===
@@ -188,7 +193,7 @@ public static class ManagerExtensions
     /// </summary>
     public static bool CanCastSpells(this SpellcastManager spellcast)
     {
-        if (!spellcast.IsManagerReady()) return false;
+        if (!CoreExtensions.IsManagerReady(spellcast)) return false;
         
         return TryGetManager<CombatManager>()?.CanPerformPlayerAction(PlayerActionType.CastSpell) == true;
     }
@@ -198,9 +203,9 @@ public static class ManagerExtensions
     /// </summary>
     public static bool TryProcessCards(this SpellcastManager spellcast, IEnumerable<Card> cards)
     {
-        if (!spellcast.IsManagerReady() || cards == null) return false;
+        if (!CoreExtensions.IsManagerReady(spellcast) || cards == null) return false;
         
-        var cardList = cards.Where(c => c.IsValid()).ToList();
+        var cardList = cards.Where(c => CardExtensions.IsValid(c)).ToList();
         if (cardList.Count == 0) return false;
         
         try
@@ -224,7 +229,7 @@ public static class ManagerExtensions
     public static T TrySpawnEntity<T>(this T manager, EntityAsset asset, Vector3 position = default) 
         where T : MonoBehaviour, IGameManager
     {
-        if (!manager.IsManagerReady() || asset == null) return manager;
+        if (!CoreExtensions.IsManagerReady(manager) || asset == null) return manager;
         
         try
         {
@@ -251,7 +256,7 @@ public static class ManagerExtensions
     /// </summary>
     public static bool TrySetTarget(this EnemyManager enemyManager, EntityBehaviour target)
     {
-        if (!enemyManager.IsManagerReady() || !target.IsValidTarget()) return false;
+        if (!CoreExtensions.IsManagerReady(enemyManager) || !EntityExtensions.IsValidTarget(target)) return false;
         
         try
         {
@@ -272,7 +277,7 @@ public static class ManagerExtensions
     /// </summary>
     public static bool TryUpdateLayout(this HandLayoutManager layout)
     {
-        if (!layout.IsManagerReady()) return false;
+        if (!CoreExtensions.IsManagerReady(layout)) return false;
         
         try
         {
@@ -294,7 +299,7 @@ public static class ManagerExtensions
     /// </summary>
     public static bool AreAllCriticalManagersReady(this GameManager gameManager)
     {
-        if (!gameManager.IsManagerReady()) return false;
+        if (!CoreExtensions.IsManagerReady(gameManager)) return false;
         
         var criticalManagers = new (System.Type type, bool ready)[]
         {
@@ -313,7 +318,21 @@ public static class ManagerExtensions
     {
         if (!gameManager.AreAllCriticalManagersReady()) return false;
         
-        return TryGetManager<CombatManager>()?.TryWithManager<CombatManager>(cm => cm.StartCombat()) == true;
+        var combatManager = TryGetManager<CombatManager>();
+        if (combatManager != null && CoreExtensions.IsManagerReady(combatManager))
+        {
+            try
+            {
+                combatManager.StartCombat();
+                return true;
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogError($"[ManagerExtensions] Combat start failed: {ex.Message}");
+            }
+        }
+        
+        return false;
     }
 
     // === DIAGNOSTICS & MONITORING ===
@@ -363,7 +382,7 @@ public static class ManagerExtensions
     /// </summary>
     public static CombatAssessment GetCombatAssessment(this CombatManager combat)
     {
-        if (!combat.IsManagerReady()) 
+        if (!CoreExtensions.IsManagerReady(combat)) 
             return new CombatAssessment { Difficulty = CombatDifficulty.None };
         
         return new CombatAssessment
@@ -380,9 +399,9 @@ public static class ManagerExtensions
     public static bool TryOptimalRecovery(this CombatManager combat, ResourceType type, int maxRecovery)
     {
         var resource = combat.GetResourceByType(type);
-        if (!resource.IsValidResource()) return false;
+        if (!CoreExtensions.IsValidResource(resource)) return false;
         
-        var resourceHealth = resource.GetResourceHealth();
+        var resourceHealth = ResourceExtensions.GetResourceHealth(resource);
         
         int optimalAmount = resourceHealth switch
         {
@@ -420,6 +439,18 @@ public static class ManagerExtensions
             if (type == typeof(GameManager) && TryGetManager<GameManager>()?.IsManagerReady() != true) return false;
         }
         return true;
+    }
+    
+    // === RESOURCE PORTFOLIO HELPER ===
+    
+    /// <summary>
+    /// Resource Portfolio für Combat Assessment
+    /// INTEGRATION: Verwendet ResourceExtensions
+    /// </summary>
+    public static ResourcePortfolio GetResourcePortfolio(this CombatManager combat)
+    {
+        var resources = new List<Resource> { combat.Life, combat.Creativity };
+        return ResourceExtensions.OptimizePortfolio(resources, new List<ResourceCost>());
     }
 }
 

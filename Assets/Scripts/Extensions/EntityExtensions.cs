@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using GameCore.Enums;
 using GameCore.Data;
+using GameCore.Extensions;
 
 /// <summary>
 /// EntityExtensions - Spezialisierte Extensions für Entity-System  
