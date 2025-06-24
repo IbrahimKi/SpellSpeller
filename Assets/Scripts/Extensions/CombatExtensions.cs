@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System;
 using GameCore.Enums;
+using GameCore.Data;
+
 public static class CombatExtensions
 {
     public static bool IsInPlayerActionPhase(this CombatManager combat)
@@ -102,27 +104,10 @@ public static class CombatExtensions
         
         bool canAfford = true;
         
-        if (cost.CreativityCost > 0)
+        if (cost.Amount > 0)
         {
-            canAfford &= combat.Creativity.CurrentValue >= cost.CreativityCost;
-            canAfford &= (combat.Creativity.CurrentValue - cost.CreativityCost) >= 0;
-        }
-        
-        if (cost.LifeCost > 0)
-        {
-            canAfford &= combat.Life.CurrentValue > cost.LifeCost;
-        }
-        
-        if (cost.RequiresCards > 0)
-        {
-            if (CardManager.HasInstance && CardManager.Instance.IsReady)
-            {
-                canAfford &= CardManager.Instance.SelectedCards.Count >= cost.RequiresCards;
-            }
-            else
-            {
-                canAfford = false;
-            }
+            var resource = combat.GetResourceByType(cost.ResourceType);
+            canAfford &= resource.IsValidResource() && resource.HasAvailable(cost.Amount);
         }
         
         return canAfford;
@@ -134,11 +119,8 @@ public static class CombatExtensions
         
         try
         {
-            if (cost.CreativityCost > 0)
-                combat.ModifyCreativity(-cost.CreativityCost);
-            
-            if (cost.LifeCost > 0)
-                combat.ModifyLife(-cost.LifeCost);
+            if (cost.Amount > 0)
+                combat.TryModifyResource(cost.ResourceType, -cost.Amount);
             
             return true;
         }
@@ -332,108 +314,3 @@ public static class CombatExtensions
         return enemies.OrderBy(e => e.HealthPercentage).Take(maxTargets).ToList();
     }
 }
-
-public enum CombatDifficulty
-{
-    None,
-    Easy,
-    Moderate,
-    Hard,
-    Desperate
-}
-
-public enum HealthStatus
-{
-    Dying,
-    Critical,
-    Low,
-    Moderate,
-    Good,
-    Excellent
-}
-
-public enum ResourceStatus
-{
-    Critical,
-    Low,
-    Medium,
-    High
-}
-
-public enum ThreatLevel
-{
-    None,
-    Low,
-    Medium,
-    High,
-    Extreme
-}
-
-public enum TargetingStrategy
-{
-    Optimal,
-    Weakest,
-    Strongest,
-    Nearest,
-    Priority,
-    Random
-}
-
-public enum HealingMode
-{
-    Self,
-    MostDamaged,
-    All,
-    Critical
-}
-
-public enum ActionType
-{
-    Attack,
-    Defend,
-    Heal,
-    DrawCard,
-    EndTurn,
-    CastSpell
-}
-
-public enum ActionPriority
-{
-    Low,
-    Medium,
-    High,
-    Critical
-}
-
-public enum UrgencyLevel
-{
-    Low,
-    Medium,
-    High,
-    Critical
-}
-
-public class CombatSituation
-{
-    public bool IsPlayerTurn { get; set; }
-    public bool CanAct { get; set; }
-    public HealthStatus HealthStatus { get; set; }
-    public ResourceStatus CreativityStatus { get; set; }
-    public ThreatLevel EnemyThreat { get; set; }
-    public ActionType RecommendedAction { get; set; }
-    public UrgencyLevel UrgencyLevel { get; set; }
-    public bool IsResourceCrisis { get; set; }
-}
-
-public class ActionCost
-{
-    public int CreativityCost { get; set; }
-    public int LifeCost { get; set; }
-    public int RequiresCards { get; set; }
-    
-    public static ActionCost None => new ActionCost();
-    public static ActionCost Draw => new ActionCost { CreativityCost = 1 };
-    public static ActionCost Discard => new ActionCost { CreativityCost = 1, RequiresCards = 1 };
-}
-
-// Moved DamageType to SharedEnums.cs

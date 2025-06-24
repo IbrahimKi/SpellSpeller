@@ -330,8 +330,8 @@ public static class EntityExtensions
         // Priority scoring
         score += entity.TargetPriority * criteria.PriorityWeight;
         
-        // Type preference
-        if (criteria.PreferredTypes?.Contains(entity.Type) == true)
+        // Type preference - FIXED: Using LINQ Contains
+        if (criteria.PreferredTypes?.Any(t => (GameCore.Enums.EntityType)t == (GameCore.Enums.EntityType)entity.Type) == true)
             score += criteria.TypeWeight;
         
         return score;

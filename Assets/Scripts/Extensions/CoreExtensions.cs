@@ -2,6 +2,7 @@ using UnityEngine;
 using GameCore.Enums;
 using GameCore.Data;
 using System;
+using System.Linq;
 
 /// <summary>
 /// CoreExtensions - Fundamentale Extensions für alle Systeme

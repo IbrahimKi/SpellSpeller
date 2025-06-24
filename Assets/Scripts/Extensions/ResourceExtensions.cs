@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System;
 using GameCore.Enums;
+using GameCore.Data;
 
 public static class ResourceExtensions
 {
@@ -295,7 +296,7 @@ public static class ResourceExtensions
         foreach (var resource in validResources)
         {
             var resourceType = GetResourceType(resource);
-            var plannedSpending = costsByType.GetValueOrDefault(resourceType, 0);
+            var plannedSpending = costsByType.ContainsKey(resourceType) ? costsByType[resourceType] : 0;
             
             var recommendation = new ResourceRecommendation
             {
@@ -363,63 +364,6 @@ public static class ResourceExtensions
         else
             return ResourceAction.Maintain;
     }
-}
-
-public enum ResourceHealth
-{
-    Dead = 0,
-    Dying = 1,
-    Critical = 2,
-    Low = 3,
-    Moderate = 4,
-    Good = 5,
-    Excellent = 6
-}
-
-public enum ResourceUrgency
-{
-    None,
-    Low,
-    Medium,
-    High,
-    Immediate
-}
-
-public enum ResourcePriority
-{
-    VeryLow = 1,
-    Low = 2,
-    Medium = 3,
-    High = 4,
-    Critical = 5
-}
-
-public enum ResourceAction
-{
-    Maintain,
-    RecoverImmediately,
-    RecoverBeforeSpending,
-    ReduceSpending,
-    ConsiderIncreaseSpending,
-    Optimize
-}
-
-public enum BudgetStatus
-{
-    Balanced,
-    Overbudget,
-    Underbudget
-}
-
-public class ResourceCost
-{
-    public ResourceType ResourceType { get; set; }
-    public int Amount { get; set; }
-    public ResourcePriority Priority { get; set; } = ResourcePriority.Medium;
-    public string Description { get; set; } = "";
-    
-    public static ResourceCost Create(ResourceType type, int amount, ResourcePriority priority = ResourcePriority.Medium)
-        => new ResourceCost { ResourceType = type, Amount = amount, Priority = priority };
 }
 
 public class ResourceOperation
