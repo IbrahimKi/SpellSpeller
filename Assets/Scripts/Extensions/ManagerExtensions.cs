@@ -4,22 +4,25 @@ using System.Linq;
 
 public static class ManagerExtensions
 {
+    // Extension method für IGameManager
     public static bool IsManagerReady<T>(this T manager) where T : MonoBehaviour, IGameManager
         => manager != null && !manager.Equals(null) && manager.IsReady;
     
-    public static bool IsManagerReady<T>(this SingletonBehaviour<T> manager) where T : MonoBehaviour
+    // Extension method für SingletonBehaviour
+    public static bool IsManagerReady<T>(this SingletonBehaviour<T> manager) where T : SingletonBehaviour<T>
     {
         if (manager == null || manager.Equals(null)) return false;
         return manager is IGameManager gameManager ? gameManager.IsReady : true;
     }
     
+    // Static helper methods (keine Extensions)
     public static T TryGetManager<T>() where T : SingletonBehaviour<T>
         => SingletonBehaviour<T>.HasInstance ? SingletonBehaviour<T>.Instance : null;
     
     public static bool TryWithManager<T>(System.Action<T> action) where T : SingletonBehaviour<T>
     {
         var manager = TryGetManager<T>();
-        if (manager != null && manager.IsManagerReady())
+        if (manager != null && (manager is IGameManager gm ? gm.IsReady : true))
         {
             try
             {
@@ -38,7 +41,7 @@ public static class ManagerExtensions
     public static TResult TryWithManager<T, TResult>(System.Func<T, TResult> func, TResult defaultValue = default) where T : SingletonBehaviour<T>
     {
         var manager = TryGetManager<T>();
-        if (manager != null && manager.IsManagerReady())
+        if (manager != null && (manager is IGameManager gm ? gm.IsReady : true))
         {
             try
             {
@@ -53,6 +56,14 @@ public static class ManagerExtensions
         return defaultValue;
     }
     
+    // Extension method für MonoBehaviour (für this.TryWithManager pattern)
+    public static bool TryWithManager<T>(this MonoBehaviour caller, System.Action<T> action) where T : SingletonBehaviour<T>
+        => TryWithManager(action);
+    
+    public static TResult TryWithManager<T, TResult>(this MonoBehaviour caller, System.Func<T, TResult> func, TResult defaultValue = default) where T : SingletonBehaviour<T>
+        => TryWithManager(func, defaultValue);
+    
+    // CombatManager specific extensions
     public static bool CanPerformPlayerAction(this CombatManager combat, PlayerActionType actionType = PlayerActionType.General)
     {
         if (!combat.IsManagerReady()) return false;
@@ -132,7 +143,7 @@ public static class ManagerExtensions
         if (!combat.IsManagerReady()) return new ResourcePortfolio();
         
         var resources = new[] { combat.Life, combat.Creativity }.Where(r => r != null);
-        return resources.OptimizePortfolio(plannedCosts ?? Enumerable.Empty<ResourceCost>());
+        return resources.OptimizePortfolio(plannedCosts ?? System.Linq.Enumerable.Empty<ResourceCost>());
     }
     
     public static bool TryOptimalRecovery(this CombatManager combat, ResourceType type, int maxRecovery)
@@ -330,8 +341,26 @@ public static class ManagerExtensions
             Debug.LogWarning($"[ManagerExtensions] {kvp.Key} not ready!");
         }
     }
+    
+    // Additional helper method for CombatManager
+    public static CombatAssessment GetCombatAssessment(this CombatManager combat)
+    {
+        return new CombatAssessment
+        {
+            Difficulty = combat.GetCombatDifficulty(),
+            Situation = combat.GetCombatSituation()
+        };
+    }
 }
 
+// Supporting class
+public class CombatAssessment
+{
+    public CombatDifficulty Difficulty { get; set; }
+    public CombatSituation Situation { get; set; }
+}
+
+// Moved enums to avoid duplication
 public enum PlayerActionType
 {
     General,
@@ -364,13 +393,9 @@ public enum TurnPhase
     PlayerTurn,
     EnemyTurn,
     Setup,
-    Cleanup
+    Cleanup,
+    TurnTransition,
+    CombatEnd
 }
 
-public enum ComboState
-{
-    None,
-    Building,
-    Ready,
-    Processing
-}
+// ComboState bleibt in SpellcastManager.cs definiert, da es spezifisch für diesen Manager ist

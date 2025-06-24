@@ -436,11 +436,4 @@ public class ActionCost
     public static ActionCost Discard => new ActionCost { CreativityCost = 1, RequiresCards = 1 };
 }
 
-public enum DamageType
-{
-    Normal,
-    Fire,
-    Ice,
-    Lightning,
-    True
-}
+// Moved DamageType to SharedEnums.cs

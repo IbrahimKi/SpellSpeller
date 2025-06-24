@@ -2,6 +2,7 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 using System.Collections.Generic;
+using System.Linq;
 
 public class DropAreaHandler : MonoBehaviour, IDropHandler, IPointerEnterHandler, IPointerExitHandler
 {
@@ -63,24 +64,35 @@ public class DropAreaHandler : MonoBehaviour, IDropHandler, IPointerEnterHandler
         }
         
         Card cardComponent = currentDraggedCard.GetComponent<Card>();
-        if (cardComponent == null)
+        if (!cardComponent.IsPlayable())
         {
             canAcceptDrop = false;
             dropAreaImage.color = normalColor;
             return;
         }
         
-        // Check based on area type
+        // Check based on area type using extensions
         if (gameObject.CompareTag("PlayArea"))
         {
-            // For play area - always allow adding to combo during player turn
+            // For play area - check if we can play cards
             var cardList = new List<Card> { cardComponent };
             canAcceptDrop = SpellcastManager.CheckCanPlayCards(cardList);
+            
+            // Additional check with ManagerExtensions
+            if (canAcceptDrop)
+            {
+                canAcceptDrop = ManagerExtensions.TryWithManager<CombatManager, bool>(cm => 
+                    cm.CanPerformPlayerAction(PlayerActionType.PlayCards)
+                );
+            }
         }
         else if (gameObject.CompareTag("DiscardArea"))
         {
-            // For discard area - check resources
-            canAcceptDrop = SpellcastManager.CheckCanDiscardCard(cardComponent);
+            // For discard area - check resources using extensions
+            canAcceptDrop = SpellcastManager.CheckCanDiscardCard(cardComponent) &&
+                          ManagerExtensions.TryWithManager<CombatManager, bool>(cm => 
+                              cm.CanSpendResource(ResourceType.Creativity, 1)
+                          );
         }
         else
         {

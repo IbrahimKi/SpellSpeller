@@ -141,13 +141,13 @@ public class CardDragHandler : MonoBehaviour, IBeginDragHandler, IDragHandler, I
     private void HandlePlayAreaDrop(GameObject playArea)
     {
         Card cardComponent = GetComponent<Card>();
-        if (cardComponent == null)
+        if (!cardComponent.IsPlayable())
         {
             ReturnToOriginalPosition();
             return;
         }
         
-        // Check if we can play
+        // Check if we can play using extensions
         var cardList = new List<Card> { cardComponent };
         if (!SpellcastManager.CheckCanPlayCards(cardList))
         {
@@ -161,20 +161,19 @@ public class CardDragHandler : MonoBehaviour, IBeginDragHandler, IDragHandler, I
         // Select if not selected
         if (!cardComponent.IsSelected)
         {
-            cardComponent.Select();
+            cardComponent.TrySelect();
         }
         
-        // Play the card
-        if (SpellcastManager.HasInstance)
-        {
-            SpellcastManager.Instance.ProcessCardPlay(cardList);
-        }
+        // Play the card using extensions
+        ManagerExtensions.TryWithManager<SpellcastManager>(sm => 
+            sm.TryProcessCards(cardList)
+        );
     }
     
     private void HandleDiscardAreaDrop(GameObject discardArea)
     {
         Card cardComponent = GetComponent<Card>();
-        if (cardComponent == null)
+        if (!cardComponent.IsPlayable())
         {
             ReturnToOriginalPosition();
             return;
@@ -187,32 +186,29 @@ public class CardDragHandler : MonoBehaviour, IBeginDragHandler, IDragHandler, I
             return;
         }
         
-        // Process discard
-        if (CombatManager.HasInstance)
+        // Process discard using extensions
+        ManagerExtensions.TryWithManager<CombatManager>(cm => 
         {
-            CombatManager.Instance.SpendCreativity(1);
-        }
-        
-        if (DeckManager.HasInstance && cardComponent.CardData != null)
-        {
-            DeckManager.Instance.DiscardCard(cardComponent.CardData);
-        }
-        
-        if (CardManager.HasInstance)
-        {
-            CardManager.Instance.RemoveCardFromHand(cardComponent);
-            CardManager.Instance.DestroyCard(cardComponent);
-        }
-        
-        // Draw new card
-        if (DeckManager.HasInstance)
-        {
-            var newCardData = DeckManager.Instance.DrawCard();
-            if (newCardData != null && CardManager.HasInstance)
+            if (cm.CanSpendResource(ResourceType.Creativity, 1))
             {
-                CardManager.Instance.SpawnCard(newCardData, null, true);
+                cm.TryModifyResource(ResourceType.Creativity, -1);
+                
+                ManagerExtensions.TryWithManager<DeckManager>(dm => 
+                {
+                    if (cardComponent.CardData != null)
+                        dm.DiscardCard(cardComponent.CardData);
+                });
+                
+                ManagerExtensions.TryWithManager<CardManager>(cardManager => 
+                {
+                    cardManager.RemoveCardFromHand(cardComponent);
+                    cardManager.DestroyCard(cardComponent);
+                });
+                
+                // Draw new card
+                dm.TryDrawCard();
             }
-        }
+        });
     }
 
     private void ReturnToOriginalPosition()

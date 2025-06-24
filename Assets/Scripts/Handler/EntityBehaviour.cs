@@ -98,30 +98,36 @@ public class EntityBehaviour : MonoBehaviour, IPointerClickHandler, IPointerEnte
     
     private void RegisterWithManager()
     {
+        // Use ManagerExtensions for safer registration
         switch (Type)
         {
             case EntityType.Enemy:
-                if (EnemyManager.HasInstance)
-                    EnemyManager.Instance.RegisterEnemy(this);
+                ManagerExtensions.TryWithManager<EnemyManager>(em => 
+                    em.RegisterEnemy(this)
+                );
                 break;
             case EntityType.Unit:
-                if (UnitManager.HasInstance)
-                    UnitManager.Instance.RegisterUnit(this);
+                ManagerExtensions.TryWithManager<UnitManager>(um => 
+                    um.RegisterUnit(this)
+                );
                 break;
         }
     }
     
     private void OnDestroy()
     {
+        // Use ManagerExtensions for safer unregistration
         switch (Type)
         {
             case EntityType.Enemy:
-                if (EnemyManager.HasInstance)
-                    EnemyManager.Instance.UnregisterEnemy(this);
+                ManagerExtensions.TryWithManager<EnemyManager>(em => 
+                    em.UnregisterEnemy(this)
+                );
                 break;
             case EntityType.Unit:
-                if (UnitManager.HasInstance)
-                    UnitManager.Instance.UnregisterUnit(this);
+                ManagerExtensions.TryWithManager<UnitManager>(um => 
+                    um.UnregisterUnit(this)
+                );
                 break;
         }
         
@@ -137,7 +143,8 @@ public class EntityBehaviour : MonoBehaviour, IPointerClickHandler, IPointerEnte
         if (oldHealth != currentHealth)
         {
             OnEntityHealthChanged?.Invoke(this, oldHealth, currentHealth);
-            Debug.Log($"[Entity Behaviour] Entity is now at {currentHealth}) life!");
+            Debug.Log($"[EntityBehaviour] {EntityName} health changed: {oldHealth} -> {currentHealth}");
+            
             if (currentHealth <= 0)
             {
                 Die();
@@ -153,13 +160,29 @@ public class EntityBehaviour : MonoBehaviour, IPointerClickHandler, IPointerEnte
     public void Damage(int amount)
     {
         if (amount > 0)
-            ModifyHealth(-amount);
+        {
+            // Use extension method for enhanced damage
+            var result = this.TryDamageWithEffects(amount, DamageType.Normal, true);
+            if (!result.Success)
+            {
+                // Fallback to simple damage
+                ModifyHealth(-amount);
+            }
+        }
     }
     
     public void Heal(int amount)
     {
         if (amount > 0)
-            ModifyHealth(amount);
+        {
+            // Use extension method for enhanced healing
+            var result = this.TryHeal(amount, true);
+            if (!result.Success)
+            {
+                // Fallback to simple heal
+                ModifyHealth(amount);
+            }
+        }
     }
     
     private void Die()
@@ -169,7 +192,17 @@ public class EntityBehaviour : MonoBehaviour, IPointerClickHandler, IPointerEnte
     
     public void TakeDamage(int amount, DamageType damageType = DamageType.Normal)
     {
-        Damage(amount);
+        // Use extension method for damage calculation
+        var result = this.TryDamageWithEffects(amount, damageType, false);
+        if (result.Success)
+        {
+            SetHealth(result.FinalHealth);
+        }
+        else
+        {
+            // Fallback
+            Damage(amount);
+        }
     }
     
     // Targeting
@@ -191,24 +224,27 @@ public class EntityBehaviour : MonoBehaviour, IPointerClickHandler, IPointerEnte
     // UI Event handlers
     public void OnPointerClick(PointerEventData eventData)
     {
-        if (!IsTargetable || !IsAlive) return;
+        if (!this.IsValidTarget()) return;
         
+        // Use ManagerExtensions for safer handling
         switch (Type)
         {
             case EntityType.Enemy:
-                if (EnemyManager.HasInstance)
-                    EnemyManager.Instance.HandleEntityClicked(this);
+                ManagerExtensions.TryWithManager<EnemyManager>(em => 
+                    em.HandleEntityClicked(this)
+                );
                 break;
             case EntityType.Unit:
-                if (UnitManager.HasInstance)
-                    UnitManager.Instance.HandleEntityClicked(this);
+                ManagerExtensions.TryWithManager<UnitManager>(um => 
+                    um.HandleEntityClicked(this)
+                );
                 break;
         }
     }
     
     public void OnPointerEnter(PointerEventData eventData)
     {
-        if (!IsTargetable || !IsAlive) return;
+        if (!this.IsValidTarget()) return;
         
         isHovered = true;
         if (hoverIndicator != null)
@@ -248,6 +284,19 @@ public class EntityBehaviour : MonoBehaviour, IPointerClickHandler, IPointerEnte
         {
             Gizmos.color = Color.yellow;
             Gizmos.DrawWireSphere(TargetPosition, 0.5f);
+            
+            // Draw health status using extensions
+            var healthStatus = this.GetHealthStatus();
+            Gizmos.color = healthStatus switch
+            {
+                EntityHealthStatus.Full => Color.green,
+                EntityHealthStatus.High => Color.cyan,
+                EntityHealthStatus.Moderate => Color.yellow,
+                EntityHealthStatus.Low => new Color(1f, 0.5f, 0f),
+                EntityHealthStatus.Critical => Color.red,
+                _ => Color.gray
+            };
+            Gizmos.DrawWireSphere(transform.position, 0.3f);
         }
     }
 }

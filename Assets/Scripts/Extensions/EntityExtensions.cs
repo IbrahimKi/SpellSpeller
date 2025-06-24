@@ -398,6 +398,13 @@ public enum EntitySortCriteria
     Name
 }
 
+public enum EntityCategory
+{
+    Minion,
+    Elite,
+    Boss
+}
+
 public class DamageResult
 {
     public bool Success { get; set; }
@@ -417,22 +424,6 @@ public class HealResult
     public float HealthPercentage { get; set; }
     public bool WasFullyHealed { get; set; }
     public string FailureReason { get; set; } = "";
-}
-
-public enum DamageType
-{
-    Normal,
-    Fire,
-    Ice,
-    Lightning,
-    True
-}
-
-public enum EntityType
-{
-    Unit,
-    Enemy,
-    Neutral
 }
 
 public class TargetingCriteria
