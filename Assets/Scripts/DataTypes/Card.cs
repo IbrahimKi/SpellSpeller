@@ -4,9 +4,7 @@ using TMPro;
 using UnityEngine.EventSystems;
 using System.Collections.Generic;
 using GameCore.Enums; // CRITICAL: SharedEnums import
-using GameCore.Extensions; // CRITICAL: CoreExtensions import
-
-// REMOVED: CardState enum definition - now using SharedEnums.CardState
+using GameCore.Data; // CRITICAL: SharedData import
 
 public class Card : MonoBehaviour, IPointerClickHandler, IPointerEnterHandler, IPointerExitHandler
 {
@@ -75,7 +73,7 @@ public class Card : MonoBehaviour, IPointerClickHandler, IPointerEnterHandler, I
     private void OnDestroy()
     {
         // INTEGRATION: Use CoreExtensions for safer cleanup
-        this.TryWithManager<HandLayoutManager>(hlm => hlm.CleanupCardReference(this));
+        CoreExtensions.TryWithManager<HandLayoutManager>(this, hlm => hlm.CleanupCardReference(this));
     }
     
     public void SetCardData(CardData data)
@@ -113,7 +111,7 @@ public class Card : MonoBehaviour, IPointerClickHandler, IPointerEnterHandler, I
             if (!isSelected) Select();
             
             // INTEGRATION: Use CoreExtensions for safer instant play
-            this.TryWithManager<SpellcastManager>(sm => 
+            CoreExtensions.TryWithManager<SpellcastManager>(this, sm => 
             {
                 var cardList = new List<Card> { this };
                 sm.ProcessCardPlay(cardList);
@@ -129,7 +127,7 @@ public class Card : MonoBehaviour, IPointerClickHandler, IPointerEnterHandler, I
             if (!isSelected) Select();
             
             // INTEGRATION: Use CoreExtensions for safer instant play
-            this.TryWithManager<SpellcastManager>(sm => 
+            CoreExtensions.TryWithManager<SpellcastManager>(this, sm => 
             {
                 var cardList = new List<Card> { this };
                 sm.ProcessCardPlay(cardList);
@@ -264,7 +262,7 @@ public class Card : MonoBehaviour, IPointerClickHandler, IPointerEnterHandler, I
     /// </summary>
     public bool TrySelect()
     {
-        return this.SafeExecute(card => 
+        return CoreExtensions.SafeExecute(this, card => 
         {
             if (card.isInteractable && !card.isSelected)
             {
@@ -280,7 +278,7 @@ public class Card : MonoBehaviour, IPointerClickHandler, IPointerEnterHandler, I
     /// </summary>
     public bool TryDeselect()
     {
-        return this.SafeExecute(card => 
+        return CoreExtensions.SafeExecute(this, card => 
         {
             if (card.isSelected)
             {
@@ -289,5 +287,16 @@ public class Card : MonoBehaviour, IPointerClickHandler, IPointerEnterHandler, I
             }
             return false;
         });
+    }
+    
+    // Extension method compatibility
+    public bool IsValid()
+    {
+        return CoreExtensions.IsValidReference(this) && cardData != null;
+    }
+    
+    public bool IsPlayable()
+    {
+        return IsValid() && isInteractable && CoreExtensions.IsActiveAndValid(gameObject);
     }
 }

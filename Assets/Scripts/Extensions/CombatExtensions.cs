@@ -2,7 +2,7 @@ using UnityEngine;
 using System.Collections.Generic;
 using System.Linq;
 using System;
-
+using GameCore.Enums;
 public static class CombatExtensions
 {
     public static bool IsInPlayerActionPhase(this CombatManager combat)

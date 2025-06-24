@@ -2,6 +2,8 @@ using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 using System.Collections;
+using GameCore.Enums; // CRITICAL: SharedEnums import
+using GameCore.Data; // CRITICAL: SharedData import
 
 public class CardManager : SingletonBehaviour<CardManager>, IGameManager
 {
@@ -403,8 +405,8 @@ public class CardManager : SingletonBehaviour<CardManager>, IGameManager
         if (!IsReady) return false;
         
         return !IsHandFull && 
-               ManagerExtensions.TryWithManager<DeckManager, bool>(dm => !dm.IsDeckEmpty) &&
-               ManagerExtensions.TryWithManager<CombatManager, bool>(cm => cm.IsPlayerTurn);
+               CoreExtensions.TryWithManager<DeckManager, bool>(this, dm => !dm.IsDeckEmpty) &&
+               CoreExtensions.TryWithManager<CombatManager, bool>(this, cm => cm.IsPlayerTurn);
     }
 
 #if UNITY_EDITOR

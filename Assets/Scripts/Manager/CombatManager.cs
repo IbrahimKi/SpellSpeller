@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System;
 using System.Collections;
 using System.Linq;
+using GameCore.Enums; // CRITICAL: SharedEnums import
+using GameCore.Data; // CRITICAL: SharedData import
 
 [System.Serializable]
 public class Resource
@@ -71,8 +73,8 @@ public class CombatManager : SingletonBehaviour<CombatManager>, IGameManager
     public Resource Creativity => _creativity;
     public int CurrentTurn => _currentTurn;
     public TurnPhase CurrentPhase => _currentPhase;
-    public int DeckSize => this.TryWithManager<DeckManager, int>(dm => dm.DeckSize);
-    public int DiscardSize => this.TryWithManager<DeckManager, int>(dm => dm.DiscardSize);
+    public int DeckSize => CoreExtensions.TryWithManager<DeckManager, int>(this, dm => dm.DeckSize);
+    public int DiscardSize => CoreExtensions.TryWithManager<DeckManager, int>(this, dm => dm.DiscardSize);
     public IReadOnlyList<EntityBehaviour> CurrentTargets => _currentTargets.AsReadOnly();
     public bool CanEndTurn => _isInCombat && _currentPhase == TurnPhase.PlayerTurn && !_isProcessingTurn;
     public bool IsPlayerTurn => _currentPhase == TurnPhase.PlayerTurn;
@@ -92,7 +94,7 @@ public class CombatManager : SingletonBehaviour<CombatManager>, IGameManager
             EnemyManager.OnAllEnemiesDefeated += HandleAllEnemiesDefeated;
         }
         
-        this.TryWithManager<DeckManager>(dm => 
+        CoreExtensions.TryWithManager<DeckManager>(this, dm => 
         {
             DeckManager.OnDeckSizeChanged += size => OnDeckSizeChanged?.Invoke(size);
         });
@@ -126,7 +128,7 @@ public class CombatManager : SingletonBehaviour<CombatManager>, IGameManager
         _currentPhase = TurnPhase.PlayerTurn;
         _isProcessingTurn = false;
         
-        this.TryWithManager<DeckManager>(dm => 
+        CoreExtensions.TryWithManager<DeckManager>(this, dm => 
         {
             if (dm.DeckSize == 0)
                 dm.GenerateTestDeck();
@@ -136,7 +138,7 @@ public class CombatManager : SingletonBehaviour<CombatManager>, IGameManager
         if (startingHandSize > 0)
             yield return DrawCards(startingHandSize);
         
-        this.TryWithManager<EnemyManager>(em => 
+        CoreExtensions.TryWithManager<EnemyManager>(this, em => 
         {
             var firstEnemy = em.GetSmartTarget(TargetingStrategy.Optimal);
             if (firstEnemy != null)
@@ -178,7 +180,7 @@ public class CombatManager : SingletonBehaviour<CombatManager>, IGameManager
         }
         OnCreativityChanged?.Invoke(_creativity);
         
-        int cardsToRefill = Mathf.Max(0, startingHandSize - this.TryWithManager<CardManager, int>(cm => cm.HandSize));
+        int cardsToRefill = Mathf.Max(0, startingHandSize - CoreExtensions.TryWithManager<CardManager, int>(this, cm => cm.HandSize));
         if (cardsToRefill > 0)
             yield return DrawCards(cardsToRefill);
         
@@ -230,7 +232,7 @@ public class CombatManager : SingletonBehaviour<CombatManager>, IGameManager
     {
         for (int i = 0; i < count; i++)
         {
-            if (this.TryWithManager<DeckManager>(dm => dm.TryDrawCard()))
+            if (CoreExtensions.TryWithManager<DeckManager>(this, dm => dm.TryDrawCard()))
                 yield return null;
         }
     }
@@ -275,7 +277,7 @@ public class CombatManager : SingletonBehaviour<CombatManager>, IGameManager
     }
     
     public void AddSmartTarget(TargetingStrategy strategy = TargetingStrategy.Optimal)
-        => this.TryWithManager<EnemyManager>(em => 
+        => CoreExtensions.TryWithManager<EnemyManager>(this, em => 
         {
             var smartTarget = em.GetSmartTarget(strategy);
             if (smartTarget != null)
@@ -283,7 +285,7 @@ public class CombatManager : SingletonBehaviour<CombatManager>, IGameManager
         });
     
     public void DealDamageToTargets(int damage, DamageType damageType = DamageType.Normal)
-        => this.TryWithManager<EnemyManager>(em => em.DamageTargetedEnemies(damage));
+        => CoreExtensions.TryWithManager<EnemyManager>(this, em => em.DamageTargetedEnemies(damage));
     
     public bool TrySmartHealing(int healAmount, HealingMode mode = HealingMode.Self)
         => this.TrySmartHeal(healAmount, mode);
