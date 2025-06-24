@@ -98,16 +98,16 @@ public class EntityBehaviour : MonoBehaviour, IPointerClickHandler, IPointerEnte
     
     private void RegisterWithManager()
     {
-        // Use ManagerExtensions for safer registration
+        // INTEGRATION: Use ManagerExtensions for safer registration
         switch (Type)
         {
             case EntityType.Enemy:
-                ManagerExtensions.TryWithManager<EnemyManager>(em => 
+                this.TryWithManager<EnemyManager>(em => 
                     em.RegisterEnemy(this)
                 );
                 break;
             case EntityType.Unit:
-                ManagerExtensions.TryWithManager<UnitManager>(um => 
+                this.TryWithManager<UnitManager>(um => 
                     um.RegisterUnit(this)
                 );
                 break;
@@ -116,16 +116,16 @@ public class EntityBehaviour : MonoBehaviour, IPointerClickHandler, IPointerEnte
     
     private void OnDestroy()
     {
-        // Use ManagerExtensions for safer unregistration
+        // INTEGRATION: Use ManagerExtensions for safer unregistration
         switch (Type)
         {
             case EntityType.Enemy:
-                ManagerExtensions.TryWithManager<EnemyManager>(em => 
+                this.TryWithManager<EnemyManager>(em => 
                     em.UnregisterEnemy(this)
                 );
                 break;
             case EntityType.Unit:
-                ManagerExtensions.TryWithManager<UnitManager>(um => 
+                this.TryWithManager<UnitManager>(um => 
                     um.UnregisterUnit(this)
                 );
                 break;
@@ -226,16 +226,16 @@ public class EntityBehaviour : MonoBehaviour, IPointerClickHandler, IPointerEnte
     {
         if (!this.IsValidTarget()) return;
         
-        // Use ManagerExtensions for safer handling
+        // INTEGRATION: Use ManagerExtensions for safer handling
         switch (Type)
         {
             case EntityType.Enemy:
-                ManagerExtensions.TryWithManager<EnemyManager>(em => 
+                this.TryWithManager<EnemyManager>(em => 
                     em.HandleEntityClicked(this)
                 );
                 break;
             case EntityType.Unit:
-                ManagerExtensions.TryWithManager<UnitManager>(um => 
+                this.TryWithManager<UnitManager>(um => 
                     um.HandleEntityClicked(this)
                 );
                 break;

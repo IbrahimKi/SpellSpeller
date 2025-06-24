@@ -71,7 +71,7 @@ public class DropAreaHandler : MonoBehaviour, IDropHandler, IPointerEnterHandler
             return;
         }
         
-        // Check based on area type using extensions
+        // INTEGRATION: Use ManagerExtensions for safer validation
         if (gameObject.CompareTag("PlayArea"))
         {
             // For play area - check if we can play cards
@@ -81,16 +81,16 @@ public class DropAreaHandler : MonoBehaviour, IDropHandler, IPointerEnterHandler
             // Additional check with ManagerExtensions
             if (canAcceptDrop)
             {
-                canAcceptDrop = ManagerExtensions.TryWithManager<CombatManager, bool>(cm => 
+                canAcceptDrop = this.TryWithManager<CombatManager, bool>(cm => 
                     cm.CanPerformPlayerAction(PlayerActionType.PlayCards)
                 );
             }
         }
         else if (gameObject.CompareTag("DiscardArea"))
         {
-            // For discard area - check resources using extensions
+            // INTEGRATION: For discard area - check resources using extensions
             canAcceptDrop = SpellcastManager.CheckCanDiscardCard(cardComponent) &&
-                          ManagerExtensions.TryWithManager<CombatManager, bool>(cm => 
+                          this.TryWithManager<CombatManager, bool>(cm => 
                               cm.CanSpendResource(ResourceType.Creativity, 1)
                           );
         }

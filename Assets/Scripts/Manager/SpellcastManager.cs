@@ -271,20 +271,19 @@ public class SpellcastManager : SingletonBehaviour<SpellcastManager>, IGameManag
     
     public void DrawCard()
     {
-        if (!CanDraw()) return;
-        
-        this.TryWithManager<DeckManager>(dm => dm.TryDrawCard());
+        // INTEGRATION: Verwende CardManager.CanDrawCard() statt redundante CanDraw()
+        this.TryWithManager<CardManager>(cm => 
+        {
+            if (cm.CanDrawCard())
+            {
+                this.TryWithManager<DeckManager>(dm => dm.TryDrawCard());
+            }
+        });
     }
     
     public void ClearSelection()
     {
         this.TryWithManager<CardManager>(cm => cm.ClearSelection());
-    }
-    
-    private bool CanDraw()
-    {
-        return this.TryWithManager<CardManager, bool>(cm => !cm.IsHandFull) && 
-               this.TryWithManager<DeckManager, bool>(dm => !dm.IsDeckEmpty);
     }
     
     // Drop area support
@@ -309,7 +308,7 @@ public class SpellcastManager : SingletonBehaviour<SpellcastManager>, IGameManag
         return Instance.TryWithManager<CombatManager, bool>(cm => 
         {
             return cm.CanPerformPlayerAction(PlayerActionType.DiscardCard) && 
-                   cm.CanSpendCreativity(1) &&
+                   cm.CanSpendResource(ResourceType.Creativity, 1) &&
                    Instance.TryWithManager<DeckManager, bool>(dm => 
                        dm.GetTotalAvailableCards() > 0);
         });

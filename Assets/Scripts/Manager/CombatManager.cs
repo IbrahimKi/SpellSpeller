@@ -258,11 +258,12 @@ public class CombatManager : SingletonBehaviour<CombatManager>, IGameManager
             OnCreativityChanged?.Invoke(_creativity);
     }
     
+    // INTEGRATION: Simplified using ResourceExtensions
     public bool CanSpendCreativity(int amount) 
-        => this.CanSpendResource(ResourceType.Creativity, amount);
-    
+        => _creativity.CanAfford(new ResourceCost { ResourceType = ResourceType.Creativity, Amount = amount });
+
     public bool SpendCreativity(int amount)
-        => this.TryModifyResource(ResourceType.Creativity, -amount);
+        => _creativity.TryApplyCost(new ResourceCost { ResourceType = ResourceType.Creativity, Amount = amount });
     
     public void AddTarget(EntityBehaviour target)
     {

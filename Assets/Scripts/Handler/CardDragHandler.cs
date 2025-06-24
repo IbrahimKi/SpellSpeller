@@ -164,8 +164,8 @@ public class CardDragHandler : MonoBehaviour, IBeginDragHandler, IDragHandler, I
             cardComponent.TrySelect();
         }
         
-        // Play the card using extensions
-        ManagerExtensions.TryWithManager<SpellcastManager>(sm => 
+        // INTEGRATION: Use ManagerExtensions for safer card play
+        this.TryWithManager<SpellcastManager>(sm => 
             sm.TryProcessCards(cardList)
         );
     }
@@ -186,27 +186,27 @@ public class CardDragHandler : MonoBehaviour, IBeginDragHandler, IDragHandler, I
             return;
         }
         
-        // Process discard using extensions
-        ManagerExtensions.TryWithManager<CombatManager>(cm => 
+        // INTEGRATION: Use ManagerExtensions for safer discard process
+        this.TryWithManager<CombatManager>(cm => 
         {
             if (cm.CanSpendResource(ResourceType.Creativity, 1))
             {
                 cm.TryModifyResource(ResourceType.Creativity, -1);
                 
-                ManagerExtensions.TryWithManager<DeckManager>(dm => 
+                this.TryWithManager<DeckManager>(dm => 
                 {
                     if (cardComponent.CardData != null)
                         dm.DiscardCard(cardComponent.CardData);
                 });
                 
-                ManagerExtensions.TryWithManager<CardManager>(cardManager => 
+                this.TryWithManager<CardManager>(cardManager => 
                 {
                     cardManager.RemoveCardFromHand(cardComponent);
                     cardManager.DestroyCard(cardComponent);
                 });
                 
                 // Draw new card
-                dm.TryDrawCard();
+                this.TryWithManager<DeckManager>(dm => dm.TryDrawCard());
             }
         });
     }
