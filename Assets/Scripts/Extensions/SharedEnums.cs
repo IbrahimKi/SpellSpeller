@@ -1,6 +1,5 @@
-// SharedEnums.cs - NEUE DATEI
-// KRITISCHER FIX: Ersetzt alle Enum-Duplikate aus bestehenden Extensions
-// LOCATION: Assets/Scripts/Extensions/SharedEnums.cs
+using UnityEngine;
+using System.Collections.Generic;
 
 namespace GameCore.Enums
 {
@@ -327,8 +326,6 @@ namespace GameCore.Enums
 }
 
 // === SHARED DATA CLASSES ===
-// Klassen die von mehreren Extensions verwendet werden
-
 namespace GameCore.Data
 {
     using UnityEngine;

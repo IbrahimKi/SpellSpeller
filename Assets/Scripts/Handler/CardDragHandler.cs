@@ -2,6 +2,8 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.Events;
+using GameCore.Enums; // CRITICAL: SharedEnums import
+using GameCore.Data; // CRITICAL: SharedData import
 
 public class CardDragHandler : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler
 {
@@ -164,8 +166,8 @@ public class CardDragHandler : MonoBehaviour, IBeginDragHandler, IDragHandler, I
             cardComponent.TrySelect();
         }
         
-        // INTEGRATION: Use ManagerExtensions for safer card play
-        this.TryWithManager<SpellcastManager>(sm => 
+        // INTEGRATION: Use CoreExtensions for safer card play
+        CoreExtensions.TryWithManager<SpellcastManager>(this, sm => 
             sm.TryProcessCards(cardList)
         );
     }
@@ -186,27 +188,27 @@ public class CardDragHandler : MonoBehaviour, IBeginDragHandler, IDragHandler, I
             return;
         }
         
-        // INTEGRATION: Use ManagerExtensions for safer discard process
-        this.TryWithManager<CombatManager>(cm => 
+        // INTEGRATION: Use CoreExtensions for safer discard process
+        CoreExtensions.TryWithManager<CombatManager>(this, cm => 
         {
             if (cm.CanSpendResource(ResourceType.Creativity, 1))
             {
                 cm.TryModifyResource(ResourceType.Creativity, -1);
                 
-                this.TryWithManager<DeckManager>(dm => 
+                CoreExtensions.TryWithManager<DeckManager>(this, dm => 
                 {
                     if (cardComponent.CardData != null)
                         dm.DiscardCard(cardComponent.CardData);
                 });
                 
-                this.TryWithManager<CardManager>(cardManager => 
+                CoreExtensions.TryWithManager<CardManager>(this, cardManager => 
                 {
                     cardManager.RemoveCardFromHand(cardComponent);
                     cardManager.DestroyCard(cardComponent);
                 });
                 
                 // Draw new card
-                this.TryWithManager<DeckManager>(dm => dm.TryDrawCard());
+                CoreExtensions.TryWithManager<DeckManager>(this, dm => dm.TryDrawCard());
             }
         });
     }

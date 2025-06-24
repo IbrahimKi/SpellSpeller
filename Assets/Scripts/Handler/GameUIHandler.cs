@@ -4,6 +4,8 @@ using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 using System.Collections;
+using GameCore.Enums; // CRITICAL: SharedEnums import
+using GameCore.Data; // CRITICAL: SharedData import
 
 public class GameUIHandler : MonoBehaviour
 {
@@ -95,10 +97,10 @@ public class GameUIHandler : MonoBehaviour
         UpdateButtonsThrottled();
     }
     
-    // INTEGRATION: Standardized Event Setup using ManagerExtensions
+    // INTEGRATION: Standardized Event Setup using CoreExtensions
     private void SetupEventListeners()
     {
-        ManagerExtensions.TryWithManager<CombatManager>(manager =>
+        CoreExtensions.TryWithManager<CombatManager>(this, manager =>
         {
             CombatManager.OnLifeChanged += UpdateLifeDisplay;
             CombatManager.OnCreativityChanged += UpdateCreativityDisplay;
@@ -107,13 +109,13 @@ public class GameUIHandler : MonoBehaviour
             CombatManager.OnTurnPhaseChanged += UpdateTurnPhaseDisplay;
         });
         
-        ManagerExtensions.TryWithManager<CardManager>(manager =>
+        CoreExtensions.TryWithManager<CardManager>(this, manager =>
         {
             CardManager.OnSelectionChanged += OnCardSelectionChanged;
             CardManager.OnHandUpdated += OnHandUpdated;
         });
         
-        ManagerExtensions.TryWithManager<SpellcastManager>(manager =>
+        CoreExtensions.TryWithManager<SpellcastManager>(this, manager =>
         {
             SpellcastManager.OnComboStateChanged += UpdateComboDisplay;
             SpellcastManager.OnSpellFound += OnSpellFound;
@@ -124,8 +126,8 @@ public class GameUIHandler : MonoBehaviour
     
     private void OnDestroy()
     {
-        // INTEGRATION: Standardized Event Cleanup using ManagerExtensions
-        ManagerExtensions.TryWithManager<CombatManager>(manager =>
+        // INTEGRATION: Standardized Event Cleanup using CoreExtensions
+        CoreExtensions.TryWithManager<CombatManager>(this, manager =>
         {
             CombatManager.OnLifeChanged -= UpdateLifeDisplay;
             CombatManager.OnCreativityChanged -= UpdateCreativityDisplay;
@@ -134,13 +136,13 @@ public class GameUIHandler : MonoBehaviour
             CombatManager.OnTurnPhaseChanged -= UpdateTurnPhaseDisplay;
         });
         
-        ManagerExtensions.TryWithManager<CardManager>(manager =>
+        CoreExtensions.TryWithManager<CardManager>(this, manager =>
         {
             CardManager.OnSelectionChanged -= OnCardSelectionChanged;
             CardManager.OnHandUpdated -= OnHandUpdated;
         });
         
-        ManagerExtensions.TryWithManager<SpellcastManager>(manager =>
+        CoreExtensions.TryWithManager<SpellcastManager>(this, manager =>
         {
             SpellcastManager.OnComboStateChanged -= UpdateComboDisplay;
             SpellcastManager.OnSpellFound -= OnSpellFound;
@@ -153,13 +155,13 @@ public class GameUIHandler : MonoBehaviour
     private void PlaySelectedCards()
     {
         if (!_managersReady) return;
-        ManagerExtensions.TryWithManager<SpellcastManager>(sm => sm.PlaySelectedCards());
+        CoreExtensions.TryWithManager<SpellcastManager>(this, sm => sm.PlaySelectedCards());
     }
     
     private void ClearSelection()
     {
         if (!_managersReady) return;
-        ManagerExtensions.TryWithManager<SpellcastManager>(sm => sm.ClearSelection());
+        CoreExtensions.TryWithManager<SpellcastManager>(this, sm => sm.ClearSelection());
     }
     
     private void DrawCard()
@@ -172,19 +174,19 @@ public class GameUIHandler : MonoBehaviour
             return;
         }
         
-        ManagerExtensions.TryWithManager<SpellcastManager>(sm => sm.DrawCard());
+        CoreExtensions.TryWithManager<SpellcastManager>(this, sm => sm.DrawCard());
     }
     
     private void CastCombo()
     {
         if (!_managersReady) return;
-        ManagerExtensions.TryWithManager<SpellcastManager>(sm => sm.TryCastCurrentCombo());
+        CoreExtensions.TryWithManager<SpellcastManager>(this, sm => sm.TryCastCurrentCombo());
     }
     
     private void EndTurn()
     {
         if (!_managersReady) return;
-        ManagerExtensions.TryWithManager<CombatManager>(cm => 
+        CoreExtensions.TryWithManager<CombatManager>(this, cm => 
         {
             if (cm.CanEndTurn)
                 cm.EndPlayerTurn();
@@ -195,7 +197,7 @@ public class GameUIHandler : MonoBehaviour
     {
         if (!_managersReady) return false;
         
-        return ManagerExtensions.TryWithManager<CardManager, bool>(cm => cm.CanDrawCard());
+        return CoreExtensions.TryWithManager<CardManager, bool>(this, cm => cm.CanDrawCard());
     }
     
     // ===== RESOURCE DISPLAYS =====
@@ -224,7 +226,7 @@ public class GameUIHandler : MonoBehaviour
     {
         if (deckText != null)
         {
-            int discardSize = ManagerExtensions.TryWithManager<CombatManager, int>(cm => cm.DiscardSize);
+            int discardSize = CoreExtensions.TryWithManager<CombatManager, int>(this, cm => cm.DiscardSize);
             deckText.text = $"Deck: {deckSize} | Discard: {discardSize}";
         }
         
@@ -344,8 +346,8 @@ public class GameUIHandler : MonoBehaviour
     {
         if (!_managersReady) return;
         
-        bool isPlayerTurn = ManagerExtensions.TryWithManager<CombatManager, bool>(cm => cm.IsPlayerTurn);
-        bool hasSelectedCards = ManagerExtensions.TryWithManager<CardManager, bool>(cm => cm.SelectedCards?.Count > 0);
+        bool isPlayerTurn = CoreExtensions.TryWithManager<CombatManager, bool>(this, cm => cm.IsPlayerTurn);
+        bool hasSelectedCards = CoreExtensions.TryWithManager<CardManager, bool>(this, cm => cm.SelectedCards?.Count > 0);
         
         if (playButton != null) 
             playButton.interactable = hasSelectedCards && isPlayerTurn;
@@ -361,7 +363,7 @@ public class GameUIHandler : MonoBehaviour
     {
         if (castComboButton == null) return;
         
-        bool isPlayerTurn = ManagerExtensions.TryWithManager<CombatManager, bool>(cm => cm.IsPlayerTurn);
+        bool isPlayerTurn = CoreExtensions.TryWithManager<CombatManager, bool>(this, cm => cm.IsPlayerTurn);
         castComboButton.interactable = canCast && isPlayerTurn;
         
         var buttonText = castComboButton.GetComponentInChildren<TextMeshProUGUI>();
@@ -383,9 +385,9 @@ public class GameUIHandler : MonoBehaviour
         if (buttonText != null && !canDraw)
         {
             if (!_managersReady) buttonText.text = "Draw (Wait)";
-            else if (ManagerExtensions.TryWithManager<CardManager, bool>(cm => cm.IsHandFull)) buttonText.text = "Draw (Full)";
-            else if (ManagerExtensions.TryWithManager<DeckManager, bool>(dm => dm.IsDeckEmpty)) buttonText.text = "Draw (Empty)";
-            else if (!ManagerExtensions.TryWithManager<CombatManager, bool>(cm => cm.IsPlayerTurn)) buttonText.text = "Draw (Turn)";
+            else if (CoreExtensions.TryWithManager<CardManager, bool>(this, cm => cm.IsHandFull)) buttonText.text = "Draw (Full)";
+            else if (CoreExtensions.TryWithManager<DeckManager, bool>(this, dm => dm.IsDeckEmpty)) buttonText.text = "Draw (Empty)";
+            else if (!CoreExtensions.TryWithManager<CombatManager, bool>(this, cm => cm.IsPlayerTurn)) buttonText.text = "Draw (Turn)";
             else buttonText.text = "Draw (?)";
         }
         else if (buttonText != null)
@@ -399,13 +401,13 @@ public class GameUIHandler : MonoBehaviour
     {
         if (endTurnButton != null)
         {
-            bool canEndTurn = ManagerExtensions.TryWithManager<CombatManager, bool>(cm => cm.CanEndTurn);
+            bool canEndTurn = CoreExtensions.TryWithManager<CombatManager, bool>(this, cm => cm.CanEndTurn);
             endTurnButton.interactable = canEndTurn;
             
             var buttonText = endTurnButton.GetComponentInChildren<TextMeshProUGUI>();
             if (buttonText != null)
             {
-                bool isProcessing = ManagerExtensions.TryWithManager<CombatManager, bool>(cm => cm.IsProcessingTurn);
+                bool isProcessing = CoreExtensions.TryWithManager<CombatManager, bool>(this, cm => cm.IsProcessingTurn);
                 buttonText.text = isProcessing ? "Processing..." : "End Turn";
             }
         }
@@ -445,7 +447,7 @@ public class GameUIHandler : MonoBehaviour
     {
         if (!_managersReady) return;
         
-        ManagerExtensions.TryWithManager<CombatManager>(combat =>
+        CoreExtensions.TryWithManager<CombatManager>(this, combat =>
         {
             UpdateLifeDisplay(combat.Life);
             UpdateCreativityDisplay(combat.Creativity);
@@ -454,7 +456,7 @@ public class GameUIHandler : MonoBehaviour
             UpdateTurnPhaseDisplay(combat.CurrentPhase);
         });
         
-        ManagerExtensions.TryWithManager<CardManager>(cm =>
+        CoreExtensions.TryWithManager<CardManager>(this, cm =>
             UpdateCardPlayUI(cm.SelectedCards)
         );
             

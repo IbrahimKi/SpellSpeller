@@ -146,9 +146,9 @@ public static class ManagerExtensions
         try
         {
             cardManager.ClearSelection();
-            foreach (var card in cards.Where(c => CardExtensions.IsValid(c)))
+            foreach (var card in cards.Where(c => CoreExtensions.IsValidReference(c)))
             {
-                if (!CardExtensions.TrySelect(card)) return false;
+                if (!card.TrySelect()) return false;
             }
             return true;
         }
@@ -205,7 +205,7 @@ public static class ManagerExtensions
     {
         if (!CoreExtensions.IsManagerReady(spellcast) || cards == null) return false;
         
-        var cardList = cards.Where(c => CardExtensions.IsValid(c)).ToList();
+        var cardList = cards.Where(c => CoreExtensions.IsValidReference(c)).ToList();
         if (cardList.Count == 0) return false;
         
         try
@@ -256,7 +256,7 @@ public static class ManagerExtensions
     /// </summary>
     public static bool TrySetTarget(this EnemyManager enemyManager, EntityBehaviour target)
     {
-        if (!CoreExtensions.IsManagerReady(enemyManager) || !EntityExtensions.IsValidTarget(target)) return false;
+        if (!CoreExtensions.IsManagerReady(enemyManager) || target == null || !target.IsValidTarget()) return false;
         
         try
         {
@@ -401,14 +401,14 @@ public static class ManagerExtensions
         var resource = combat.GetResourceByType(type);
         if (!CoreExtensions.IsValidResource(resource)) return false;
         
-        var resourceHealth = ResourceExtensions.GetResourceHealth(resource);
+        var resourceHealth = resource.GetResourceHealth();
         
         int optimalAmount = resourceHealth switch
         {
             ResourceHealth.Dead or ResourceHealth.Dying => maxRecovery,
-            ResourceHealth.Critical => Mathf.Min(maxRecovery, resource.MaxValue / 2),
-            ResourceHealth.Low => Mathf.Min(maxRecovery, resource.MaxValue / 3),
-            _ => Mathf.Min(maxRecovery, resource.MaxValue / 4)
+            ResourceHealth.Critical => UnityEngine.Mathf.Min(maxRecovery, resource.MaxValue / 2),
+            ResourceHealth.Low => UnityEngine.Mathf.Min(maxRecovery, resource.MaxValue / 3),
+            _ => UnityEngine.Mathf.Min(maxRecovery, resource.MaxValue / 4)
         };
         
         if (optimalAmount > 0)
@@ -450,7 +450,7 @@ public static class ManagerExtensions
     public static ResourcePortfolio GetResourcePortfolio(this CombatManager combat)
     {
         var resources = new List<Resource> { combat.Life, combat.Creativity };
-        return ResourceExtensions.OptimizePortfolio(resources, new List<ResourceCost>());
+        return resources.OptimizePortfolio(new List<ResourceCost>());
     }
 }
 

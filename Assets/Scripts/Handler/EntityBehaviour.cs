@@ -1,5 +1,7 @@
 using UnityEngine;
 using UnityEngine.EventSystems;
+using GameCore.Enums; // CRITICAL: SharedEnums import
+using GameCore.Data; // CRITICAL: SharedData import
 
 public class EntityBehaviour : MonoBehaviour, IPointerClickHandler, IPointerEnterHandler, IPointerExitHandler
 {
@@ -98,16 +100,16 @@ public class EntityBehaviour : MonoBehaviour, IPointerClickHandler, IPointerEnte
     
     private void RegisterWithManager()
     {
-        // INTEGRATION: Use ManagerExtensions for safer registration
+        // INTEGRATION: Use CoreExtensions for safer registration
         switch (Type)
         {
             case EntityType.Enemy:
-                this.TryWithManager<EnemyManager>(em => 
+                CoreExtensions.TryWithManager<EnemyManager>(this, em => 
                     em.RegisterEnemy(this)
                 );
                 break;
             case EntityType.Unit:
-                this.TryWithManager<UnitManager>(um => 
+                CoreExtensions.TryWithManager<UnitManager>(this, um => 
                     um.RegisterUnit(this)
                 );
                 break;
@@ -116,16 +118,16 @@ public class EntityBehaviour : MonoBehaviour, IPointerClickHandler, IPointerEnte
     
     private void OnDestroy()
     {
-        // INTEGRATION: Use ManagerExtensions for safer unregistration
+        // INTEGRATION: Use CoreExtensions for safer unregistration
         switch (Type)
         {
             case EntityType.Enemy:
-                this.TryWithManager<EnemyManager>(em => 
+                CoreExtensions.TryWithManager<EnemyManager>(this, em => 
                     em.UnregisterEnemy(this)
                 );
                 break;
             case EntityType.Unit:
-                this.TryWithManager<UnitManager>(um => 
+                CoreExtensions.TryWithManager<UnitManager>(this, um => 
                     um.UnregisterUnit(this)
                 );
                 break;
@@ -161,13 +163,7 @@ public class EntityBehaviour : MonoBehaviour, IPointerClickHandler, IPointerEnte
     {
         if (amount > 0)
         {
-            // Use extension method for enhanced damage
-            var result = this.TryDamageWithEffects(amount, DamageType.Normal, true);
-            if (!result.Success)
-            {
-                // Fallback to simple damage
-                ModifyHealth(-amount);
-            }
+            ModifyHealth(-amount);
         }
     }
     
@@ -175,13 +171,7 @@ public class EntityBehaviour : MonoBehaviour, IPointerClickHandler, IPointerEnte
     {
         if (amount > 0)
         {
-            // Use extension method for enhanced healing
-            var result = this.TryHeal(amount, true);
-            if (!result.Success)
-            {
-                // Fallback to simple heal
-                ModifyHealth(amount);
-            }
+            ModifyHealth(amount);
         }
     }
     
@@ -192,17 +182,7 @@ public class EntityBehaviour : MonoBehaviour, IPointerClickHandler, IPointerEnte
     
     public void TakeDamage(int amount, DamageType damageType = DamageType.Normal)
     {
-        // Use extension method for damage calculation
-        var result = this.TryDamageWithEffects(amount, damageType, false);
-        if (result.Success)
-        {
-            SetHealth(result.FinalHealth);
-        }
-        else
-        {
-            // Fallback
-            Damage(amount);
-        }
+        Damage(amount);
     }
     
     // Targeting
@@ -224,18 +204,18 @@ public class EntityBehaviour : MonoBehaviour, IPointerClickHandler, IPointerEnte
     // UI Event handlers
     public void OnPointerClick(PointerEventData eventData)
     {
-        if (!this.IsValidTarget()) return;
+        if (!IsTargetable || !IsAlive) return;
         
-        // INTEGRATION: Use ManagerExtensions for safer handling
+        // INTEGRATION: Use CoreExtensions for safer handling
         switch (Type)
         {
             case EntityType.Enemy:
-                this.TryWithManager<EnemyManager>(em => 
+                CoreExtensions.TryWithManager<EnemyManager>(this, em => 
                     em.HandleEntityClicked(this)
                 );
                 break;
             case EntityType.Unit:
-                this.TryWithManager<UnitManager>(um => 
+                CoreExtensions.TryWithManager<UnitManager>(this, um => 
                     um.HandleEntityClicked(this)
                 );
                 break;
@@ -244,7 +224,7 @@ public class EntityBehaviour : MonoBehaviour, IPointerClickHandler, IPointerEnte
     
     public void OnPointerEnter(PointerEventData eventData)
     {
-        if (!this.IsValidTarget()) return;
+        if (!IsTargetable || !IsAlive) return;
         
         isHovered = true;
         if (hoverIndicator != null)
@@ -260,6 +240,37 @@ public class EntityBehaviour : MonoBehaviour, IPointerClickHandler, IPointerEnte
             hoverIndicator.SetActive(false);
         
         OnEntityUnhovered?.Invoke(this);
+    }
+    
+    // Extension method compatibility
+    public bool IsValidTarget()
+    {
+        return CoreExtensions.IsValidReference(this) && IsAlive && IsTargetable;
+    }
+    
+    public bool IsValidEntity()
+    {
+        return CoreExtensions.IsValidReference(this);
+    }
+    
+    public bool IsActiveEntity()
+    {
+        return IsValidEntity() && CoreExtensions.IsActiveAndValid(gameObject);
+    }
+    
+    public bool IsEnemy()
+    {
+        return IsValidEntity() && Type == EntityType.Enemy;
+    }
+    
+    public bool IsUnit()
+    {
+        return IsValidEntity() && Type == EntityType.Unit;
+    }
+    
+    public bool HasTag(string tag)
+    {
+        return !string.IsNullOrEmpty(tag) && entityAsset?.HasTag(tag) == true;
     }
     
     // PERFORMANCE FIX: Use PropertyBlock instead of creating material instances
@@ -285,15 +296,15 @@ public class EntityBehaviour : MonoBehaviour, IPointerClickHandler, IPointerEnte
             Gizmos.color = Color.yellow;
             Gizmos.DrawWireSphere(TargetPosition, 0.5f);
             
-            // Draw health status using extensions
-            var healthStatus = this.GetHealthStatus();
-            Gizmos.color = healthStatus switch
+            // Draw health status
+            float healthPercentage = HealthPercentage;
+            Gizmos.color = healthPercentage switch
             {
-                EntityHealthStatus.Full => Color.green,
-                EntityHealthStatus.High => Color.cyan,
-                EntityHealthStatus.Moderate => Color.yellow,
-                EntityHealthStatus.Low => new Color(1f, 0.5f, 0f),
-                EntityHealthStatus.Critical => Color.red,
+                >= 0.8f => Color.green,
+                >= 0.6f => Color.cyan,
+                >= 0.4f => Color.yellow,
+                >= 0.2f => new Color(1f, 0.5f, 0f),
+                > 0f => Color.red,
                 _ => Color.gray
             };
             Gizmos.DrawWireSphere(transform.position, 0.3f);

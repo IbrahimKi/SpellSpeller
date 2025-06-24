@@ -4,7 +4,7 @@ using UnityEngine.UI;
 using System.Collections.Generic;
 using System.Linq;
 using GameCore.Enums; // CRITICAL: SharedEnums import
-using GameCore.Extensions; // CRITICAL: CoreExtensions import
+using GameCore.Data; // CRITICAL: SharedData import
 
 public class DropAreaHandler : MonoBehaviour, IDropHandler, IPointerEnterHandler, IPointerExitHandler
 {
@@ -83,7 +83,7 @@ public class DropAreaHandler : MonoBehaviour, IDropHandler, IPointerEnterHandler
             // Additional check with CoreExtensions
             if (canAcceptDrop)
             {
-                canAcceptDrop = this.TryWithManager<CombatManager, bool>(cm => 
+                canAcceptDrop = CoreExtensions.TryWithManager<CombatManager, bool>(this, cm => 
                     cm.CanPerformPlayerAction(PlayerActionType.PlayCards)
                 );
             }
@@ -92,7 +92,7 @@ public class DropAreaHandler : MonoBehaviour, IDropHandler, IPointerEnterHandler
         {
             // INTEGRATION: For discard area - check resources using extensions
             canAcceptDrop = SpellcastManager.CheckCanDiscardCard(cardComponent) &&
-                          this.TryWithManager<CombatManager, bool>(cm => 
+                          CoreExtensions.TryWithManager<CombatManager, bool>(this, cm => 
                               cm.CanSpendResource(ResourceType.Creativity, 1)
                           );
         }
