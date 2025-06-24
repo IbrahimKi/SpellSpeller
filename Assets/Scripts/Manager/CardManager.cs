@@ -329,7 +329,7 @@ public class CardManager : SingletonBehaviour<CardManager>, IGameManager
         return allCardData?.Count(card => card != null) ?? 0;
     }
     
-    // Extension method integrations
+    // INTEGRATION: Extension method integrations
     public static string GetLetterSequenceFromCards(List<Card> cards)
         => cards.GetLetterSequence();
     
@@ -395,6 +395,16 @@ public class CardManager : SingletonBehaviour<CardManager>, IGameManager
             Debug.LogError($"[CardManager] Card selection failed: {ex.Message}");
             return false;
         }
+    }
+    
+    // FIX: Fehlende Methode für GameUIHandler Integration
+    public bool CanDrawCard()
+    {
+        if (!IsReady) return false;
+        
+        return !IsHandFull && 
+               ManagerExtensions.TryWithManager<DeckManager, bool>(dm => !dm.IsDeckEmpty) &&
+               ManagerExtensions.TryWithManager<CombatManager, bool>(cm => cm.IsPlayerTurn);
     }
 
 #if UNITY_EDITOR
