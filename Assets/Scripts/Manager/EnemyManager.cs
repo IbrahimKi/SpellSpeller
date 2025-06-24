@@ -2,6 +2,8 @@ using UnityEngine;
 using System.Collections.Generic;
 using System.Linq;
 using System.Collections;
+using GameCore.Enums;
+using GameCore.Data;
 
 public class EnemyManager : SingletonBehaviour<EnemyManager>, IGameManager
 {

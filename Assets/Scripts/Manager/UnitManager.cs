@@ -2,6 +2,8 @@ using UnityEngine;
 using System.Collections.Generic;
 using System.Linq;
 using System.Collections;
+using GameCore.Enums;
+using GameCore.Data;
 
 public class UnitManager : SingletonBehaviour<UnitManager>, IGameManager
 {
@@ -81,7 +83,7 @@ public class UnitManager : SingletonBehaviour<UnitManager>, IGameManager
     // Unit spawning
     public EntityBehaviour SpawnUnit(EntityAsset unitAsset, Vector3 position = default, Quaternion rotation = default)
     {
-        if (unitAsset == null || !unitAsset.IsUnit())
+        if (unitAsset == null || !IsUnitAsset(unitAsset))
         {
             Debug.LogError("[UnitManager] Invalid unit asset");
             return null;
@@ -122,6 +124,24 @@ public class UnitManager : SingletonBehaviour<UnitManager>, IGameManager
         return unit;
     }
     
+    /// <summary>
+    /// Helper method to check if asset is unit type
+    /// FALLBACK: Direct type check if EntityExtensions not available
+    /// </summary>
+    private bool IsUnitAsset(EntityAsset asset)
+    {
+        return asset != null && asset.Type == EntityType.Unit;
+    }
+    
+    /// <summary>
+    /// Helper method to check if entity is unit type
+    /// FALLBACK: Direct type check if EntityExtensions not available
+    /// </summary>
+    private bool IsUnitEntity(EntityBehaviour entity)
+    {
+        return entity != null && entity.Type == EntityType.Unit;
+    }
+    
     private IEnumerator SpawnAnimation(EntityBehaviour unit, float delay)
     {
         if (delay > 0)
@@ -146,7 +166,7 @@ public class UnitManager : SingletonBehaviour<UnitManager>, IGameManager
     // Registration (called by EntityBehaviour)
     public void RegisterUnit(EntityBehaviour unit)
     {
-        if (unit == null || !unit.IsUnit()) return;
+        if (unit == null || !IsUnitEntity(unit)) return;
         
         int id = _nextUnitId++;
         _units[id] = unit;
@@ -195,7 +215,7 @@ public class UnitManager : SingletonBehaviour<UnitManager>, IGameManager
     
     public void SelectUnit(EntityBehaviour unit)
     {
-        if (!unit.IsValidTarget() || !unit.IsUnit()) return;
+        if (!unit.IsValidTarget() || !IsUnitEntity(unit)) return;
         
         // Deselect current unit
         if (_selectedUnit != null)
@@ -370,7 +390,7 @@ public class UnitManager : SingletonBehaviour<UnitManager>, IGameManager
     // Event handlers
     private void HandleEntityHealthChanged(EntityBehaviour entity, int oldHealth, int newHealth)
     {
-        if (!entity.IsUnit()) return;
+        if (!IsUnitEntity(entity)) return;
         
         int damage = oldHealth - newHealth;
         if (damage > 0)
@@ -394,7 +414,7 @@ public class UnitManager : SingletonBehaviour<UnitManager>, IGameManager
     
     private void HandleEntityDestroyed(EntityBehaviour entity)
     {
-        if (!entity.IsUnit()) return;
+        if (!IsUnitEntity(entity)) return;
         UnregisterUnit(entity);
     }
     
@@ -533,14 +553,6 @@ public class UnitManager : SingletonBehaviour<UnitManager>, IGameManager
 #endif
 }
 
-public enum FormationType
-{
-    Line,
-    Circle,
-    Grid,
-    Custom
-}
-
 // INTEGRATION: Supporting class for unit status
 [System.Serializable]
 public class UnitStatusReport
@@ -552,13 +564,4 @@ public class UnitStatusReport
     public float LowestHealth;
     public float HighestHealth;
     public UnitGroupStatus OverallStatus;
-}
-
-public enum UnitGroupStatus
-{
-    None,
-    Healthy,
-    Moderate,
-    Damaged,
-    Critical
 }

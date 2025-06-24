@@ -32,6 +32,45 @@ public static class EntityExtensions
     public static bool IsActiveEntity(this EntityBehaviour entity)
         => entity.IsValidEntity() && entity.IsActiveAndValid();
 
+    // === TYPE CHECKING (Vereinfachte Type-Checks) ===
+    
+    /// <summary>
+    /// Entity ist Enemy
+    /// </summary>
+    public static bool IsEnemy(this EntityBehaviour entity)
+        => entity.IsValidEntity() && entity.Type == EntityType.Enemy;
+    
+    /// <summary>
+    /// Entity ist Unit (Spieler-kontrolliert)
+    /// FIXED: Direkte Implementierung statt Asset-Abhängigkeit
+    /// </summary>
+    public static bool IsUnit(this EntityBehaviour entity)
+        => entity.IsValidEntity() && entity.Type == EntityType.Unit;
+    
+    /// <summary>
+    /// Entity ist Neutral
+    /// </summary>
+    public static bool IsNeutral(this EntityBehaviour entity)
+        => entity.IsValidEntity() && entity.Type == EntityType.Neutral;
+    
+    /// <summary>
+    /// Entity ist Boss
+    /// </summary>
+    public static bool IsBoss(this EntityBehaviour entity)
+        => entity?.Asset?.Category == EntityCategory.Boss;
+    
+    /// <summary>
+    /// Entity ist Elite
+    /// </summary>
+    public static bool IsElite(this EntityBehaviour entity)
+        => entity?.Asset?.Category == EntityCategory.Elite;
+    
+    /// <summary>
+    /// Entity ist Minion
+    /// </summary>
+    public static bool IsMinion(this EntityBehaviour entity)
+        => entity?.Asset?.Category == EntityCategory.Minion;
+
     // === HEALTH STATUS ANALYSIS ===
     
     /// <summary>
@@ -364,42 +403,4 @@ public static class EntityExtensions
     /// </summary>
     public static bool HasAllTags(this EntityBehaviour entity, params string[] tags)
         => tags?.Length > 0 && entity?.Asset?.HasAllTags(tags) == true;
-
-    // === TYPE CHECKING (Vereinfachte Type-Checks) ===
-    
-    /// <summary>
-    /// Entity ist Enemy
-    /// </summary>
-    public static bool IsEnemy(this EntityBehaviour entity)
-        => entity.IsValidEntity() && entity.Type == EntityType.Enemy;
-    
-    /// <summary>
-    /// Entity ist Unit (Spieler-kontrolliert)
-    /// </summary>
-    public static bool IsUnit(this EntityBehaviour entity)
-        => entity.IsValidEntity() && entity.Type == EntityType.Unit;
-    
-    /// <summary>
-    /// Entity ist Neutral
-    /// </summary>
-    public static bool IsNeutral(this EntityBehaviour entity)
-        => entity.IsValidEntity() && entity.Type == EntityType.Neutral;
-    
-    /// <summary>
-    /// Entity ist Boss
-    /// </summary>
-    public static bool IsBoss(this EntityBehaviour entity)
-        => entity?.Asset?.Category == EntityCategory.Boss;
-    
-    /// <summary>
-    /// Entity ist Elite
-    /// </summary>
-    public static bool IsElite(this EntityBehaviour entity)
-        => entity?.Asset?.Category == EntityCategory.Elite;
-    
-    /// <summary>
-    /// Entity ist Minion
-    /// </summary>
-    public static bool IsMinion(this EntityBehaviour entity)
-        => entity?.Asset?.Category == EntityCategory.Minion;
 }
