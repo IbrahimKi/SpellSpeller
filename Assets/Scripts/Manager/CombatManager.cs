@@ -284,8 +284,35 @@ public class CombatManager : SingletonBehaviour<CombatManager>, IGameManager
                 AddTarget(smartTarget);
         });
     
+    // CRITICAL FIX: Enhanced DealDamageToTargets with proper tracking
     public void DealDamageToTargets(int damage, DamageType damageType = DamageType.Normal)
-        => CoreExtensions.TryWithManager<EnemyManager>(this, em => em.DamageTargetedEnemies(damage));
+    {
+        Debug.Log($"[CombatManager] Dealing {damage} {damageType} damage to {_currentTargets.Count} targets");
+        
+        if (_currentTargets.Count == 0)
+        {
+            Debug.LogWarning("[CombatManager] No targets selected for damage");
+            return;
+        }
+        
+        // INTEGRATION: Use EnemyManager for proper damage handling with events
+        CoreExtensions.TryWithManager<EnemyManager>(this, em => 
+        {
+            foreach (var target in _currentTargets.ToList())
+            {
+                if (target != null && target.IsValidTarget())
+                {
+                    int healthBefore = target.CurrentHealth;
+                    target.TakeDamage(damage, damageType);
+                    int actualDamage = healthBefore - target.CurrentHealth;
+                    
+                    Debug.Log($"[CombatManager] Target {target.EntityName}: {healthBefore} -> {target.CurrentHealth} (-{actualDamage})");
+                    
+                    // The EnemyManager will handle the OnEnemyDamaged event via HandleEntityHealthChanged
+                }
+            }
+        });
+    }
     
     public bool TrySmartHealing(int healAmount, HealingMode mode = HealingMode.Self)
         => this.TrySmartHeal(healAmount, mode);

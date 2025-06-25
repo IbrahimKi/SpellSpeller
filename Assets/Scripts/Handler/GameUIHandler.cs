@@ -67,8 +67,10 @@ public class GameUIHandler : MonoBehaviour
     private float _lastEnemyPanelUpdate = 0f;
     private bool _managersReady = false;
     
-    // Spell tracking - SIMPLIFIED
+    // Spell tracking
     private Coroutine _spellDisplayCoroutine;
+    private SpellAsset _currentSpell;
+    private bool _waitingForDamage = false;
     
     // Enemy tracking
     private EntityBehaviour _currentDisplayedEnemy;
@@ -201,7 +203,7 @@ public class GameUIHandler : MonoBehaviour
             CardManager.OnHandUpdated += OnHandUpdated;
         });
         
-        // Spell events - SIMPLIFIED
+        // Spell events - FIXED: Better event handling
         CoreExtensions.TryWithManager<SpellcastManager>(this, manager =>
         {
             SpellcastManager.OnComboStateChanged += UpdateComboDisplay;
@@ -209,7 +211,7 @@ public class GameUIHandler : MonoBehaviour
             SpellcastManager.OnSpellNotFound += OnSpellNotFound;
             SpellcastManager.OnComboCleared += OnComboCleared;
             SpellcastManager.OnSpellCast += OnSpellCast;
-            SpellcastManager.OnSpellDamageDealt += OnSpellDamageDealt; // NEW direct damage tracking
+            SpellcastManager.OnSpellDamageDealt += OnSpellDamageDealt; // Direct damage tracking
         });
         
         // Enemy events
@@ -223,7 +225,7 @@ public class GameUIHandler : MonoBehaviour
     
     private void OnDestroy()
     {
-        // Unsubscribe all events (simplified - same structure as setup)
+        // Unsubscribe all events
         CoreExtensions.TryWithManager<CombatManager>(this, manager =>
         {
             CombatManager.OnLifeChanged -= UpdateLifeDisplay;
@@ -432,10 +434,12 @@ public class GameUIHandler : MonoBehaviour
         {
             string letters = CardManager.GetLetterSequenceFromCards(selectedCards);
             statusText.text = $"Selected: {letters}";
+            statusText.color = Color.white; // Reset color after spell cast
         }
         else
         {
             statusText.text = "Select cards to play";
+            statusText.color = Color.white;
         }
     }
     
@@ -501,14 +505,16 @@ public class GameUIHandler : MonoBehaviour
         }
     }
     
-    // ===== SPELL EVENTS - SIMPLIFIED =====
+    // ===== SPELL EVENTS - FIXED: Better event handling =====
     private void OnSpellFound(SpellAsset spell, string usedLetters)
     {
         if (statusText != null)
         {
-            statusText.text = $"Cast: {spell.SpellName}!";
+            statusText.text = $"Casting: {spell.SpellName}...";
             statusText.color = Color.green;
         }
+        
+        Debug.Log($"[GameUIHandler] Spell found: {spell.SpellName}");
     }
     
     private void OnSpellNotFound(string attemptedLetters)
@@ -518,6 +524,9 @@ public class GameUIHandler : MonoBehaviour
             statusText.text = "No spell found";
             statusText.color = Color.red;
         }
+        
+        // Auto-clear after delay
+        StartCoroutine(ResetStatusTextDelayed(2f));
     }
     
     private void OnComboCleared()
@@ -531,18 +540,63 @@ public class GameUIHandler : MonoBehaviour
         UpdateCastComboButton(false);
     }
     
-    // ===== SPELL CAST DISPLAY - SIMPLIFIED =====
     private void OnSpellCast(SpellAsset spell, List<CardData> cards)
     {
+        Debug.Log($"[GameUIHandler] Spell cast: {spell.SpellName}");
+        
+        _currentSpell = spell;
+        _waitingForDamage = true;
+        
         ShowSpellCastDisplay(spell);
+        
+        // Set a timeout in case damage event doesn't fire
+        StartCoroutine(SpellDamageTimeout(1f));
     }
     
-    // NEW: Direct damage tracking from SpellcastManager
     private void OnSpellDamageDealt(SpellAsset spell, int totalDamage)
     {
+        Debug.Log($"[GameUIHandler] Spell damage received: {spell.SpellName} dealt {totalDamage} damage");
+        
+        _waitingForDamage = false;
         UpdateSpellDamageDisplay(spell, totalDamage);
+        
+        // Update status text
+        if (statusText != null)
+        {
+            statusText.text = $"{spell.SpellName}: {totalDamage} damage!";
+            statusText.color = Color.red;
+        }
+        
+        // Auto-clear status after delay
+        StartCoroutine(ResetStatusTextDelayed(3f));
     }
     
+    private IEnumerator SpellDamageTimeout(float timeout)
+    {
+        yield return new WaitForSeconds(timeout);
+        
+        if (_waitingForDamage && _currentSpell != null)
+        {
+            Debug.LogWarning($"[GameUIHandler] Timeout waiting for damage from {_currentSpell.SpellName}");
+            _waitingForDamage = false;
+            
+            // Show fallback damage display
+            UpdateSpellDamageDisplay(_currentSpell, 0);
+        }
+    }
+    
+    private IEnumerator ResetStatusTextDelayed(float delay)
+    {
+        yield return new WaitForSeconds(delay);
+        
+        if (statusText != null)
+        {
+            statusText.text = "Select cards to play";
+            statusText.color = Color.white;
+        }
+    }
+    
+    // ===== SPELL CAST DISPLAY =====
     private void ShowSpellCastDisplay(SpellAsset spell)
     {
         if (spellCastPanel == null || spell == null) return;
@@ -554,7 +608,10 @@ public class GameUIHandler : MonoBehaviour
             
         // Reset damage display
         if (spellDamageText != null)
+        {
             spellDamageText.text = "Casting...";
+            spellDamageText.color = Color.yellow;
+        }
         
         if (_spellDisplayCoroutine != null)
             StopCoroutine(_spellDisplayCoroutine);
@@ -572,7 +629,7 @@ public class GameUIHandler : MonoBehaviour
             {
                 case SpellEffectType.Damage:
                     spellDamageText.text = $"Damage: {totalDamage}";
-                    spellDamageText.color = Color.red;
+                    spellDamageText.color = totalDamage > 0 ? Color.red : Color.gray;
                     break;
                 case SpellEffectType.Heal:
                     spellDamageText.text = $"Heal: +{Mathf.RoundToInt(primaryEffect.value)}";
@@ -582,7 +639,16 @@ public class GameUIHandler : MonoBehaviour
                     spellDamageText.text = "Buff Applied";
                     spellDamageText.color = Color.blue;
                     break;
+                default:
+                    spellDamageText.text = "Effect Applied";
+                    spellDamageText.color = Color.cyan;
+                    break;
             }
+        }
+        else
+        {
+            spellDamageText.text = "Unknown Effect";
+            spellDamageText.color = Color.gray;
         }
     }
     

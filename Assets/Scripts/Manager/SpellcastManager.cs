@@ -26,8 +26,6 @@ public class SpellcastManager : SingletonBehaviour<SpellcastManager>, IGameManag
     private string _currentCombo = "";
     private Dictionary<string, SpellAsset> _spellCache = new Dictionary<string, SpellAsset>();
     private List<CardData> _comboCardData = new List<CardData>();
-    private DamageContext _currentDamageContext;
-    private SpellAsset _lastCastSpell;
     
     private bool _isReady = false;
     public bool IsReady => _isReady;
@@ -40,13 +38,12 @@ public class SpellcastManager : SingletonBehaviour<SpellcastManager>, IGameManag
     public static event Action OnComboCleared;
     public static event Action<SpellAsset, List<CardData>> OnSpellCast;
     public static event Action<SpellEffect> OnSpellEffectTriggered;
-    public static event Action<SpellAsset, int> OnSpellDamageDealt; // NEW: Direct spell damage tracking
+    public static event Action<SpellAsset, int> OnSpellDamageDealt; // Direct spell damage tracking
     
     // Properties
     public string CurrentCombo => _currentCombo;
     public ComboState CurrentComboState { get; private set; } = ComboState.Empty;
     public bool CanCastCombo => CurrentComboState == ComboState.Ready && _comboCardData.Count > 0;
-    public DamageContext CurrentDamageContext => _currentDamageContext; // NEW: Expose for damage tracking
     
     protected override void OnAwakeInitialize()
     {
@@ -143,32 +140,46 @@ public class SpellcastManager : SingletonBehaviour<SpellcastManager>, IGameManag
     {
         Debug.Log($"[SpellcastManager] Casting '{spell.SpellName}' with sequence: {usedLetters}");
         
-        _lastCastSpell = spell; // Track for damage context
-        
+        // Fire initial events
         OnSpellFound?.Invoke(spell, usedLetters);
         OnSpellCast?.Invoke(spell, sourceCardData);
         
-        // Process effects with damage tracking
-        int totalDamage = 0;
+        // Execute effects with direct damage tracking
+        int totalDamageDealt = 0;
+        
         foreach (var effect in spell.Effects)
         {
-            if (effect.effectType == SpellEffectType.Damage)
+            OnSpellEffectTriggered?.Invoke(effect);
+            
+            switch (effect.effectType)
             {
-                // Subscribe to damage events temporarily
-                var damageTracker = new DamageTracker(spell);
-                EnemyManager.OnEnemyDamaged += damageTracker.OnEnemyDamaged;
-                
-                TriggerSpellEffect(effect);
-                
-                // Wait a frame for damage to be applied
-                StartCoroutine(TrackDamageResult(spell, damageTracker, 0.1f));
-            }
-            else
-            {
-                TriggerSpellEffect(effect);
+                case SpellEffectType.Damage:
+                    int damageDealt = ApplyDamageEffect(effect);
+                    totalDamageDealt += damageDealt;
+                    break;
+                    
+                case SpellEffectType.Heal:
+                    ApplyHealEffect(effect);
+                    break;
+                    
+                case SpellEffectType.Buff:
+                    ApplyBuffEffect(effect);
+                    break;
+                    
+                default:
+                    Debug.Log($"[SpellcastManager] Unknown effect type: {effect.effectType}");
+                    break;
             }
         }
         
+        // Fire damage event immediately after all effects are processed
+        if (totalDamageDealt > 0)
+        {
+            OnSpellDamageDealt?.Invoke(spell, totalDamageDealt);
+            Debug.Log($"[SpellcastManager] Spell '{spell.SpellName}' dealt {totalDamageDealt} total damage");
+        }
+        
+        // Return cards to deck
         this.TryWithManager<DeckManager>(dm => 
         {
             foreach (var cardData in sourceCardData)
@@ -178,117 +189,96 @@ public class SpellcastManager : SingletonBehaviour<SpellcastManager>, IGameManag
         this.TryWithManager<CardManager>(cm => cm.ClearSelection());
     }
     
-    // Enhanced TriggerSpellEffect with proper event sequence
-    public void TriggerSpellEffect(SpellEffect effect)
+    private int ApplyDamageEffect(SpellEffect effect)
     {
-        Debug.Log($"[SpellcastManager] Triggering spell effect: {effect.effectName} ({effect.effectType}, value: {effect.value})");
-        
-        // Create damage tracking context before applying effect
-        if (effect.effectType == SpellEffectType.Damage)
-        {
-            _currentDamageContext = new DamageContext 
-            { 
-                SpellAsset = _lastCastSpell,
-                Effect = effect,
-                StartTime = Time.time
-            };
-        }
-        
-        // Fire event so UI can prepare
-        OnSpellEffectTriggered?.Invoke(effect);
+        int totalDamage = 0;
         
         this.TryWithManager<CombatManager>(cm => 
         {
-            switch (effect.effectType)
+            // Ensure we have targets
+            if (cm.CurrentTargets.Count == 0)
             {
-                case SpellEffectType.Damage:
-                    ApplyDamageEffect(effect, cm);
-                    break;
-                case SpellEffectType.Heal:
-                    ApplyHealEffect(effect, cm);
-                    break;
-                case SpellEffectType.Buff:
-                    ApplyBuffEffect(effect, cm);
-                    break;
-                default:
-                    Debug.Log($"[SpellcastManager] Unknown effect type: {effect.effectType}");
-                    break;
+                cm.AddSmartTarget(TargetingStrategy.Optimal);
+                Debug.Log("[SpellcastManager] No targets found, selected smart target");
+            }
+            
+            if (cm.CurrentTargets.Count > 0)
+            {
+                int damage = Mathf.RoundToInt(effect.value);
+                Debug.Log($"[SpellcastManager] Applying {damage} damage to {cm.CurrentTargets.Count} targets");
+                
+                // Apply damage directly and track results
+                this.TryWithManager<EnemyManager>(em => 
+                {
+                    foreach (var target in cm.CurrentTargets)
+                    {
+                        if (target != null && target.IsValidTarget())
+                        {
+                            int healthBefore = target.CurrentHealth;
+                            target.TakeDamage(damage, DamageType.Normal);
+                            int actualDamage = healthBefore - target.CurrentHealth;
+                            totalDamage += actualDamage;
+                            
+                            Debug.Log($"[SpellcastManager] Dealt {actualDamage} damage to {target.EntityName}");
+                        }
+                    }
+                });
+            }
+            else
+            {
+                Debug.LogWarning("[SpellcastManager] No valid targets for damage effect");
             }
         });
         
-        // Clear damage context after a delay
-        if (effect.effectType == SpellEffectType.Damage)
-        {
-            StartCoroutine(ClearDamageContextDelayed(0.5f));
-        }
+        return totalDamage;
     }
     
-    private IEnumerator ClearDamageContextDelayed(float delay)
+    private void ApplyHealEffect(SpellEffect effect)
     {
-        yield return new WaitForSeconds(delay);
-        _currentDamageContext = null;
-    }
-    
-    private void ApplyDamageEffect(SpellEffect effect, CombatManager combat)
-    {
-        if (combat.CurrentTargets.Count == 0)
+        this.TryWithManager<CombatManager>(cm => 
         {
-            combat.AddSmartTarget(TargetingStrategy.Optimal);
-            Debug.Log("[SpellcastManager] No targets found, selected smart target");
-        }
-        
-        if (combat.CurrentTargets.Count > 0)
-        {
-            int damage = Mathf.RoundToInt(effect.value);
-            Debug.Log($"[SpellcastManager] Applying {damage} damage to {combat.CurrentTargets.Count} targets");
-            combat.DealDamageToTargets(damage, DamageType.Normal);
-        }
-        else
-        {
-            Debug.LogWarning("[SpellcastManager] No valid targets for damage effect");
-        }
-    }
-    
-    private void ApplyHealEffect(SpellEffect effect, CombatManager combat)
-    {
-        int healAmount = Mathf.RoundToInt(effect.value);
-        
-        var lifeHealth = combat.Life.GetResourceHealth();
-        if (lifeHealth <= ResourceHealth.Critical)
-        {
-            combat.ModifyLife(healAmount);
-            Debug.Log($"[SpellcastManager] Emergency heal: +{healAmount} life");
-        }
-        else
-        {
-            int optimalHeal = combat.Life.GetOptimalRecovery(healAmount);
-            if (optimalHeal > 0)
+            int healAmount = Mathf.RoundToInt(effect.value);
+            
+            var lifeHealth = cm.Life.GetResourceHealth();
+            if (lifeHealth <= ResourceHealth.Critical)
             {
-                combat.ModifyLife(optimalHeal);
-                Debug.Log($"[SpellcastManager] Optimal heal: +{optimalHeal} life");
+                cm.ModifyLife(healAmount);
+                Debug.Log($"[SpellcastManager] Emergency heal: +{healAmount} life");
             }
-        }
+            else
+            {
+                int optimalHeal = cm.Life.GetOptimalRecovery(healAmount);
+                if (optimalHeal > 0)
+                {
+                    cm.ModifyLife(optimalHeal);
+                    Debug.Log($"[SpellcastManager] Optimal heal: +{optimalHeal} life");
+                }
+            }
+        });
     }
     
-    private void ApplyBuffEffect(SpellEffect effect, CombatManager combat)
+    private void ApplyBuffEffect(SpellEffect effect)
     {
         Debug.Log($"[SpellcastManager] Applying buff effect: {effect.effectName}");
         
-        if (effect.effectName.ToLower().Contains("creativity"))
+        this.TryWithManager<CombatManager>(cm => 
         {
-            int creativityGain = Mathf.RoundToInt(effect.value);
-            int optimalGain = combat.Creativity.GetOptimalRecovery(creativityGain);
-            
-            if (optimalGain > 0)
+            if (effect.effectName.ToLower().Contains("creativity"))
             {
-                combat.ModifyCreativity(optimalGain);
-                Debug.Log($"[SpellcastManager] Creativity gain: +{optimalGain}");
+                int creativityGain = Mathf.RoundToInt(effect.value);
+                int optimalGain = cm.Creativity.GetOptimalRecovery(creativityGain);
+                
+                if (optimalGain > 0)
+                {
+                    cm.ModifyCreativity(optimalGain);
+                    Debug.Log($"[SpellcastManager] Creativity gain: +{optimalGain}");
+                }
             }
-        }
-        else
-        {
-            Debug.Log($"[SpellcastManager] Generic buff applied: {effect.effectName} (value: {effect.value})");
-        }
+            else
+            {
+                Debug.Log($"[SpellcastManager] Generic buff applied: {effect.effectName} (value: {effect.value})");
+            }
+        });
     }
     
     public void ClearCombo()
@@ -326,40 +316,6 @@ public class SpellcastManager : SingletonBehaviour<SpellcastManager>, IGameManag
     {
         yield return new WaitForSeconds(delay);
         ClearCombo();
-    }
-    
-    private IEnumerator TrackDamageResult(SpellAsset spell, DamageTracker tracker, float delay)
-    {
-        yield return new WaitForSeconds(delay);
-        
-        // Unsubscribe
-        EnemyManager.OnEnemyDamaged -= tracker.OnEnemyDamaged;
-        
-        // Report total damage
-        if (tracker.TotalDamage > 0)
-        {
-            OnSpellDamageDealt?.Invoke(spell, tracker.TotalDamage);
-            Debug.Log($"[SpellcastManager] Spell '{spell.SpellName}' dealt {tracker.TotalDamage} total damage");
-        }
-    }
-    
-    // Inner class for damage tracking
-    private class DamageTracker
-    {
-        private SpellAsset _spell;
-        public int TotalDamage { get; private set; }
-        
-        public DamageTracker(SpellAsset spell)
-        {
-            _spell = spell;
-            TotalDamage = 0;
-        }
-        
-        public void OnEnemyDamaged(EntityBehaviour enemy, int damage)
-        {
-            TotalDamage += damage;
-            Debug.Log($"[DamageTracker] Tracked {damage} damage for spell '{_spell.SpellName}'");
-        }
     }
     
     // UI Support Methods
@@ -523,12 +479,4 @@ public class SpellRecommendation
     public bool CanCast;
     public List<Card> RequiredCards;
     public float Effectiveness;
-}
-
-[System.Serializable]
-public class DamageContext
-{
-    public SpellAsset SpellAsset;
-    public SpellEffect Effect;
-    public float StartTime;
 }
