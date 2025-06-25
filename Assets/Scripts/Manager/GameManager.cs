@@ -11,10 +11,11 @@ public class GameManager : SingletonBehaviour<GameManager>
         new ManagerInitConfig { managerType = ManagerType.Card, priority = 0 },
         new ManagerInitConfig { managerType = ManagerType.Deck, priority = 1 },
         new ManagerInitConfig { managerType = ManagerType.HandLayout, priority = 2 },
-        new ManagerInitConfig { managerType = ManagerType.Spellcast, priority = 3 },
-        new ManagerInitConfig { managerType = ManagerType.Combat, priority = 4 },
-        new ManagerInitConfig { managerType = ManagerType.Enemy, priority = 5 },
-        new ManagerInitConfig { managerType = ManagerType.Unit, priority = 6 }
+        new ManagerInitConfig { managerType = ManagerType.CardSlot, priority = 3 }, // NEW
+        new ManagerInitConfig { managerType = ManagerType.Spellcast, priority = 4 },
+        new ManagerInitConfig { managerType = ManagerType.Combat, priority = 5 },
+        new ManagerInitConfig { managerType = ManagerType.Enemy, priority = 6 },
+        new ManagerInitConfig { managerType = ManagerType.Unit, priority = 7 }
     };
     
     [Header("Settings")]
@@ -88,15 +89,15 @@ public class GameManager : SingletonBehaviour<GameManager>
     
     private void DiscoverManagers()
     {
-        // Use ManagerExtensions for safer discovery
         RegisterManagerSafely(ManagerType.Card, ManagerExtensions.TryGetManager<CardManager>());
         RegisterManagerSafely(ManagerType.Deck, ManagerExtensions.TryGetManager<DeckManager>());
         RegisterManagerSafely(ManagerType.HandLayout, ManagerExtensions.TryGetManager<HandLayoutManager>());
+        RegisterManagerSafely(ManagerType.CardSlot, ManagerExtensions.TryGetManager<CardSlotManager>()); // NEW
         RegisterManagerSafely(ManagerType.Spellcast, ManagerExtensions.TryGetManager<SpellcastManager>());
         RegisterManagerSafely(ManagerType.Combat, ManagerExtensions.TryGetManager<CombatManager>());
         RegisterManagerSafely(ManagerType.Enemy, ManagerExtensions.TryGetManager<EnemyManager>());
         RegisterManagerSafely(ManagerType.Unit, ManagerExtensions.TryGetManager<UnitManager>());
-            
+        
         Debug.Log($"[GameManager] Discovered {_managers.Count} managers");
     }
     
@@ -218,7 +219,8 @@ public enum ManagerType
     Spellcast,
     Combat,
     Enemy,
-    Unit
+    Unit,
+    CardSlot
 }
 
 // Interface für alle Manager

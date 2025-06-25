@@ -29,6 +29,14 @@ public class GameUIHandler : MonoBehaviour
     [SerializeField] private TextMeshProUGUI turnText;
     [SerializeField] private TextMeshProUGUI turnPhaseText;
     
+    [Header("Card Slot System UI")]
+    [SerializeField] private DropAreaHandler cardSlotDropArea;
+    [SerializeField] private Button playSlotSequenceButton;
+    [SerializeField] private Button clearSlotsButton;
+    [SerializeField] private TextMeshProUGUI slotStatusText;
+    [SerializeField] private TextMeshProUGUI slotSequenceText;
+    [SerializeField] private Toggle enableSlotsToggle;
+    
     [Header("Visual Settings")]
     [SerializeField] private Color healthLowColor = Color.red;
     [SerializeField] private Color healthNormalColor = Color.white;
@@ -77,6 +85,10 @@ public class GameUIHandler : MonoBehaviour
     private int _totalEnemyMaxHealth;
     private int _totalEnemyCurrentHealth;
     
+    // Card Slot System State
+    private bool _slotSystemEnabled = false;
+    private List<Card> _currentSlotSequence = new List<Card>();
+    
     private void Start()
     {
         StartCoroutine(WaitForManagersAndSetup());
@@ -119,19 +131,15 @@ public class GameUIHandler : MonoBehaviour
     {
         return CoreExtensions.TryWithManager<EnemyManager, EntityBehaviour>(this, em =>
         {
-            // Priority 1: Targeted
             var targetedEnemy = em.AllEnemies.FirstOrDefault(e => e != null && e.IsTargeted);
             if (targetedEnemy != null) return targetedEnemy;
             
-            // Priority 2: Boss
             var boss = em.AllEnemies.FirstOrDefault(e => e != null && e.IsBoss() && e.IsValidEntity());
             if (boss != null) return boss;
             
-            // Priority 3: Elite
             var elite = em.AllEnemies.FirstOrDefault(e => e != null && e.IsElite() && e.IsValidEntity());
             if (elite != null) return elite;
             
-            // Priority 4: First alive
             return em.AllEnemies.FirstOrDefault(e => e != null && e.IsValidEntity());
         });
     }
@@ -146,7 +154,151 @@ public class GameUIHandler : MonoBehaviour
         _managersReady = true;
         SetupEventListeners();
         SetupButtons();
+        SetupCardSlotSystem();
         RefreshAllDisplays();
+    }
+    
+    // === CARD SLOT SYSTEM SETUP ===
+    
+    private void SetupCardSlotSystem()
+    {
+        // Event Listeners für Card Slot System
+        if (cardSlotDropArea != null)
+        {
+            DropAreaHandler.OnCardSlotFilled += OnCardSlotFilled;
+            DropAreaHandler.OnCardSlotCleared += OnCardSlotCleared;
+            DropAreaHandler.OnSlotSequenceChanged += OnSlotSequenceChanged;
+        }
+        
+        // UI Toggle Setup
+        if (enableSlotsToggle != null)
+        {
+            enableSlotsToggle.isOn = _slotSystemEnabled;
+            enableSlotsToggle.onValueChanged.AddListener(OnSlotSystemToggle);
+        }
+        
+        // Initial Slot UI Update
+        UpdateSlotUI();
+    }
+    
+    private void OnCardSlotFilled(int slotIndex, Card card)
+    {
+        Debug.Log($"[GameUIHandler] Card slot {slotIndex + 1} filled with {card.GetCardName()}");
+        UpdateSlotUI();
+        UpdateButtonsThrottled();
+    }
+    
+    private void OnCardSlotCleared(int slotIndex, Card card)
+    {
+        Debug.Log($"[GameUIHandler] Card slot {slotIndex + 1} cleared");
+        UpdateSlotUI();
+        UpdateButtonsThrottled();
+    }
+    
+    private void OnSlotSequenceChanged(List<Card> slotSequence)
+    {
+        _currentSlotSequence = slotSequence ?? new List<Card>();
+        UpdateSlotSequenceDisplay();
+        UpdateSlotPlayButton();
+    }
+    
+    private void OnSlotSystemToggle(bool enabled)
+    {
+        _slotSystemEnabled = enabled;
+        
+        if (cardSlotDropArea != null)
+        {
+            cardSlotDropArea.EnableSlotSystem(enabled);
+        }
+        
+        UpdateSlotUI();
+        Debug.Log($"[GameUIHandler] Card slot system {(enabled ? "enabled" : "disabled")}");
+    }
+    
+    private void UpdateSlotUI()
+    {
+        bool hasSlotSystem = cardSlotDropArea != null && cardSlotDropArea.IsSlotSystemEnabled();
+        
+        // Slot UI Elemente visibility
+        if (playSlotSequenceButton != null)
+            playSlotSequenceButton.gameObject.SetActive(hasSlotSystem);
+            
+        if (clearSlotsButton != null)
+            clearSlotsButton.gameObject.SetActive(hasSlotSystem);
+            
+        if (slotStatusText != null)
+            slotStatusText.gameObject.SetActive(hasSlotSystem);
+            
+        if (slotSequenceText != null)
+            slotSequenceText.gameObject.SetActive(hasSlotSystem);
+        
+        if (hasSlotSystem)
+        {
+            UpdateSlotStatusDisplay();
+            UpdateSlotSequenceDisplay();
+        }
+    }
+    
+    private void UpdateSlotStatusDisplay()
+    {
+        if (slotStatusText == null || cardSlotDropArea == null) return;
+        
+        int filledSlots = cardSlotDropArea.GetFilledSlotCount();
+        int totalSlots = cardSlotDropArea.CardSlots?.Count ?? 0;
+        
+        slotStatusText.text = $"Slots: {filledSlots}/{totalSlots}";
+        
+        if (filledSlots == 0)
+        {
+            slotStatusText.color = Color.gray;
+        }
+        else if (cardSlotDropArea.AreAllSlotsFilled())
+        {
+            slotStatusText.color = Color.green;
+        }
+        else
+        {
+            slotStatusText.color = Color.white;
+        }
+    }
+    
+    private void UpdateSlotSequenceDisplay()
+    {
+        if (slotSequenceText == null) return;
+        
+        if (_currentSlotSequence.Count == 0)
+        {
+            slotSequenceText.text = "Slot Sequence: Empty";
+            slotSequenceText.color = Color.gray;
+        }
+        else
+        {
+            string letterSequence = _currentSlotSequence.GetLetterSequence();
+            slotSequenceText.text = $"Sequence: {letterSequence}";
+            
+            // Farbe basierend auf Spell-Potenzial
+            bool canCast = cardSlotDropArea?.CanPlaySlotSequence() ?? false;
+            slotSequenceText.color = canCast ? Color.green : Color.white;
+        }
+    }
+    
+    private void UpdateSlotPlayButton()
+    {
+        if (playSlotSequenceButton == null) return;
+        
+        bool canPlaySlots = _currentSlotSequence.Count > 0 && 
+                           (cardSlotDropArea?.CanPlaySlotSequence() ?? false) &&
+                           CoreExtensions.TryWithManager<CombatManager, bool>(this, cm => cm.IsPlayerTurn);
+        
+        playSlotSequenceButton.interactable = canPlaySlots;
+        
+        var buttonText = playSlotSequenceButton.GetComponentInChildren<TextMeshProUGUI>();
+        if (buttonText != null)
+        {
+            buttonText.text = _currentSlotSequence.Count > 0 ? 
+                             $"Play Slots ({_currentSlotSequence.Count})" : 
+                             "Play Slots";
+        }
     }
     
     private void SetupButtons()
@@ -181,6 +333,19 @@ public class GameUIHandler : MonoBehaviour
             castComboButton.onClick.AddListener(CastCombo);
         }
         
+        // Card Slot System Buttons
+        if (playSlotSequenceButton != null)
+        {
+            playSlotSequenceButton.onClick.RemoveAllListeners();
+            playSlotSequenceButton.onClick.AddListener(PlaySlotSequence);
+        }
+        
+        if (clearSlotsButton != null)
+        {
+            clearSlotsButton.onClick.RemoveAllListeners();
+            clearSlotsButton.onClick.AddListener(ClearAllSlots);
+        }
+        
         UpdateButtonsThrottled();
     }
     
@@ -203,7 +368,7 @@ public class GameUIHandler : MonoBehaviour
             CardManager.OnHandUpdated += OnHandUpdated;
         });
         
-        // Spell events - FIXED: Better event handling
+        // Spell events
         CoreExtensions.TryWithManager<SpellcastManager>(this, manager =>
         {
             SpellcastManager.OnComboStateChanged += UpdateComboDisplay;
@@ -211,7 +376,7 @@ public class GameUIHandler : MonoBehaviour
             SpellcastManager.OnSpellNotFound += OnSpellNotFound;
             SpellcastManager.OnComboCleared += OnComboCleared;
             SpellcastManager.OnSpellCast += OnSpellCast;
-            SpellcastManager.OnSpellDamageDealt += OnSpellDamageDealt; // Direct damage tracking
+            SpellcastManager.OnSpellDamageDealt += OnSpellDamageDealt;
         });
         
         // Enemy events
@@ -226,37 +391,33 @@ public class GameUIHandler : MonoBehaviour
     private void OnDestroy()
     {
         // Unsubscribe all events
-        CoreExtensions.TryWithManager<CombatManager>(this, manager =>
-        {
-            CombatManager.OnLifeChanged -= UpdateLifeDisplay;
-            CombatManager.OnCreativityChanged -= UpdateCreativityDisplay;
-            CombatManager.OnDeckSizeChanged -= UpdateDeckDisplay;
-            CombatManager.OnTurnChanged -= UpdateTurnDisplay;
-            CombatManager.OnTurnPhaseChanged -= UpdateTurnPhaseDisplay;
-        });
+        CombatManager.OnLifeChanged -= UpdateLifeDisplay;
+        CombatManager.OnCreativityChanged -= UpdateCreativityDisplay;
+        CombatManager.OnDeckSizeChanged -= UpdateDeckDisplay;
+        CombatManager.OnTurnChanged -= UpdateTurnDisplay;
+        CombatManager.OnTurnPhaseChanged -= UpdateTurnPhaseDisplay;
         
-        CoreExtensions.TryWithManager<CardManager>(this, manager =>
-        {
-            CardManager.OnSelectionChanged -= OnCardSelectionChanged;
-            CardManager.OnHandUpdated -= OnHandUpdated;
-        });
+        CardManager.OnSelectionChanged -= OnCardSelectionChanged;
+        CardManager.OnHandUpdated -= OnHandUpdated;
         
-        CoreExtensions.TryWithManager<SpellcastManager>(this, manager =>
-        {
-            SpellcastManager.OnComboStateChanged -= UpdateComboDisplay;
-            SpellcastManager.OnSpellFound -= OnSpellFound;
-            SpellcastManager.OnSpellNotFound -= OnSpellNotFound;
-            SpellcastManager.OnComboCleared -= OnComboCleared;
-            SpellcastManager.OnSpellCast -= OnSpellCast;
-            SpellcastManager.OnSpellDamageDealt -= OnSpellDamageDealt;
-        });
+        SpellcastManager.OnComboStateChanged -= UpdateComboDisplay;
+        SpellcastManager.OnSpellFound -= OnSpellFound;
+        SpellcastManager.OnSpellNotFound -= OnSpellNotFound;
+        SpellcastManager.OnComboCleared -= OnComboCleared;
+        SpellcastManager.OnSpellCast -= OnSpellCast;
+        SpellcastManager.OnSpellDamageDealt -= OnSpellDamageDealt;
         
-        CoreExtensions.TryWithManager<EnemyManager>(this, manager =>
+        EnemyManager.OnEnemySpawned -= OnEnemySpawned;
+        EnemyManager.OnEnemyDespawned -= OnEnemyDespawned;
+        EntityBehaviour.OnEntityHealthChanged -= OnEntityHealthChanged;
+        
+        // Card Slot System Events
+        if (cardSlotDropArea != null)
         {
-            EnemyManager.OnEnemySpawned -= OnEnemySpawned;
-            EnemyManager.OnEnemyDespawned -= OnEnemyDespawned;
-            EntityBehaviour.OnEntityHealthChanged -= OnEntityHealthChanged;
-        });
+            DropAreaHandler.OnCardSlotFilled -= OnCardSlotFilled;
+            DropAreaHandler.OnCardSlotCleared -= OnCardSlotCleared;
+            DropAreaHandler.OnSlotSequenceChanged -= OnSlotSequenceChanged;
+        }
     }
     
     // ===== BUTTON ACTIONS =====
@@ -299,6 +460,59 @@ public class GameUIHandler : MonoBehaviour
             if (cm.CanEndTurn)
                 cm.EndPlayerTurn();
         });
+    }
+    
+    // === CARD SLOT SYSTEM BUTTON ACTIONS ===
+    
+    private void PlaySlotSequence()
+    {
+        if (!_managersReady || cardSlotDropArea == null) return;
+        
+        var slotSequence = cardSlotDropArea.GetSlotSequence();
+        if (slotSequence.Count == 0)
+        {
+            Debug.LogWarning("[GameUIHandler] No cards in slot sequence to play");
+            return;
+        }
+        
+        if (!cardSlotDropArea.CanPlaySlotSequence())
+        {
+            Debug.LogWarning("[GameUIHandler] Cannot play slot sequence - conditions not met");
+            return;
+        }
+        
+        Debug.Log($"[GameUIHandler] Playing slot sequence with {slotSequence.Count} cards");
+        
+        // Spiele Cards der Reihe nach über SpellcastManager
+        CoreExtensions.TryWithManager<SpellcastManager>(this, sm => 
+        {
+            sm.ProcessCardPlay(slotSequence);
+        });
+        
+        // Slots nach dem Spielen leeren
+        cardSlotDropArea.ClearAllSlots();
+        
+        // Status Update
+        if (statusText != null)
+        {
+            string letterSequence = slotSequence.GetLetterSequence();
+            statusText.text = $"Played slot sequence: {letterSequence}";
+            statusText.color = Color.cyan;
+        }
+    }
+    
+    private void ClearAllSlots()
+    {
+        if (cardSlotDropArea == null) return;
+        
+        cardSlotDropArea.ClearAllSlots();
+        Debug.Log("[GameUIHandler] Cleared all card slots");
+        
+        if (statusText != null)
+        {
+            statusText.text = "Card slots cleared";
+            statusText.color = Color.yellow;
+        }
     }
     
     private bool CanDraw()
@@ -434,7 +648,7 @@ public class GameUIHandler : MonoBehaviour
         {
             string letters = CardManager.GetLetterSequenceFromCards(selectedCards);
             statusText.text = $"Selected: {letters}";
-            statusText.color = Color.white; // Reset color after spell cast
+            statusText.color = Color.white;
         }
         else
         {
@@ -465,6 +679,7 @@ public class GameUIHandler : MonoBehaviour
             
         UpdateDrawButton();
         UpdateEndTurnButton();
+        UpdateSlotPlayButton();
     }
     
     private void UpdateCastComboButton(bool canCast)
@@ -505,7 +720,7 @@ public class GameUIHandler : MonoBehaviour
         }
     }
     
-    // ===== SPELL EVENTS - FIXED: Better event handling =====
+    // ===== SPELL EVENTS =====
     private void OnSpellFound(SpellAsset spell, string usedLetters)
     {
         if (statusText != null)
@@ -525,7 +740,6 @@ public class GameUIHandler : MonoBehaviour
             statusText.color = Color.red;
         }
         
-        // Auto-clear after delay
         StartCoroutine(ResetStatusTextDelayed(2f));
     }
     
@@ -549,7 +763,6 @@ public class GameUIHandler : MonoBehaviour
         
         ShowSpellCastDisplay(spell);
         
-        // Set a timeout in case damage event doesn't fire
         StartCoroutine(SpellDamageTimeout(1f));
     }
     
@@ -560,14 +773,12 @@ public class GameUIHandler : MonoBehaviour
         _waitingForDamage = false;
         UpdateSpellDamageDisplay(spell, totalDamage);
         
-        // Update status text
         if (statusText != null)
         {
             statusText.text = $"{spell.SpellName}: {totalDamage} damage!";
             statusText.color = Color.red;
         }
         
-        // Auto-clear status after delay
         StartCoroutine(ResetStatusTextDelayed(3f));
     }
     
@@ -580,7 +791,6 @@ public class GameUIHandler : MonoBehaviour
             Debug.LogWarning($"[GameUIHandler] Timeout waiting for damage from {_currentSpell.SpellName}");
             _waitingForDamage = false;
             
-            // Show fallback damage display
             UpdateSpellDamageDisplay(_currentSpell, 0);
         }
     }
@@ -606,7 +816,6 @@ public class GameUIHandler : MonoBehaviour
         if (lastSpellText != null)
             lastSpellText.text = spell.SpellName;
             
-        // Reset damage display
         if (spellDamageText != null)
         {
             spellDamageText.text = "Casting...";
@@ -778,5 +987,55 @@ public class GameUIHandler : MonoBehaviour
         
         UpdateTotalEnemyHealth();
         UpdateAllButtons();
+        UpdateSlotUI();
     }
+    
+    // === CONVENIENCE METHODS FOR SLOT SYSTEM ===
+    
+    public bool IsSlotSystemActive()
+    {
+        return _slotSystemEnabled && cardSlotDropArea != null && cardSlotDropArea.IsSlotSystemEnabled();
+    }
+    
+    public int GetCurrentSlotCount()
+    {
+        return _currentSlotSequence?.Count ?? 0;
+    }
+    
+    public string GetCurrentSlotLetterSequence()
+    {
+        return cardSlotDropArea?.GetSlotLetterSequence() ?? "";
+    }
+    
+    public bool CanPlayCurrentSlots()
+    {
+        return IsSlotSystemActive() && 
+               _currentSlotSequence.Count > 0 && 
+               (cardSlotDropArea?.CanPlaySlotSequence() ?? false);
+    }
+
+#if UNITY_EDITOR
+    [ContextMenu("Test Slot System")]
+    private void TestSlotSystem()
+    {
+        Debug.Log("[GameUIHandler] Testing slot system...");
+        Debug.Log($"Slot system enabled: {_slotSystemEnabled}");
+        Debug.Log($"Slot system active: {IsSlotSystemActive()}");
+        Debug.Log($"Current slot count: {GetCurrentSlotCount()}");
+        Debug.Log($"Current sequence: '{GetCurrentSlotLetterSequence()}'");
+        Debug.Log($"Can play slots: {CanPlayCurrentSlots()}");
+    }
+    
+    [ContextMenu("Toggle Slot System")]
+    private void DebugToggleSlotSystem()
+    {
+        OnSlotSystemToggle(!_slotSystemEnabled);
+    }
+    
+    [ContextMenu("Clear Test Slots")]
+    private void DebugClearSlots()
+    {
+        ClearAllSlots();
+    }
+#endif
 }
