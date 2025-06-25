@@ -40,9 +40,38 @@ public class GameUIHandler : MonoBehaviour
     [SerializeField] private Color comboReadyColor = Color.green;
     [SerializeField] private Color comboInvalidColor = Color.red;
     
+    [Header("Spell Cast Display")]
+    [SerializeField] private GameObject spellCastPanel;
+    [SerializeField] private TextMeshProUGUI lastSpellText;
+    [SerializeField] private TextMeshProUGUI spellDamageText;
+    [SerializeField] private float spellDisplayDuration = 3f;
+    
+    [Header("Enemy Info Display")]
+    [SerializeField] private GameObject enemyInfoPanel;
+    [SerializeField] private TextMeshProUGUI enemyNameText;
+    [SerializeField] private TextMeshProUGUI enemyTypeText;
+    [SerializeField] private TextMeshProUGUI enemyHealthText;
+    [SerializeField] private Slider enemyHealthBar;
+    
+    [Header("Total Enemy Health")]
+    [SerializeField] private GameObject totalEnemyHealthPanel;
+    [SerializeField] private Slider totalEnemyHealthBar;
+    [SerializeField] private TextMeshProUGUI totalEnemyHealthText;
+    [SerializeField] private TextMeshProUGUI enemyCountText;
+    
     // PERFORMANCE FIX: Button Update Throttling
     private float _lastButtonUpdate = 0f;
     private bool _managersReady = false;
+    
+    // Spell tracking
+    private SpellAsset _lastCastSpell;
+    private int _lastSpellDamage;
+    private Coroutine _spellDisplayCoroutine;
+    
+    // Enemy tracking
+    private EntityBehaviour _currentHoveredEnemy;
+    private int _totalEnemyMaxHealth;
+    private int _totalEnemyCurrentHealth;
     
     private void Start()
     {
@@ -121,6 +150,18 @@ public class GameUIHandler : MonoBehaviour
             SpellcastManager.OnSpellFound += OnSpellFound;
             SpellcastManager.OnSpellNotFound += OnSpellNotFound;
             SpellcastManager.OnComboCleared += OnComboCleared;
+            SpellcastManager.OnSpellCast += OnSpellCast;
+        });
+        
+        CoreExtensions.TryWithManager<EnemyManager>(this, manager =>
+        {
+            EnemyManager.OnEnemySpawned += OnEnemySpawned;
+            EnemyManager.OnEnemyDespawned += OnEnemyDespawned;
+            EnemyManager.OnEnemyTargeted += OnEnemyTargeted;
+            EnemyManager.OnEnemyDamaged += OnEnemyDamaged;
+            EntityBehaviour.OnEntityHealthChanged += OnEntityHealthChanged;
+            EntityBehaviour.OnEntityHovered += OnEntityHovered;
+            EntityBehaviour.OnEntityUnhovered += OnEntityUnhovered;
         });
     }
     
@@ -148,6 +189,18 @@ public class GameUIHandler : MonoBehaviour
             SpellcastManager.OnSpellFound -= OnSpellFound;
             SpellcastManager.OnSpellNotFound -= OnSpellNotFound;
             SpellcastManager.OnComboCleared -= OnComboCleared;
+            SpellcastManager.OnSpellCast -= OnSpellCast;
+        });
+        
+        CoreExtensions.TryWithManager<EnemyManager>(this, manager =>
+        {
+            EnemyManager.OnEnemySpawned -= OnEnemySpawned;
+            EnemyManager.OnEnemyDespawned -= OnEnemyDespawned;
+            EnemyManager.OnEnemyTargeted -= OnEnemyTargeted;
+            EnemyManager.OnEnemyDamaged -= OnEnemyDamaged;
+            EntityBehaviour.OnEntityHealthChanged -= OnEntityHealthChanged;
+            EntityBehaviour.OnEntityHovered -= OnEntityHovered;
+            EntityBehaviour.OnEntityUnhovered -= OnEntityUnhovered;
         });
     }
     
@@ -443,6 +496,204 @@ public class GameUIHandler : MonoBehaviour
         UpdateCastComboButton(false);
     }
     
+    // ===== SPELL CAST DISPLAY =====
+    private void OnSpellCast(SpellAsset spell, List<CardData> cards)
+    {
+        _lastCastSpell = spell;
+        _lastSpellDamage = 0;
+        ShowSpellCastDisplay();
+    }
+    
+    private void OnEnemyDamaged(EntityBehaviour enemy, int damage)
+    {
+        // Track damage if spell was recently cast
+        if (_lastCastSpell != null && Time.time - _lastSpellCastTime < 1f)
+        {
+            _lastSpellDamage += damage;
+            UpdateSpellDamageDisplay();
+        }
+    }
+    
+    private float _lastSpellCastTime;
+    
+    private void ShowSpellCastDisplay()
+    {
+        if (spellCastPanel == null || _lastCastSpell == null) return;
+        
+        _lastSpellCastTime = Time.time;
+        spellCastPanel.SetActive(true);
+        
+        if (lastSpellText != null)
+            lastSpellText.text = _lastCastSpell.SpellName;
+            
+        UpdateSpellDamageDisplay();
+        
+        if (_spellDisplayCoroutine != null)
+            StopCoroutine(_spellDisplayCoroutine);
+        _spellDisplayCoroutine = StartCoroutine(HideSpellDisplayAfterDelay());
+    }
+    
+    private void UpdateSpellDamageDisplay()
+    {
+        if (spellDamageText == null || _lastCastSpell == null) return;
+        
+        var primaryEffect = _lastCastSpell.Effects?.FirstOrDefault();
+        if (primaryEffect != null)
+        {
+            switch (primaryEffect.effectType)
+            {
+                case SpellEffectType.Damage:
+                    spellDamageText.text = $"Damage: {_lastSpellDamage}";
+                    spellDamageText.color = Color.red;
+                    break;
+                case SpellEffectType.Heal:
+                    spellDamageText.text = $"Heal: +{Mathf.RoundToInt(primaryEffect.value)}";
+                    spellDamageText.color = Color.green;
+                    break;
+                case SpellEffectType.Buff:
+                    spellDamageText.text = "Buff Applied";
+                    spellDamageText.color = Color.blue;
+                    break;
+            }
+        }
+    }
+    
+    private IEnumerator HideSpellDisplayAfterDelay()
+    {
+        yield return new WaitForSeconds(spellDisplayDuration);
+        
+        if (spellCastPanel != null)
+            spellCastPanel.SetActive(false);
+            
+        _lastCastSpell = null;
+        _lastSpellDamage = 0;
+    }
+    
+    // ===== ENEMY INFO DISPLAY =====
+    private void OnEntityHovered(EntityBehaviour entity)
+    {
+        if (entity.IsEnemy())
+        {
+            _currentHoveredEnemy = entity;
+            ShowEnemyInfo(entity);
+        }
+    }
+    
+    private void OnEntityUnhovered(EntityBehaviour entity)
+    {
+        if (entity == _currentHoveredEnemy)
+        {
+            _currentHoveredEnemy = null;
+            HideEnemyInfo();
+        }
+    }
+    
+    private void OnEnemyTargeted(EntityBehaviour enemy)
+    {
+        ShowEnemyInfo(enemy);
+    }
+    
+    private void ShowEnemyInfo(EntityBehaviour enemy)
+    {
+        if (enemyInfoPanel == null || enemy == null) return;
+        
+        enemyInfoPanel.SetActive(true);
+        
+        if (enemyNameText != null)
+            enemyNameText.text = enemy.EntityName;
+            
+        if (enemyTypeText != null)
+        {
+            string type = enemy.IsBoss() ? "BOSS" : enemy.IsElite() ? "Elite" : "Enemy";
+            enemyTypeText.text = type;
+            enemyTypeText.color = enemy.IsBoss() ? Color.red : enemy.IsElite() ? Color.yellow : Color.white;
+        }
+        
+        UpdateEnemyHealthDisplay(enemy);
+    }
+    
+    private void HideEnemyInfo()
+    {
+        if (enemyInfoPanel != null)
+            enemyInfoPanel.SetActive(false);
+    }
+    
+    private void UpdateEnemyHealthDisplay(EntityBehaviour enemy)
+    {
+        if (enemy == null) return;
+        
+        if (enemyHealthText != null)
+            enemyHealthText.text = $"{enemy.CurrentHealth}/{enemy.MaxHealth} HP";
+            
+        if (enemyHealthBar != null)
+            enemyHealthBar.value = enemy.HealthPercentage;
+    }
+    
+    // ===== TOTAL ENEMY HEALTH =====
+    private void OnEnemySpawned(EntityBehaviour enemy)
+    {
+        UpdateTotalEnemyHealth();
+    }
+    
+    private void OnEnemyDespawned(EntityBehaviour enemy)
+    {
+        UpdateTotalEnemyHealth();
+    }
+    
+    private void OnEntityHealthChanged(EntityBehaviour entity, int oldHealth, int newHealth)
+    {
+        if (entity.IsEnemy())
+        {
+            UpdateTotalEnemyHealth();
+            
+            if (entity == _currentHoveredEnemy || entity.IsTargeted)
+                UpdateEnemyHealthDisplay(entity);
+        }
+    }
+    
+    private void UpdateTotalEnemyHealth()
+    {
+        _totalEnemyMaxHealth = 0;
+        _totalEnemyCurrentHealth = 0;
+        
+        CoreExtensions.TryWithManager<EnemyManager>(this, em =>
+        {
+            foreach (var enemy in em.AllEnemies)
+            {
+                if (enemy != null && enemy.IsValidEntity())
+                {
+                    _totalEnemyMaxHealth += enemy.MaxHealth;
+                    _totalEnemyCurrentHealth += Mathf.Max(0, enemy.CurrentHealth);
+                }
+            }
+            
+            UpdateTotalEnemyHealthDisplay(em.AliveEnemyCount);
+        });
+    }
+    
+    private void UpdateTotalEnemyHealthDisplay(int enemyCount)
+    {
+        if (totalEnemyHealthPanel != null)
+        {
+            totalEnemyHealthPanel.SetActive(_totalEnemyMaxHealth > 0);
+        }
+        
+        if (totalEnemyHealthBar != null && _totalEnemyMaxHealth > 0)
+        {
+            totalEnemyHealthBar.value = (float)_totalEnemyCurrentHealth / _totalEnemyMaxHealth;
+        }
+        
+        if (totalEnemyHealthText != null)
+        {
+            totalEnemyHealthText.text = $"{_totalEnemyCurrentHealth} / {_totalEnemyMaxHealth}";
+        }
+        
+        if (enemyCountText != null)
+        {
+            enemyCountText.text = $"Enemies: {enemyCount}";
+        }
+    }
+    
     private void RefreshAllDisplays()
     {
         if (!_managersReady) return;
@@ -459,7 +710,8 @@ public class GameUIHandler : MonoBehaviour
         CoreExtensions.TryWithManager<CardManager>(this, cm =>
             UpdateCardPlayUI(cm.SelectedCards)
         );
-            
+        
+        UpdateTotalEnemyHealth();
         UpdateAllButtons();
     }
 }
