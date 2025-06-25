@@ -4,8 +4,8 @@ using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 using System.Collections;
-using GameCore.Enums; // CRITICAL: SharedEnums import
-using GameCore.Data; // CRITICAL: SharedData import
+using GameCore.Enums;
+using GameCore.Data;
 
 public class GameUIHandler : MonoBehaviour
 {
@@ -59,23 +59,85 @@ public class GameUIHandler : MonoBehaviour
     [SerializeField] private TextMeshProUGUI totalEnemyHealthText;
     [SerializeField] private TextMeshProUGUI enemyCountText;
     
-    // PERFORMANCE FIX: Button Update Throttling
+    [Header("Update Settings")]
+    [SerializeField] private float enemyPanelUpdateInterval = 0.1f;
+    
+    // Performance optimization
     private float _lastButtonUpdate = 0f;
+    private float _lastEnemyPanelUpdate = 0f;
     private bool _managersReady = false;
     
     // Spell tracking
     private SpellAsset _lastCastSpell;
     private int _lastSpellDamage;
     private Coroutine _spellDisplayCoroutine;
+    private float _lastSpellCastTime;
     
     // Enemy tracking
-    private EntityBehaviour _currentHoveredEnemy;
+    private EntityBehaviour _currentDisplayedEnemy;
+    private bool _shouldShowEnemyPanel = false;
     private int _totalEnemyMaxHealth;
     private int _totalEnemyCurrentHealth;
     
     private void Start()
     {
         StartCoroutine(WaitForManagersAndSetup());
+    }
+    
+    private void Update()
+    {
+        if (!_managersReady) return;
+        
+        UpdateEnemyPanelLogic();
+    }
+    
+    private void UpdateEnemyPanelLogic()
+    {
+        if (Time.time - _lastEnemyPanelUpdate < enemyPanelUpdateInterval) return;
+        _lastEnemyPanelUpdate = Time.time;
+        
+        // Bestimme welcher Enemy angezeigt werden soll
+        EntityBehaviour enemyToShow = GetEnemyToDisplay();
+        
+        if (enemyToShow != null)
+        {
+            if (_currentDisplayedEnemy != enemyToShow)
+            {
+                _currentDisplayedEnemy = enemyToShow;
+                ShowEnemyInfo(enemyToShow);
+            }
+            else
+            {
+                // Update nur die Health-Werte falls sich was geändert hat
+                UpdateEnemyHealthDisplay(enemyToShow);
+            }
+        }
+        else if (_currentDisplayedEnemy != null)
+        {
+            _currentDisplayedEnemy = null;
+            HideEnemyInfo();
+        }
+    }
+    
+    private EntityBehaviour GetEnemyToDisplay()
+    {
+        return CoreExtensions.TryWithManager<EnemyManager, EntityBehaviour>(this, em =>
+        {
+            // Priorität 1: Gezielter Enemy
+            var targetedEnemy = em.AllEnemies.FirstOrDefault(e => e != null && e.IsTargeted);
+            if (targetedEnemy != null) return targetedEnemy;
+            
+            // Priorität 2: Boss
+            var boss = em.AllEnemies.FirstOrDefault(e => e != null && e.IsBoss() && e.IsValidEntity());
+            if (boss != null) return boss;
+            
+            // Priorität 3: Elite
+            var elite = em.AllEnemies.FirstOrDefault(e => e != null && e.IsElite() && e.IsValidEntity());
+            if (elite != null) return elite;
+            
+            // Priorität 4: Erster lebender Enemy
+            return em.AllEnemies.FirstOrDefault(e => e != null && e.IsValidEntity());
+        });
     }
     
     private IEnumerator WaitForManagersAndSetup()
@@ -126,7 +188,6 @@ public class GameUIHandler : MonoBehaviour
         UpdateButtonsThrottled();
     }
     
-    // INTEGRATION: Standardized Event Setup using CoreExtensions
     private void SetupEventListeners()
     {
         CoreExtensions.TryWithManager<CombatManager>(this, manager =>
@@ -157,17 +218,13 @@ public class GameUIHandler : MonoBehaviour
         {
             EnemyManager.OnEnemySpawned += OnEnemySpawned;
             EnemyManager.OnEnemyDespawned += OnEnemyDespawned;
-            EnemyManager.OnEnemyTargeted += OnEnemyTargeted;
             EnemyManager.OnEnemyDamaged += OnEnemyDamaged;
             EntityBehaviour.OnEntityHealthChanged += OnEntityHealthChanged;
-            EntityBehaviour.OnEntityHovered += OnEntityHovered;
-            EntityBehaviour.OnEntityUnhovered += OnEntityUnhovered;
         });
     }
     
     private void OnDestroy()
     {
-        // INTEGRATION: Standardized Event Cleanup using CoreExtensions
         CoreExtensions.TryWithManager<CombatManager>(this, manager =>
         {
             CombatManager.OnLifeChanged -= UpdateLifeDisplay;
@@ -196,11 +253,8 @@ public class GameUIHandler : MonoBehaviour
         {
             EnemyManager.OnEnemySpawned -= OnEnemySpawned;
             EnemyManager.OnEnemyDespawned -= OnEnemyDespawned;
-            EnemyManager.OnEnemyTargeted -= OnEnemyTargeted;
             EnemyManager.OnEnemyDamaged -= OnEnemyDamaged;
             EntityBehaviour.OnEntityHealthChanged -= OnEntityHealthChanged;
-            EntityBehaviour.OnEntityHovered -= OnEntityHovered;
-            EntityBehaviour.OnEntityUnhovered -= OnEntityUnhovered;
         });
     }
     
@@ -387,7 +441,6 @@ public class GameUIHandler : MonoBehaviour
         }
     }
     
-    // PERFORMANCE FIX: Throttle Button Updates
     private void UpdateButtonsThrottled()
     {
         if (Time.unscaledTime - _lastButtonUpdate < 0.1f) return;
@@ -506,15 +559,12 @@ public class GameUIHandler : MonoBehaviour
     
     private void OnEnemyDamaged(EntityBehaviour enemy, int damage)
     {
-        // Track damage if spell was recently cast
         if (_lastCastSpell != null && Time.time - _lastSpellCastTime < 1f)
         {
             _lastSpellDamage += damage;
             UpdateSpellDamageDisplay();
         }
     }
-    
-    private float _lastSpellCastTime;
     
     private void ShowSpellCastDisplay()
     {
@@ -570,29 +620,6 @@ public class GameUIHandler : MonoBehaviour
     }
     
     // ===== ENEMY INFO DISPLAY =====
-    private void OnEntityHovered(EntityBehaviour entity)
-    {
-        if (entity.IsEnemy())
-        {
-            _currentHoveredEnemy = entity;
-            ShowEnemyInfo(entity);
-        }
-    }
-    
-    private void OnEntityUnhovered(EntityBehaviour entity)
-    {
-        if (entity == _currentHoveredEnemy)
-        {
-            _currentHoveredEnemy = null;
-            HideEnemyInfo();
-        }
-    }
-    
-    private void OnEnemyTargeted(EntityBehaviour enemy)
-    {
-        ShowEnemyInfo(enemy);
-    }
-    
     private void ShowEnemyInfo(EntityBehaviour enemy)
     {
         if (enemyInfoPanel == null || enemy == null) return;
@@ -645,9 +672,6 @@ public class GameUIHandler : MonoBehaviour
         if (entity.IsEnemy())
         {
             UpdateTotalEnemyHealth();
-            
-            if (entity == _currentHoveredEnemy || entity.IsTargeted)
-                UpdateEnemyHealthDisplay(entity);
         }
     }
     

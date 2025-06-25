@@ -4,7 +4,7 @@ using System.Linq;
 using System;
 using System.Collections;
 using GameCore.Enums; // CRITICAL: SharedEnums import
- // CRITICAL: SharedData import
+using GameCore.Data; // CRITICAL: SharedData import
 
 public enum ComboState
 {
@@ -37,7 +37,7 @@ public class SpellcastManager : SingletonBehaviour<SpellcastManager>, IGameManag
     public static event Action<string> OnSpellNotFound;
     public static event Action OnComboCleared;
     public static event Action<SpellAsset, List<CardData>> OnSpellCast;
-    public static event Action<SpellEffect> OnSpellEffectTriggered;
+    public static event Action<SpellEffect> OnSpellEffectTriggered; // FIX: Added missing event
     
     // Properties
     public string CurrentCombo => _currentCombo;
@@ -142,8 +142,11 @@ public class SpellcastManager : SingletonBehaviour<SpellcastManager>, IGameManag
         OnSpellFound?.Invoke(spell, usedLetters);
         OnSpellCast?.Invoke(spell, sourceCardData);
         
+        // FIX: Trigger effects one by one for proper UI tracking
         foreach (var effect in spell.Effects)
+        {
             TriggerSpellEffect(effect);
+        }
         
         this.TryWithManager<DeckManager>(dm => 
         {
@@ -154,9 +157,13 @@ public class SpellcastManager : SingletonBehaviour<SpellcastManager>, IGameManag
         this.TryWithManager<CardManager>(cm => cm.ClearSelection());
     }
     
+    // FIX: Enhanced TriggerSpellEffect with event firing
     public void TriggerSpellEffect(SpellEffect effect)
     {
+        // FIX: Fire the event FIRST so UI can prepare for tracking damage
         OnSpellEffectTriggered?.Invoke(effect);
+        
+        Debug.Log($"[SpellcastManager] Triggering spell effect: {effect.effectName} ({effect.effectType}, value: {effect.value})");
         
         this.TryWithManager<CombatManager>(cm => 
         {
@@ -171,6 +178,9 @@ public class SpellcastManager : SingletonBehaviour<SpellcastManager>, IGameManag
                 case SpellEffectType.Buff:
                     ApplyBuffEffect(effect, cm);
                     break;
+                default:
+                    Debug.Log($"[SpellcastManager] Unknown effect type: {effect.effectType}");
+                    break;
             }
         });
     }
@@ -178,12 +188,20 @@ public class SpellcastManager : SingletonBehaviour<SpellcastManager>, IGameManag
     private void ApplyDamageEffect(SpellEffect effect, CombatManager combat)
     {
         if (combat.CurrentTargets.Count == 0)
+        {
             combat.AddSmartTarget(TargetingStrategy.Optimal);
+            Debug.Log("[SpellcastManager] No targets found, selected smart target");
+        }
         
         if (combat.CurrentTargets.Count > 0)
         {
             int damage = Mathf.RoundToInt(effect.value);
+            Debug.Log($"[SpellcastManager] Applying {damage} damage to {combat.CurrentTargets.Count} targets");
             combat.DealDamageToTargets(damage, DamageType.Normal);
+        }
+        else
+        {
+            Debug.LogWarning("[SpellcastManager] No valid targets for damage effect");
         }
     }
     
@@ -210,6 +228,8 @@ public class SpellcastManager : SingletonBehaviour<SpellcastManager>, IGameManag
     
     private void ApplyBuffEffect(SpellEffect effect, CombatManager combat)
     {
+        Debug.Log($"[SpellcastManager] Applying buff effect: {effect.effectName}");
+        
         if (effect.effectName.ToLower().Contains("creativity"))
         {
             int creativityGain = Mathf.RoundToInt(effect.value);
@@ -220,6 +240,10 @@ public class SpellcastManager : SingletonBehaviour<SpellcastManager>, IGameManag
                 combat.ModifyCreativity(optimalGain);
                 Debug.Log($"[SpellcastManager] Creativity gain: +{optimalGain}");
             }
+        }
+        else
+        {
+            Debug.Log($"[SpellcastManager] Generic buff applied: {effect.effectName} (value: {effect.value})");
         }
     }
     
@@ -267,7 +291,10 @@ public class SpellcastManager : SingletonBehaviour<SpellcastManager>, IGameManag
         {
             var selectedCards = cm.SelectedCards;
             if (selectedCards?.Count > 0)
+            {
+                Debug.Log($"[SpellcastManager] Playing {selectedCards.Count} selected cards");
                 ProcessCardPlay(selectedCards);
+            }
         });
     }
     
