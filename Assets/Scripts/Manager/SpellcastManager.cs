@@ -26,6 +26,8 @@ public class SpellcastManager : SingletonBehaviour<SpellcastManager>, IGameManag
     private string _currentCombo = "";
     private Dictionary<string, SpellAsset> _spellCache = new Dictionary<string, SpellAsset>();
     private List<CardData> _comboCardData = new List<CardData>();
+    private DamageContext _currentDamageContext;
+    private SpellAsset _lastCastSpell;
     
     private bool _isReady = false;
     public bool IsReady => _isReady;
@@ -37,12 +39,14 @@ public class SpellcastManager : SingletonBehaviour<SpellcastManager>, IGameManag
     public static event Action<string> OnSpellNotFound;
     public static event Action OnComboCleared;
     public static event Action<SpellAsset, List<CardData>> OnSpellCast;
-    public static event Action<SpellEffect> OnSpellEffectTriggered; // FIX: Added missing event
+    public static event Action<SpellEffect> OnSpellEffectTriggered;
+    public static event Action<SpellAsset, int> OnSpellDamageDealt; // NEW: Direct spell damage tracking
     
     // Properties
     public string CurrentCombo => _currentCombo;
     public ComboState CurrentComboState { get; private set; } = ComboState.Empty;
     public bool CanCastCombo => CurrentComboState == ComboState.Ready && _comboCardData.Count > 0;
+    public DamageContext CurrentDamageContext => _currentDamageContext; // NEW: Expose for damage tracking
     
     protected override void OnAwakeInitialize()
     {
@@ -139,13 +143,30 @@ public class SpellcastManager : SingletonBehaviour<SpellcastManager>, IGameManag
     {
         Debug.Log($"[SpellcastManager] Casting '{spell.SpellName}' with sequence: {usedLetters}");
         
+        _lastCastSpell = spell; // Track for damage context
+        
         OnSpellFound?.Invoke(spell, usedLetters);
         OnSpellCast?.Invoke(spell, sourceCardData);
         
-        // FIX: Trigger effects one by one for proper UI tracking
+        // Process effects with damage tracking
+        int totalDamage = 0;
         foreach (var effect in spell.Effects)
         {
-            TriggerSpellEffect(effect);
+            if (effect.effectType == SpellEffectType.Damage)
+            {
+                // Subscribe to damage events temporarily
+                var damageTracker = new DamageTracker(spell);
+                EnemyManager.OnEnemyDamaged += damageTracker.OnEnemyDamaged;
+                
+                TriggerSpellEffect(effect);
+                
+                // Wait a frame for damage to be applied
+                StartCoroutine(TrackDamageResult(spell, damageTracker, 0.1f));
+            }
+            else
+            {
+                TriggerSpellEffect(effect);
+            }
         }
         
         this.TryWithManager<DeckManager>(dm => 
@@ -157,13 +178,24 @@ public class SpellcastManager : SingletonBehaviour<SpellcastManager>, IGameManag
         this.TryWithManager<CardManager>(cm => cm.ClearSelection());
     }
     
-    // FIX: Enhanced TriggerSpellEffect with event firing
+    // Enhanced TriggerSpellEffect with proper event sequence
     public void TriggerSpellEffect(SpellEffect effect)
     {
-        // FIX: Fire the event FIRST so UI can prepare for tracking damage
-        OnSpellEffectTriggered?.Invoke(effect);
-        
         Debug.Log($"[SpellcastManager] Triggering spell effect: {effect.effectName} ({effect.effectType}, value: {effect.value})");
+        
+        // Create damage tracking context before applying effect
+        if (effect.effectType == SpellEffectType.Damage)
+        {
+            _currentDamageContext = new DamageContext 
+            { 
+                SpellAsset = _lastCastSpell,
+                Effect = effect,
+                StartTime = Time.time
+            };
+        }
+        
+        // Fire event so UI can prepare
+        OnSpellEffectTriggered?.Invoke(effect);
         
         this.TryWithManager<CombatManager>(cm => 
         {
@@ -183,6 +215,18 @@ public class SpellcastManager : SingletonBehaviour<SpellcastManager>, IGameManag
                     break;
             }
         });
+        
+        // Clear damage context after a delay
+        if (effect.effectType == SpellEffectType.Damage)
+        {
+            StartCoroutine(ClearDamageContextDelayed(0.5f));
+        }
+    }
+    
+    private IEnumerator ClearDamageContextDelayed(float delay)
+    {
+        yield return new WaitForSeconds(delay);
+        _currentDamageContext = null;
     }
     
     private void ApplyDamageEffect(SpellEffect effect, CombatManager combat)
@@ -284,6 +328,40 @@ public class SpellcastManager : SingletonBehaviour<SpellcastManager>, IGameManag
         ClearCombo();
     }
     
+    private IEnumerator TrackDamageResult(SpellAsset spell, DamageTracker tracker, float delay)
+    {
+        yield return new WaitForSeconds(delay);
+        
+        // Unsubscribe
+        EnemyManager.OnEnemyDamaged -= tracker.OnEnemyDamaged;
+        
+        // Report total damage
+        if (tracker.TotalDamage > 0)
+        {
+            OnSpellDamageDealt?.Invoke(spell, tracker.TotalDamage);
+            Debug.Log($"[SpellcastManager] Spell '{spell.SpellName}' dealt {tracker.TotalDamage} total damage");
+        }
+    }
+    
+    // Inner class for damage tracking
+    private class DamageTracker
+    {
+        private SpellAsset _spell;
+        public int TotalDamage { get; private set; }
+        
+        public DamageTracker(SpellAsset spell)
+        {
+            _spell = spell;
+            TotalDamage = 0;
+        }
+        
+        public void OnEnemyDamaged(EntityBehaviour enemy, int damage)
+        {
+            TotalDamage += damage;
+            Debug.Log($"[DamageTracker] Tracked {damage} damage for spell '{_spell.SpellName}'");
+        }
+    }
+    
     // UI Support Methods
     public void PlaySelectedCards()
     {
@@ -300,7 +378,6 @@ public class SpellcastManager : SingletonBehaviour<SpellcastManager>, IGameManag
     
     public void DrawCard()
     {
-        // INTEGRATION: Verwende CardManager.CanDrawCard() statt redundante CanDraw()
         this.TryWithManager<CardManager>(cm => 
         {
             if (cm.CanDrawCard())
@@ -446,4 +523,12 @@ public class SpellRecommendation
     public bool CanCast;
     public List<Card> RequiredCards;
     public float Effectiveness;
+}
+
+[System.Serializable]
+public class DamageContext
+{
+    public SpellAsset SpellAsset;
+    public SpellEffect Effect;
+    public float StartTime;
 }

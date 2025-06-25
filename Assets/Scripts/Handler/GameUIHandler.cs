@@ -67,15 +67,11 @@ public class GameUIHandler : MonoBehaviour
     private float _lastEnemyPanelUpdate = 0f;
     private bool _managersReady = false;
     
-    // Spell tracking
-    private SpellAsset _lastCastSpell;
-    private int _lastSpellDamage;
+    // Spell tracking - SIMPLIFIED
     private Coroutine _spellDisplayCoroutine;
-    private float _lastSpellCastTime;
     
     // Enemy tracking
     private EntityBehaviour _currentDisplayedEnemy;
-    private bool _shouldShowEnemyPanel = false;
     private int _totalEnemyMaxHealth;
     private int _totalEnemyCurrentHealth;
     
@@ -96,7 +92,6 @@ public class GameUIHandler : MonoBehaviour
         if (Time.time - _lastEnemyPanelUpdate < enemyPanelUpdateInterval) return;
         _lastEnemyPanelUpdate = Time.time;
         
-        // Bestimme welcher Enemy angezeigt werden soll
         EntityBehaviour enemyToShow = GetEnemyToDisplay();
         
         if (enemyToShow != null)
@@ -108,7 +103,6 @@ public class GameUIHandler : MonoBehaviour
             }
             else
             {
-                // Update nur die Health-Werte falls sich was geändert hat
                 UpdateEnemyHealthDisplay(enemyToShow);
             }
         }
@@ -123,19 +117,19 @@ public class GameUIHandler : MonoBehaviour
     {
         return CoreExtensions.TryWithManager<EnemyManager, EntityBehaviour>(this, em =>
         {
-            // Priorität 1: Gezielter Enemy
+            // Priority 1: Targeted
             var targetedEnemy = em.AllEnemies.FirstOrDefault(e => e != null && e.IsTargeted);
             if (targetedEnemy != null) return targetedEnemy;
             
-            // Priorität 2: Boss
+            // Priority 2: Boss
             var boss = em.AllEnemies.FirstOrDefault(e => e != null && e.IsBoss() && e.IsValidEntity());
             if (boss != null) return boss;
             
-            // Priorität 3: Elite
+            // Priority 3: Elite
             var elite = em.AllEnemies.FirstOrDefault(e => e != null && e.IsElite() && e.IsValidEntity());
             if (elite != null) return elite;
             
-            // Priorität 4: Erster lebender Enemy
+            // Priority 4: First alive
             return em.AllEnemies.FirstOrDefault(e => e != null && e.IsValidEntity());
         });
     }
@@ -190,6 +184,7 @@ public class GameUIHandler : MonoBehaviour
     
     private void SetupEventListeners()
     {
+        // Combat events
         CoreExtensions.TryWithManager<CombatManager>(this, manager =>
         {
             CombatManager.OnLifeChanged += UpdateLifeDisplay;
@@ -199,12 +194,14 @@ public class GameUIHandler : MonoBehaviour
             CombatManager.OnTurnPhaseChanged += UpdateTurnPhaseDisplay;
         });
         
+        // Card events
         CoreExtensions.TryWithManager<CardManager>(this, manager =>
         {
             CardManager.OnSelectionChanged += OnCardSelectionChanged;
             CardManager.OnHandUpdated += OnHandUpdated;
         });
         
+        // Spell events - SIMPLIFIED
         CoreExtensions.TryWithManager<SpellcastManager>(this, manager =>
         {
             SpellcastManager.OnComboStateChanged += UpdateComboDisplay;
@@ -212,19 +209,21 @@ public class GameUIHandler : MonoBehaviour
             SpellcastManager.OnSpellNotFound += OnSpellNotFound;
             SpellcastManager.OnComboCleared += OnComboCleared;
             SpellcastManager.OnSpellCast += OnSpellCast;
+            SpellcastManager.OnSpellDamageDealt += OnSpellDamageDealt; // NEW direct damage tracking
         });
         
+        // Enemy events
         CoreExtensions.TryWithManager<EnemyManager>(this, manager =>
         {
             EnemyManager.OnEnemySpawned += OnEnemySpawned;
             EnemyManager.OnEnemyDespawned += OnEnemyDespawned;
-            EnemyManager.OnEnemyDamaged += OnEnemyDamaged;
             EntityBehaviour.OnEntityHealthChanged += OnEntityHealthChanged;
         });
     }
     
     private void OnDestroy()
     {
+        // Unsubscribe all events (simplified - same structure as setup)
         CoreExtensions.TryWithManager<CombatManager>(this, manager =>
         {
             CombatManager.OnLifeChanged -= UpdateLifeDisplay;
@@ -247,13 +246,13 @@ public class GameUIHandler : MonoBehaviour
             SpellcastManager.OnSpellNotFound -= OnSpellNotFound;
             SpellcastManager.OnComboCleared -= OnComboCleared;
             SpellcastManager.OnSpellCast -= OnSpellCast;
+            SpellcastManager.OnSpellDamageDealt -= OnSpellDamageDealt;
         });
         
         CoreExtensions.TryWithManager<EnemyManager>(this, manager =>
         {
             EnemyManager.OnEnemySpawned -= OnEnemySpawned;
             EnemyManager.OnEnemyDespawned -= OnEnemyDespawned;
-            EnemyManager.OnEnemyDamaged -= OnEnemyDamaged;
             EntityBehaviour.OnEntityHealthChanged -= OnEntityHealthChanged;
         });
     }
@@ -303,7 +302,6 @@ public class GameUIHandler : MonoBehaviour
     private bool CanDraw()
     {
         if (!_managersReady) return false;
-        
         return CoreExtensions.TryWithManager<CardManager, bool>(this, cm => cm.CanDrawCard());
     }
     
@@ -485,22 +483,6 @@ public class GameUIHandler : MonoBehaviour
         
         bool canDraw = CanDraw();
         drawButton.interactable = canDraw;
-        
-        #if UNITY_EDITOR
-        var buttonText = drawButton.GetComponentInChildren<TextMeshProUGUI>();
-        if (buttonText != null && !canDraw)
-        {
-            if (!_managersReady) buttonText.text = "Draw (Wait)";
-            else if (CoreExtensions.TryWithManager<CardManager, bool>(this, cm => cm.IsHandFull)) buttonText.text = "Draw (Full)";
-            else if (CoreExtensions.TryWithManager<DeckManager, bool>(this, dm => dm.IsDeckEmpty)) buttonText.text = "Draw (Empty)";
-            else if (!CoreExtensions.TryWithManager<CombatManager, bool>(this, cm => cm.IsPlayerTurn)) buttonText.text = "Draw (Turn)";
-            else buttonText.text = "Draw (?)";
-        }
-        else if (buttonText != null)
-        {
-            buttonText.text = "Draw Card";
-        }
-        #endif
     }
     
     private void UpdateEndTurnButton()
@@ -519,7 +501,7 @@ public class GameUIHandler : MonoBehaviour
         }
     }
     
-    // ===== EVENT HANDLERS =====
+    // ===== SPELL EVENTS - SIMPLIFIED =====
     private void OnSpellFound(SpellAsset spell, string usedLetters)
     {
         if (statusText != null)
@@ -549,51 +531,47 @@ public class GameUIHandler : MonoBehaviour
         UpdateCastComboButton(false);
     }
     
-    // ===== SPELL CAST DISPLAY =====
+    // ===== SPELL CAST DISPLAY - SIMPLIFIED =====
     private void OnSpellCast(SpellAsset spell, List<CardData> cards)
     {
-        _lastCastSpell = spell;
-        _lastSpellDamage = 0;
-        ShowSpellCastDisplay();
+        ShowSpellCastDisplay(spell);
     }
     
-    private void OnEnemyDamaged(EntityBehaviour enemy, int damage)
+    // NEW: Direct damage tracking from SpellcastManager
+    private void OnSpellDamageDealt(SpellAsset spell, int totalDamage)
     {
-        if (_lastCastSpell != null && Time.time - _lastSpellCastTime < 1f)
-        {
-            _lastSpellDamage += damage;
-            UpdateSpellDamageDisplay();
-        }
+        UpdateSpellDamageDisplay(spell, totalDamage);
     }
     
-    private void ShowSpellCastDisplay()
+    private void ShowSpellCastDisplay(SpellAsset spell)
     {
-        if (spellCastPanel == null || _lastCastSpell == null) return;
+        if (spellCastPanel == null || spell == null) return;
         
-        _lastSpellCastTime = Time.time;
         spellCastPanel.SetActive(true);
         
         if (lastSpellText != null)
-            lastSpellText.text = _lastCastSpell.SpellName;
+            lastSpellText.text = spell.SpellName;
             
-        UpdateSpellDamageDisplay();
+        // Reset damage display
+        if (spellDamageText != null)
+            spellDamageText.text = "Casting...";
         
         if (_spellDisplayCoroutine != null)
             StopCoroutine(_spellDisplayCoroutine);
         _spellDisplayCoroutine = StartCoroutine(HideSpellDisplayAfterDelay());
     }
     
-    private void UpdateSpellDamageDisplay()
+    private void UpdateSpellDamageDisplay(SpellAsset spell, int totalDamage)
     {
-        if (spellDamageText == null || _lastCastSpell == null) return;
+        if (spellDamageText == null || !spellCastPanel.activeSelf) return;
         
-        var primaryEffect = _lastCastSpell.Effects?.FirstOrDefault();
+        var primaryEffect = spell.Effects?.FirstOrDefault();
         if (primaryEffect != null)
         {
             switch (primaryEffect.effectType)
             {
                 case SpellEffectType.Damage:
-                    spellDamageText.text = $"Damage: {_lastSpellDamage}";
+                    spellDamageText.text = $"Damage: {totalDamage}";
                     spellDamageText.color = Color.red;
                     break;
                 case SpellEffectType.Heal:
@@ -614,9 +592,6 @@ public class GameUIHandler : MonoBehaviour
         
         if (spellCastPanel != null)
             spellCastPanel.SetActive(false);
-            
-        _lastCastSpell = null;
-        _lastSpellDamage = 0;
     }
     
     // ===== ENEMY INFO DISPLAY =====

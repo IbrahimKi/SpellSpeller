@@ -10,9 +10,9 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: d2baaa2329b36e746b06c6ecc5687b67, type: 3}
-  m_Name: Spell_1_F_FI_FireBolt
+  m_Name: Spell_1_F_FI_FireShot
   m_EditorClassIdentifier: 
-  spellName: Fire Bolt
+  spellName: Fire Shot
   letterCode: FI
   spellType: 1
   spellSubtypes: 01000000
