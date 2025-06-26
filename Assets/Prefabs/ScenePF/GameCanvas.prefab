@@ -366,6 +366,12 @@ MonoBehaviour:
   endTurnButton: {fileID: 1775706576368608604}
   turnText: {fileID: 5546441992038875495}
   turnPhaseText: {fileID: 8077558601941881245}
+  cardSlotDropArea: {fileID: 0}
+  playSlotSequenceButton: {fileID: 0}
+  clearSlotsButton: {fileID: 0}
+  slotStatusText: {fileID: 0}
+  slotSequenceText: {fileID: 0}
+  enableSlotsToggle: {fileID: 0}
   healthLowColor: {r: 1, g: 0, b: 0, a: 1}
   healthNormalColor: {r: 1, g: 1, b: 1, a: 1}
   healthLowThreshold: 0.25
@@ -2504,6 +2510,17 @@ MonoBehaviour:
   normalColor: {r: 1, g: 1, b: 1, a: 0.1}
   highlightColor: {r: 0, g: 0.524576, b: 0.554717, a: 0.3}
   invalidColor: {r: 0.6528301, g: 0.21442893, b: 0.14165173, a: 0.3}
+  slotOccupiedColor: {r: 0.5, g: 0.5, b: 1, a: 0.4}
+  enableCardSlots: 0
+  maxSlots: 5
+  slotPrefab: {fileID: 0}
+  slotsContainer: {fileID: 0}
+  slotSpacing: 10
+  slotSize: {x: 120, y: 180}
+  emptySlotColor: {r: 0.8, g: 0.8, b: 0.8, a: 0.3}
+  filledSlotColor: {r: 0.2, g: 0.8, b: 0.2, a: 0.5}
+  showSlotNumbers: 1
+  slotNumberColor: {r: 1, g: 1, b: 1, a: 1}
 --- !u!1 &3181308360914361374
 GameObject:
   m_ObjectHideFlags: 0
@@ -2943,6 +2960,17 @@ MonoBehaviour:
   normalColor: {r: 1, g: 1, b: 1, a: 0.2}
   highlightColor: {r: 0, g: 0.1869452, b: 1, a: 0.3}
   invalidColor: {r: 0.2679245, g: 0.2679245, b: 0.2679245, a: 0.6117647}
+  slotOccupiedColor: {r: 0.5, g: 0.5, b: 1, a: 0.4}
+  enableCardSlots: 0
+  maxSlots: 5
+  slotPrefab: {fileID: 0}
+  slotsContainer: {fileID: 0}
+  slotSpacing: 10
+  slotSize: {x: 120, y: 180}
+  emptySlotColor: {r: 0.8, g: 0.8, b: 0.8, a: 0.3}
+  filledSlotColor: {r: 0.2, g: 0.8, b: 0.2, a: 0.5}
+  showSlotNumbers: 1
+  slotNumberColor: {r: 1, g: 1, b: 1, a: 1}
 --- !u!1 &3714024921478678870
 GameObject:
   m_ObjectHideFlags: 0
@@ -3155,6 +3183,17 @@ MonoBehaviour:
   normalColor: {r: 1, g: 1, b: 1, a: 0.1}
   highlightColor: {r: 1, g: 0.629811, b: 0, a: 0.3}
   invalidColor: {r: 0.15294118, g: 0.10206576, b: 0.101960786, a: 0.7058824}
+  slotOccupiedColor: {r: 0.5, g: 0.5, b: 1, a: 0.4}
+  enableCardSlots: 0
+  maxSlots: 5
+  slotPrefab: {fileID: 0}
+  slotsContainer: {fileID: 0}
+  slotSpacing: 10
+  slotSize: {x: 120, y: 180}
+  emptySlotColor: {r: 0.8, g: 0.8, b: 0.8, a: 0.3}
+  filledSlotColor: {r: 0.2, g: 0.8, b: 0.2, a: 0.5}
+  showSlotNumbers: 1
+  slotNumberColor: {r: 1, g: 1, b: 1, a: 1}
 --- !u!1 &3890519551837643206
 GameObject:
   m_ObjectHideFlags: 0
@@ -5088,97 +5127,6 @@ MonoBehaviour:
   m_FillOrigin: 0
   m_UseSpriteMesh: 0
   m_PixelsPerUnitMultiplier: 1
---- !u!1 &8425367761907369549
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 6019750254233528481}
-  - component: {fileID: 5155996090324965298}
-  - component: {fileID: 7170439679953261844}
-  - component: {fileID: 6874665856502908597}
-  m_Layer: 5
-  m_Name: CardSlot
-  m_TagString: CardSlot
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!224 &6019750254233528481
-RectTransform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 8425367761907369549}
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 8826592031256299838}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0, y: 0}
-  m_AnchorMax: {x: 0, y: 0}
-  m_AnchoredPosition: {x: 0, y: 0}
-  m_SizeDelta: {x: 0, y: 0}
-  m_Pivot: {x: 0.5, y: 0.5}
---- !u!222 &5155996090324965298
-CanvasRenderer:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 8425367761907369549}
-  m_CullTransparentMesh: 1
---- !u!114 &7170439679953261844
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 8425367761907369549}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  m_Material: {fileID: 0}
-  m_Color: {r: 1, g: 1, b: 1, a: 0}
-  m_RaycastTarget: 1
-  m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
-  m_Maskable: 1
-  m_OnCullStateChanged:
-    m_PersistentCalls:
-      m_Calls: []
-  m_Sprite: {fileID: 0}
-  m_Type: 0
-  m_PreserveAspect: 0
-  m_FillCenter: 1
-  m_FillMethod: 4
-  m_FillAmount: 1
-  m_FillClockwise: 1
-  m_FillOrigin: 0
-  m_UseSpriteMesh: 0
-  m_PixelsPerUnitMultiplier: 1
---- !u!114 &6874665856502908597
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 8425367761907369549}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 3e44fd0ce7336224ea5722e020942350, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  normalColor: {r: 1, g: 1, b: 1, a: 0.2}
-  highlightColor: {r: 0, g: 0.1869452, b: 1, a: 0.3}
-  invalidColor: {r: 0.2679245, g: 0.2679245, b: 0.2679245, a: 0.6117647}
 --- !u!1 &8475865212989619499
 GameObject:
   m_ObjectHideFlags: 0
@@ -5270,6 +5218,17 @@ MonoBehaviour:
   normalColor: {r: 1, g: 1, b: 1, a: 0.2}
   highlightColor: {r: 0, g: 0.1869452, b: 1, a: 0.3}
   invalidColor: {r: 0.2679245, g: 0.2679245, b: 0.2679245, a: 0.6117647}
+  slotOccupiedColor: {r: 0.5, g: 0.5, b: 1, a: 0.4}
+  enableCardSlots: 0
+  maxSlots: 5
+  slotPrefab: {fileID: 0}
+  slotsContainer: {fileID: 0}
+  slotSpacing: 10
+  slotSize: {x: 120, y: 180}
+  emptySlotColor: {r: 0.8, g: 0.8, b: 0.8, a: 0.3}
+  filledSlotColor: {r: 0.2, g: 0.8, b: 0.2, a: 0.5}
+  showSlotNumbers: 1
+  slotNumberColor: {r: 1, g: 1, b: 1, a: 1}
 --- !u!1 &8584798497706174027
 GameObject:
   m_ObjectHideFlags: 0
@@ -5361,6 +5320,17 @@ MonoBehaviour:
   normalColor: {r: 1, g: 1, b: 1, a: 0.2}
   highlightColor: {r: 0, g: 0.1869452, b: 1, a: 0.3}
   invalidColor: {r: 0.2679245, g: 0.2679245, b: 0.2679245, a: 0.6117647}
+  slotOccupiedColor: {r: 0.5, g: 0.5, b: 1, a: 0.4}
+  enableCardSlots: 0
+  maxSlots: 5
+  slotPrefab: {fileID: 0}
+  slotsContainer: {fileID: 0}
+  slotSpacing: 10
+  slotSize: {x: 120, y: 180}
+  emptySlotColor: {r: 0.8, g: 0.8, b: 0.8, a: 0.3}
+  filledSlotColor: {r: 0.2, g: 0.8, b: 0.2, a: 0.5}
+  showSlotNumbers: 1
+  slotNumberColor: {r: 1, g: 1, b: 1, a: 1}
 --- !u!1 &8643522269376738687
 GameObject:
   m_ObjectHideFlags: 0
@@ -6301,3 +6271,105 @@ RectTransform:
   m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: -20, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}
+--- !u!1001 &9061097129102181261
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 8826592031256299838}
+    m_Modifications:
+    - target: {fileID: 672039664977626560, guid: ea01107d7c0d4674988a132e0e20adb0, type: 3}
+      propertyPath: m_Name
+      value: CardSlot
+      objectReference: {fileID: 0}
+    - target: {fileID: 3329577543616080684, guid: ea01107d7c0d4674988a132e0e20adb0, type: 3}
+      propertyPath: m_Pivot.x
+      value: 0.5
+      objectReference: {fileID: 0}
+    - target: {fileID: 3329577543616080684, guid: ea01107d7c0d4674988a132e0e20adb0, type: 3}
+      propertyPath: m_Pivot.y
+      value: 0.5
+      objectReference: {fileID: 0}
+    - target: {fileID: 3329577543616080684, guid: ea01107d7c0d4674988a132e0e20adb0, type: 3}
+      propertyPath: m_AnchorMax.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3329577543616080684, guid: ea01107d7c0d4674988a132e0e20adb0, type: 3}
+      propertyPath: m_AnchorMax.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3329577543616080684, guid: ea01107d7c0d4674988a132e0e20adb0, type: 3}
+      propertyPath: m_AnchorMin.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3329577543616080684, guid: ea01107d7c0d4674988a132e0e20adb0, type: 3}
+      propertyPath: m_AnchorMin.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3329577543616080684, guid: ea01107d7c0d4674988a132e0e20adb0, type: 3}
+      propertyPath: m_SizeDelta.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3329577543616080684, guid: ea01107d7c0d4674988a132e0e20adb0, type: 3}
+      propertyPath: m_SizeDelta.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3329577543616080684, guid: ea01107d7c0d4674988a132e0e20adb0, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3329577543616080684, guid: ea01107d7c0d4674988a132e0e20adb0, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3329577543616080684, guid: ea01107d7c0d4674988a132e0e20adb0, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3329577543616080684, guid: ea01107d7c0d4674988a132e0e20adb0, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 3329577543616080684, guid: ea01107d7c0d4674988a132e0e20adb0, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3329577543616080684, guid: ea01107d7c0d4674988a132e0e20adb0, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3329577543616080684, guid: ea01107d7c0d4674988a132e0e20adb0, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3329577543616080684, guid: ea01107d7c0d4674988a132e0e20adb0, type: 3}
+      propertyPath: m_AnchoredPosition.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3329577543616080684, guid: ea01107d7c0d4674988a132e0e20adb0, type: 3}
+      propertyPath: m_AnchoredPosition.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3329577543616080684, guid: ea01107d7c0d4674988a132e0e20adb0, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3329577543616080684, guid: ea01107d7c0d4674988a132e0e20adb0, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3329577543616080684, guid: ea01107d7c0d4674988a132e0e20adb0, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: ea01107d7c0d4674988a132e0e20adb0, type: 3}
+--- !u!224 &6019750254233528481 stripped
+RectTransform:
+  m_CorrespondingSourceObject: {fileID: 3329577543616080684, guid: ea01107d7c0d4674988a132e0e20adb0, type: 3}
+  m_PrefabInstance: {fileID: 9061097129102181261}
+  m_PrefabAsset: {fileID: 0}

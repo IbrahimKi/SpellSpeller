@@ -1,5 +1,6 @@
 using UnityEngine;
 using System.Collections.Generic;
+using System.Linq; // CRITICAL: LINQ für Any/All operations
 using GameCore.Enums;
 using GameCore.Data;
 
@@ -33,11 +34,12 @@ public class CardSlotAsset : ScriptableObject
     public bool persistCardBetweenTurns = false;
     public bool consumeOnPlay = true;
     
-    // Validation
+    // Validation - FIXED: Direkte Method calls statt Extension methods
     public bool CanAcceptCard(Card card)
     {
         if (!isActive || !canAcceptCards || card == null) return false;
         
+        // FIXED: Direkte Method calls die jetzt in Card.cs definiert sind
         // Type restrictions
         if (allowedCardTypes.Count > 0 && !allowedCardTypes.Contains(card.GetCardType()))
             return false;
@@ -149,7 +151,7 @@ public class SlotEffect
     private void ApplyBuffEffect(Card card, CardSlotBehaviour slotBehaviour)
     {
         // Buff implementation using Extensions
-        slotBehaviour.TryWithManager<CombatManager>(cm =>
+        CoreExtensions.TryWithManager<CombatManager>(slotBehaviour, cm =>
         {
             switch (target)
             {
@@ -158,7 +160,7 @@ public class SlotEffect
                     break;
                 case SlotEffectTarget.PlacedCard:
                     // Could add temporary card enhancement
-                    slotBehaviour.LogDebug($"Buffing card {card.GetCardName()} by {effectValue}");
+                    Debug.Log($"Buffing card {card.GetCardName()} by {effectValue}");
                     break;
             }
         });
@@ -167,12 +169,12 @@ public class SlotEffect
     private void ApplyDebuffEffect(Card card, CardSlotBehaviour slotBehaviour)
     {
         // Debuff implementation
-        slotBehaviour.LogDebug($"Applying debuff {effectName} with value {effectValue}");
+        Debug.Log($"Applying debuff {effectName} with value {effectValue}");
     }
     
     private void ApplyDamageEffect(Card card, CardSlotBehaviour slotBehaviour)
     {
-        slotBehaviour.TryWithManager<EnemyManager>(em =>
+        CoreExtensions.TryWithManager<EnemyManager>(slotBehaviour, em =>
         {
             switch (target)
             {
@@ -191,7 +193,7 @@ public class SlotEffect
     
     private void ApplyHealEffect(Card card, CardSlotBehaviour slotBehaviour)
     {
-        slotBehaviour.TryWithManager<CombatManager>(cm =>
+        CoreExtensions.TryWithManager<CombatManager>(slotBehaviour, cm =>
         {
             switch (target)
             {
@@ -199,7 +201,7 @@ public class SlotEffect
                     cm.ModifyLife(effectValue);
                     break;
                 case SlotEffectTarget.AllUnits:
-                    slotBehaviour.TryWithManager<UnitManager>(um =>
+                    CoreExtensions.TryWithManager<UnitManager>(slotBehaviour, um =>
                         um.HealAllUnits(effectValue)
                     );
                     break;
@@ -209,7 +211,7 @@ public class SlotEffect
     
     private void ApplyResourceEffect(Card card, CardSlotBehaviour slotBehaviour)
     {
-        slotBehaviour.TryWithManager<CombatManager>(cm =>
+        CoreExtensions.TryWithManager<CombatManager>(slotBehaviour, cm =>
         {
             // Default to creativity modification
             cm.ModifyCreativity(effectValue);
@@ -248,12 +250,12 @@ public class SlotEffectCondition
                 return card != null && card.GetTier() >= requiredValue;
                 
             case SlotConditionType.PlayerHealthBelow:
-                return slotBehaviour.TryWithManager<CombatManager, bool>(cm =>
+                return CoreExtensions.TryWithManager<CombatManager, bool>(slotBehaviour, cm =>
                     cm.Life.Percentage < (requiredValue / 100f)
                 );
                 
             case SlotConditionType.EnemyCount:
-                return slotBehaviour.TryWithManager<EnemyManager, bool>(em =>
+                return CoreExtensions.TryWithManager<EnemyManager, bool>(slotBehaviour, em =>
                     em.AliveEnemyCount >= requiredValue
                 );
                 

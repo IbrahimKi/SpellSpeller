@@ -3,6 +3,7 @@ using UnityEngine.UI;
 using TMPro;
 using UnityEngine.EventSystems;
 using System.Collections.Generic;
+using System.Linq; // CRITICAL: LINQ für Any/All operations
 using GameCore.Enums; // CRITICAL: SharedEnums import
 using GameCore.Data; // CRITICAL: SharedData import
 
@@ -26,6 +27,9 @@ public class Card : MonoBehaviour, IPointerClickHandler, IPointerEnterHandler, I
     [SerializeField] private TextMeshProUGUI letterValuesText;
     [SerializeField] private TextMeshProUGUI tierText;
     [SerializeField] private Image cardImage;
+    
+    [Header("Card Tags")]
+    [SerializeField] private List<string> cardTags = new List<string>();
     
     // Events
     public static System.Action<Card> OnCardSelected;
@@ -233,6 +237,7 @@ public class Card : MonoBehaviour, IPointerClickHandler, IPointerEnterHandler, I
         isHovered = false;
         currentState = CardState.Idle;
         cardData = null;
+        cardTags.Clear();
         
         // Clear UI
         if (cardNameText != null) cardNameText.text = "";
@@ -253,6 +258,80 @@ public class Card : MonoBehaviour, IPointerClickHandler, IPointerEnterHandler, I
         }
         
         UpdateVisuals();
+    }
+    
+    // CRITICAL FIX: Card Type Access Methods für CardSlotAsset Kompatibilität
+    public CardType GetCardType()
+    {
+        return cardData?.cardType ?? CardType.Consonant;
+    }
+    
+    public CardSubType GetCardSubType()
+    {
+        return cardData?.CardSubType ?? CardSubType.Basic;
+    }
+    
+    public int GetTier()
+    {
+        return cardData?.tier ?? 0;
+    }
+    
+    public string GetCardName()
+    {
+        return cardData?.cardName ?? "Unknown Card";
+    }
+    
+    public string GetLetterValues()
+    {
+        return cardData?.letterValues ?? "";
+    }
+    
+    // CRITICAL FIX: HasTag method für CardSlotAsset Kompatibilität
+    public bool HasTag(string tag)
+    {
+        if (string.IsNullOrEmpty(tag)) return false;
+        
+        // Check both local tags and CardData tags
+        if (cardTags != null && cardTags.Contains(tag))
+            return true;
+        
+        // Future: Could also check CardData for tags if implemented
+        return false;
+    }
+    
+    public bool HasAnyTag(params string[] tags)
+    {
+        if (tags == null || tags.Length == 0) return false;
+        return tags.Any(tag => HasTag(tag));
+    }
+    
+    public bool HasAllTags(params string[] tags)
+    {
+        if (tags == null || tags.Length == 0) return false;
+        return tags.All(tag => HasTag(tag));
+    }
+    
+    public void AddTag(string tag)
+    {
+        if (!string.IsNullOrEmpty(tag) && !cardTags.Contains(tag))
+        {
+            cardTags.Add(tag);
+        }
+    }
+    
+    public void RemoveTag(string tag)
+    {
+        cardTags.Remove(tag);
+    }
+    
+    public void ClearTags()
+    {
+        cardTags.Clear();
+    }
+    
+    public List<string> GetTags()
+    {
+        return new List<string>(cardTags);
     }
     
     // INTEGRATION: Extension-friendly methods für CardExtensions

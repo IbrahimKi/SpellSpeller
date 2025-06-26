@@ -2,7 +2,7 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 using System.Collections.Generic;
-using System.Linq;
+using System.Linq; // CRITICAL: LINQ für Any/All operations
 using TMPro;
 using GameCore.Enums;
 using GameCore.Data;
@@ -20,10 +20,6 @@ public class DropAreaHandler : MonoBehaviour, IDropHandler, IPointerEnterHandler
     [SerializeField] private int maxSlots = 5;
     [SerializeField] private GameObject slotPrefab;
     [SerializeField] private Transform slotsContainer;
-    
-    // Public Properties für CardDragHandler Access
-    public List<CardSlot> cardSlots => cardSlots;
-    public Transform SlotsContainer => slotsContainer;
     [SerializeField] private float slotSpacing = 10f;
     [SerializeField] private Vector2 slotSize = new Vector2(120f, 180f);
     
@@ -37,9 +33,13 @@ public class DropAreaHandler : MonoBehaviour, IDropHandler, IPointerEnterHandler
     private GameObject currentDraggedCard;
     private bool canAcceptDrop = false;
     
-    // Card Slot System
-    private List<CardSlot> cardSlots = new List<CardSlot>();
-    private bool slotsInitialized = false;
+    // Card Slot System - FIXED: Eindeutige naming
+    private List<CardSlot> _cardSlots = new List<CardSlot>();
+    private bool _slotsInitialized = false;
+    
+    // FIXED: Public Properties für CardDragHandler Access
+    public List<CardSlot> CardSlots => _cardSlots;
+    public Transform SlotsContainer => slotsContainer;
     
     [System.Serializable]
     public class CardSlot
@@ -482,7 +482,7 @@ public class DropAreaHandler : MonoBehaviour, IDropHandler, IPointerEnterHandler
                 // Card in Slot platzieren
                 Vector2 localPosition;
                 RectTransformUtility.ScreenPointToLocalPointInRectangle(
-                    slotsContainer, 
+                    slotsContainer as RectTransform, 
                     eventData.position, 
                     eventData.pressEventCamera, 
                     out localPosition
@@ -537,7 +537,9 @@ public class DropAreaHandler : MonoBehaviour, IDropHandler, IPointerEnterHandler
     
     public string GetSlotLetterSequence()
     {
-        return GetSlotSequence().GetLetterSequence();
+        // FIXED: Using CardExtensions properly
+        var sequence = GetSlotSequence();
+        return sequence.GetLetterSequence();
     }
     
     public bool CanPlaySlotSequence()

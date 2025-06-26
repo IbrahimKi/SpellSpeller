@@ -3,6 +3,7 @@ using UnityEngine.UI;
 using UnityEngine.EventSystems;
 using TMPro;
 using System.Collections;
+using System.Linq; // CRITICAL: LINQ für Any/All operations
 using GameCore.Enums;
 using GameCore.Data;
 
@@ -221,7 +222,7 @@ public class CardSlotBehaviour : MonoBehaviour, IDropHandler, IPointerEnterHandl
         }
         
         // Play card via SpellcastManager using Extensions
-        bool playSuccess = this.TryWithManager<SpellcastManager>(sm =>
+        bool playSuccess = CoreExtensions.TryWithManager<SpellcastManager>(this, sm =>
         {
             var cardList = new System.Collections.Generic.List<Card> { cardToPlay };
             sm.ProcessCardPlay(cardList);
@@ -232,11 +233,11 @@ public class CardSlotBehaviour : MonoBehaviour, IDropHandler, IPointerEnterHandl
             OnCardPlayedFromSlot?.Invoke(this, cardToPlay);
             PlaySlotEffect();
             
-            this.LogDebug($"Card {cardToPlay.GetCardName()} played from slot {slotIndex}");
+            Debug.Log($"Card {cardToPlay.GetCardName()} played from slot {slotIndex}");
         }
         else
         {
-            this.LogError($"Failed to play card {cardToPlay.GetCardName()} from slot {slotIndex}");
+            Debug.LogError($"Failed to play card {cardToPlay.GetCardName()} from slot {slotIndex}");
         }
         
         return playSuccess;
@@ -340,6 +341,7 @@ public class CardSlotBehaviour : MonoBehaviour, IDropHandler, IPointerEnterHandl
                $"(Enabled: {IsEnabled}, Effects: {slotAsset?.slotEffects?.Count ?? 0})";
     }
     
+    // FIXED: Hinzugefügter System.Linq using macht .Any() verfügbar
     public bool HasEffectOfType(SlotEffectType effectType)
     {
         return slotAsset?.slotEffects?.Any(e => e.effectType == effectType) ?? false;
@@ -359,13 +361,10 @@ public class CardSlotBehaviour : MonoBehaviour, IDropHandler, IPointerEnterHandl
     {
         if (IsFilled && slotAsset != null)
         {
-            // Process turn-end effects
-            foreach (var effect in slotAsset.slotEffects)
+            // Process turn-end effects - FIXED: LINQ verfügbar
+            foreach (var effect in slotAsset.slotEffects.Where(e => e.triggerEvent == SlotTriggerEvent.OnTurnEnd))
             {
-                if (effect.triggerEvent == SlotTriggerEvent.OnTurnEnd)
-                {
-                    effect.ApplyEffect(_occupyingCard, this);
-                }
+                effect.ApplyEffect(_occupyingCard, this);
             }
             
             // Remove card if it doesn't persist
@@ -380,13 +379,10 @@ public class CardSlotBehaviour : MonoBehaviour, IDropHandler, IPointerEnterHandl
     {
         if (IsFilled && slotAsset != null)
         {
-            // Process turn-start effects
-            foreach (var effect in slotAsset.slotEffects)
+            // Process turn-start effects - FIXED: LINQ verfügbar
+            foreach (var effect in slotAsset.slotEffects.Where(e => e.triggerEvent == SlotTriggerEvent.OnTurnStart))
             {
-                if (effect.triggerEvent == SlotTriggerEvent.OnTurnStart)
-                {
-                    effect.ApplyEffect(_occupyingCard, this);
-                }
+                effect.ApplyEffect(_occupyingCard, this);
             }
         }
     }
