@@ -120,17 +120,26 @@ public class CardDragHandler : MonoBehaviour, IBeginDragHandler, IDragHandler, I
         {
             if (result.gameObject != gameObject)
             {
-                // Check for card slot drop areas first (highest priority)
-                var slotDropArea = result.gameObject.GetComponent<DropAreaHandler>();
-                if (slotDropArea != null && slotDropArea.IsSlotSystemEnabled())
+                // Check for slot drop (highest priority)
+                var slotBehaviour = result.gameObject.GetComponent<CardSlotBehaviour>();
+                if (slotBehaviour != null)
                 {
                     dropTarget = result.gameObject;
-                    successfulDrop = HandleSlotAreaDrop(slotDropArea, eventData);
+                    successfulDrop = HandleSlotDrop(slotBehaviour);
                     break;
                 }
                 
-                // Standard drop areas
-                else if (result.gameObject.CompareTag("PlayArea"))
+                // Check for drop areas
+                var dropArea = result.gameObject.GetComponent<DropAreaHandler>();
+                if (dropArea != null)
+                {
+                    dropTarget = result.gameObject;
+                    successfulDrop = HandleDropAreaDrop(dropArea);
+                    break;
+                }
+                
+                // Legacy tag-based drop areas
+                if (result.gameObject.CompareTag("PlayArea"))
                 {
                     dropTarget = result.gameObject;
                     successfulDrop = HandlePlayAreaDrop(dropTarget);
@@ -145,7 +154,7 @@ public class CardDragHandler : MonoBehaviour, IBeginDragHandler, IDragHandler, I
             }
         }
         
-        // Return to original position if no valid target or unsuccessful drop
+        // Return to original position if no valid target
         if (!successfulDrop)
         {
             ReturnToOriginalPosition();
@@ -165,115 +174,68 @@ public class CardDragHandler : MonoBehaviour, IBeginDragHandler, IDragHandler, I
         wasInSlotBefore = false;
         originalSlotIndex = -1;
         
-        // Check if parent is a card slot by looking for DropAreaHandler with slots enabled
-        var parentDropArea = GetComponentInParent<DropAreaHandler>();
-        if (parentDropArea != null && parentDropArea.IsSlotSystemEnabled())
+        // Check if parent has a CardSlotBehaviour
+        var parentSlot = GetComponentInParent<CardSlotBehaviour>();
+        if (parentSlot != null && parentSlot.OccupyingCard == GetComponent<Card>())
         {
-            // Find which slot this card was in
-            for (int i = 0; i < parentDropArea.CardSlots.Count; i++)
-            {
-                var slot = parentDropArea.CardSlots[i];
-                if (slot.occupyingCard == GetComponent<Card>())
-                {
-                    wasInSlotBefore = true;
-                    originalSlotIndex = i;
-                    
-                    // Clear the slot since we're dragging out
-                    parentDropArea.RemoveCardFromSlot(i);
-                    break;
-                }
-            }
+            wasInSlotBefore = true;
+            originalSlotIndex = parentSlot.SlotIndex;
+            
+            // Clear the slot since we're dragging out
+            parentSlot.RemoveCard(false);
         }
     }
     
-    private bool HandleSlotAreaDrop(DropAreaHandler slotDropArea, PointerEventData eventData)
+    private bool HandleSlotDrop(CardSlotBehaviour targetSlot)
     {
         Card cardComponent = GetComponent<Card>();
+        
         if (!cardComponent.IsPlayable())
         {
             Debug.LogWarning("[CardDragHandler] Card not playable for slot");
             return false;
         }
         
-        if (!slotDropArea.HasEmptySlots())
-        {
-            Debug.LogWarning("[CardDragHandler] No empty slots available");
-            return false;
-        }
-        
-        // Try to place card in closest empty slot
-        Vector2 localPosition;
-        RectTransformUtility.ScreenPointToLocalPointInRectangle(
-            slotDropArea.SlotsContainer as RectTransform, 
-            eventData.position, 
-            eventData.pressEventCamera, 
-            out localPosition
-        );
-        
-        bool placed = slotDropArea.TryPlaceCardInSlot(cardComponent);
-        
-        if (placed)
-        {
-            Debug.Log($"[CardDragHandler] Card '{cardComponent.GetCardName()}' placed in slot successfully");
-            return true;
-        }
-        else
-        {
-            Debug.LogWarning("[CardDragHandler] Failed to place card in slot");
-            return false;
-        }
+        return targetSlot.TryPlaceCard(cardComponent);
+    }
+    
+    private bool HandleDropAreaDrop(DropAreaHandler dropArea)
+    {
+        // The DropAreaHandler will handle the specific logic based on its type
+        return true; // Let the drop area handle it
     }
     
     private bool HandlePlayAreaDrop(GameObject playArea)
     {
         Card cardComponent = GetComponent<Card>();
-        if (!cardComponent.IsPlayable())
-        {
-            return false;
-        }
+        if (!cardComponent.IsPlayable()) return false;
         
-        // Check if we can play using extensions
         var cardList = new List<Card> { cardComponent };
-        if (!SpellcastManager.CheckCanPlayCards(cardList))
-        {
-            return false;
-        }
+        if (!SpellcastManager.CheckCanPlayCards(cardList)) return false;
         
         // Return to position first
         ReturnToOriginalPosition();
         
         // Select if not selected
         if (!cardComponent.IsSelected)
-        {
             cardComponent.TrySelect();
-        }
         
-        // INTEGRATION: Use CoreExtensions for safer card play
-        bool playSuccess = CoreExtensions.TryWithManager<SpellcastManager, bool>(this, sm => 
+        // Process card play
+        return CoreExtensions.TryWithManager<SpellcastManager, bool>(this, sm => 
         {
-            sm.TryProcessCards(cardList);
+            sm.ProcessCardPlay(cardList);
             return true;
         });
-        
-        return playSuccess;
     }
     
     private bool HandleDiscardAreaDrop(GameObject discardArea)
     {
         Card cardComponent = GetComponent<Card>();
-        if (!cardComponent.IsPlayable())
-        {
-            return false;
-        }
+        if (!cardComponent.IsPlayable()) return false;
         
-        // Check if we can discard
-        if (!SpellcastManager.CheckCanDiscardCard(cardComponent))
-        {
-            return false;
-        }
+        if (!SpellcastManager.CheckCanDiscardCard(cardComponent)) return false;
         
-        // INTEGRATION: Use CoreExtensions for safer discard process
-        bool discardSuccess = CoreExtensions.TryWithManager<CombatManager, bool>(this, cm => 
+        return CoreExtensions.TryWithManager<CombatManager, bool>(this, cm => 
         {
             if (cm.CanSpendResource(ResourceType.Creativity, 1))
             {
@@ -298,8 +260,6 @@ public class CardDragHandler : MonoBehaviour, IBeginDragHandler, IDragHandler, I
             }
             return false;
         });
-        
-        return discardSuccess;
     }
 
     private void ReturnToOriginalPosition()
@@ -311,42 +271,13 @@ public class CardDragHandler : MonoBehaviour, IBeginDragHandler, IDragHandler, I
         // If card was originally in a slot, try to restore it
         if (wasInSlotBefore && originalSlotIndex >= 0)
         {
-            var parentDropArea = GetComponentInParent<DropAreaHandler>();
-            if (parentDropArea != null && parentDropArea.IsSlotSystemEnabled())
+            CoreExtensions.TryWithManager<CardSlotManager>(this, csm => 
             {
                 Card cardComponent = GetComponent<Card>();
-                parentDropArea.TryPlaceCardInSlot(cardComponent, originalSlotIndex);
+                csm.TryPlaceCardInSlot(cardComponent, originalSlotIndex);
                 Debug.Log($"[CardDragHandler] Restored card to original slot {originalSlotIndex + 1}");
-            }
+            });
         }
-    }
-    
-    // === UTILITY METHODS ===
-    
-    public bool IsCurrentlyInSlot()
-    {
-        var parentDropArea = GetComponentInParent<DropAreaHandler>();
-        if (parentDropArea != null && parentDropArea.IsSlotSystemEnabled())
-        {
-            Card cardComponent = GetComponent<Card>();
-            return parentDropArea.GetFilledSlots().Contains(cardComponent);
-        }
-        return false;
-    }
-    
-    public int GetCurrentSlotIndex()
-    {
-        var parentDropArea = GetComponentInParent<DropAreaHandler>();
-        if (parentDropArea != null && parentDropArea.IsSlotSystemEnabled())
-        {
-            Card cardComponent = GetComponent<Card>();
-            for (int i = 0; i < parentDropArea.CardSlots.Count; i++)
-            {
-                if (parentDropArea.CardSlots[i].occupyingCard == cardComponent)
-                    return i;
-            }
-        }
-        return -1;
     }
 
 #if UNITY_EDITOR
@@ -356,8 +287,6 @@ public class CardDragHandler : MonoBehaviour, IBeginDragHandler, IDragHandler, I
         Debug.Log($"[CardDragHandler] Card Debug Info:");
         Debug.Log($"  Was in slot before: {wasInSlotBefore}");
         Debug.Log($"  Original slot index: {originalSlotIndex}");
-        Debug.Log($"  Currently in slot: {IsCurrentlyInSlot()}");
-        Debug.Log($"  Current slot index: {GetCurrentSlotIndex()}");
         Debug.Log($"  Original parent: {originalParent?.name ?? "null"}");
         Debug.Log($"  Current parent: {transform.parent?.name ?? "null"}");
     }
