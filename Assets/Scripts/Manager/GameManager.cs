@@ -2,6 +2,7 @@ using UnityEngine;
 using System.Collections;
 using System.Collections.Generic;
 using System;
+using GameCore.Enums; // CRITICAL: SharedEnums import
 
 public class GameManager : SingletonBehaviour<GameManager>
 {
@@ -11,7 +12,7 @@ public class GameManager : SingletonBehaviour<GameManager>
         new ManagerInitConfig { managerType = ManagerType.Card, priority = 0 },
         new ManagerInitConfig { managerType = ManagerType.Deck, priority = 1 },
         new ManagerInitConfig { managerType = ManagerType.HandLayout, priority = 2 },
-        new ManagerInitConfig { managerType = ManagerType.CardSlot, priority = 3 }, // NEW
+        new ManagerInitConfig { managerType = ManagerType.CardSlot, priority = 3 }, // FIXED: Now defined
         new ManagerInitConfig { managerType = ManagerType.Spellcast, priority = 4 },
         new ManagerInitConfig { managerType = ManagerType.Combat, priority = 5 },
         new ManagerInitConfig { managerType = ManagerType.Enemy, priority = 6 },
@@ -92,7 +93,7 @@ public class GameManager : SingletonBehaviour<GameManager>
         RegisterManagerSafely(ManagerType.Card, ManagerExtensions.TryGetManager<CardManager>());
         RegisterManagerSafely(ManagerType.Deck, ManagerExtensions.TryGetManager<DeckManager>());
         RegisterManagerSafely(ManagerType.HandLayout, ManagerExtensions.TryGetManager<HandLayoutManager>());
-        RegisterManagerSafely(ManagerType.CardSlot, ManagerExtensions.TryGetManager<CardSlotManager>()); // NEW
+        RegisterManagerSafely(ManagerType.CardSlot, ManagerExtensions.TryGetManager<CardSlotManager>()); // FIXED: Now properly defined
         RegisterManagerSafely(ManagerType.Spellcast, ManagerExtensions.TryGetManager<SpellcastManager>());
         RegisterManagerSafely(ManagerType.Combat, ManagerExtensions.TryGetManager<CombatManager>());
         RegisterManagerSafely(ManagerType.Enemy, ManagerExtensions.TryGetManager<EnemyManager>());
@@ -102,15 +103,6 @@ public class GameManager : SingletonBehaviour<GameManager>
     }
     
     private void RegisterManagerSafely(ManagerType type, MonoBehaviour manager)
-    {
-        if (manager != null && manager is IGameManager gameManager)
-        {
-            _managers[type] = gameManager;
-            Debug.Log($"[GameManager] Registered {type} manager");
-        }
-    }
-    
-    private void RegisterManager(ManagerType type, MonoBehaviour manager)
     {
         if (manager != null && manager is IGameManager gameManager)
         {
@@ -177,7 +169,8 @@ public class GameManager : SingletonBehaviour<GameManager>
     public EnemyManager EnemyManager => GetManager<EnemyManager>(ManagerType.Enemy);
     public UnitManager UnitManager => GetManager<UnitManager>(ManagerType.Unit);
     public HandLayoutManager HandLayoutManager => GetManager<HandLayoutManager>(ManagerType.HandLayout);
-    
+    public CardSlotManager CardSlotManager => GetManager<CardSlotManager>(ManagerType.CardSlot); // FIXED: Added
+
 #if UNITY_EDITOR
     [ContextMenu("Force Reinitialize")]
     public void ForceReinitialize()
@@ -200,6 +193,24 @@ public class GameManager : SingletonBehaviour<GameManager>
             Debug.Log($"  {kvp.Key}: {(kvp.Value?.IsReady ?? false ? "Ready" : "Not Ready")}");
         }
     }
+    
+    [ContextMenu("Test Card Slot System")]
+    public void TestCardSlotSystem()
+    {
+        var csm = CardSlotManager;
+        if (csm != null)
+        {
+            Debug.Log($"[GameManager] CardSlotManager Test:");
+            Debug.Log($"  IsReady: {csm.IsReady}");
+            Debug.Log($"  IsEnabled: {csm.IsEnabled}");
+            Debug.Log($"  SlotCount: {csm.SlotCount}");
+            Debug.Log($"  FilledSlots: {csm.FilledSlotCount}");
+        }
+        else
+        {
+            Debug.LogError("[GameManager] CardSlotManager not found!");
+        }
+    }
 #endif
 }
 
@@ -211,6 +222,7 @@ public class ManagerInitConfig
     public bool enabled = true;
 }
 
+// FIXED: Updated ManagerType enum with CardSlot
 public enum ManagerType
 {
     Card,
@@ -220,7 +232,7 @@ public enum ManagerType
     Combat,
     Enemy,
     Unit,
-    CardSlot
+    CardSlot  // FIXED: Added CardSlot
 }
 
 // Interface für alle Manager

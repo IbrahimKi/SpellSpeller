@@ -585,17 +585,7 @@ MonoBehaviour:
   normalColor: {r: 1, g: 1, b: 1, a: 0.2}
   highlightColor: {r: 0, g: 0.7773733, b: 1, a: 0.3}
   invalidColor: {r: 1, g: 0, b: 0, a: 0.3}
-  slotOccupiedColor: {r: 0.5, g: 0.5, b: 1, a: 0.4}
-  enableCardSlots: 1
-  maxSlots: 4
-  slotPrefab: {fileID: 672039664977626560, guid: ea01107d7c0d4674988a132e0e20adb0, type: 3}
-  slotsContainer: {fileID: 498531368}
-  slotSpacing: 10
-  slotSize: {x: 120, y: 180}
-  emptySlotColor: {r: 0.8, g: 0.8, b: 0.8, a: 0.3}
-  filledSlotColor: {r: 0.2, g: 0.8, b: 0.2, a: 0.5}
-  showSlotNumbers: 1
-  slotNumberColor: {r: 1, g: 1, b: 1, a: 1}
+  areaType: 0
 --- !u!1 &658343545
 GameObject:
   m_ObjectHideFlags: 0
@@ -888,16 +878,10 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   slotContainer: {fileID: 498531368}
-  slotPrefab: {fileID: 672039664977626560, guid: ea01107d7c0d4674988a132e0e20adb0, type: 3}
-  slotAssets:
-  - {fileID: 11400000, guid: a462580f191bec24ba560c0d1acaf179, type: 2}
-  autoCreateSlots: 1
-  defaultSlotCount: 4
-  slotSpacing: 2
-  useHorizontalLayout: 1
+  maxSlots: 5
   enableSlotSystem: 1
-  clearSlotsOnTurnEnd: 0
-  playAllSlotsSequentially: 1
+  slotSpacing: 2
+  slotSize: {x: 120, y: 180}
 --- !u!1 &890039926
 GameObject:
   m_ObjectHideFlags: 0
@@ -1246,6 +1230,10 @@ PrefabInstance:
       propertyPath: m_AnchoredPosition.y
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 7403154498216824390, guid: caae495249123394caf3d5fcd2f26a1f, type: 3}
+      propertyPath: slotSystemPanel
+      value: 
+      objectReference: {fileID: 498531367}
     - target: {fileID: 7403154498216824390, guid: caae495249123394caf3d5fcd2f26a1f, type: 3}
       propertyPath: cardSlotDropArea
       value: 

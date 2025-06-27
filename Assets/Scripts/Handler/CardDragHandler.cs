@@ -18,7 +18,7 @@ public class CardDragHandler : MonoBehaviour, IBeginDragHandler, IDragHandler, I
     private Vector2 dragOffset;
     private Camera eventCamera;
     
-    // Slot system support
+    // FIXED: Slot system support - verwendet CardSlotManager
     private bool wasInSlotBefore = false;
     private int originalSlotIndex = -1;
     
@@ -61,7 +61,7 @@ public class CardDragHandler : MonoBehaviour, IBeginDragHandler, IDragHandler, I
         originalParent = transform.parent;
         originalSiblingIndex = transform.GetSiblingIndex();
         
-        // Check if card was in a slot before dragging
+        // FIXED: Check if card was in a slot before dragging using CardSlotManager
         CheckIfInSlot();
         
         eventCamera = eventData.pressEventCamera;
@@ -167,19 +167,21 @@ public class CardDragHandler : MonoBehaviour, IBeginDragHandler, IDragHandler, I
         OnCardDragEnd?.Invoke(gameObject);
     }
     
-    // === SLOT SYSTEM SUPPORT ===
+    // === SLOT SYSTEM SUPPORT - UPDATED for CardSlotManager ===
     
     private void CheckIfInSlot()
     {
         wasInSlotBefore = false;
         originalSlotIndex = -1;
         
-        // Check if parent has a CardSlotBehaviour
+        // FIXED: Check if parent has a CardSlotBehaviour
         var parentSlot = GetComponentInParent<CardSlotBehaviour>();
         if (parentSlot != null && parentSlot.OccupyingCard == GetComponent<Card>())
         {
             wasInSlotBefore = true;
             originalSlotIndex = parentSlot.SlotIndex;
+            
+            Debug.Log($"[CardDragHandler] Card was in slot {originalSlotIndex + 1}, removing from slot");
             
             // Clear the slot since we're dragging out
             parentSlot.RemoveCard(false);
@@ -196,7 +198,13 @@ public class CardDragHandler : MonoBehaviour, IBeginDragHandler, IDragHandler, I
             return false;
         }
         
-        return targetSlot.TryPlaceCard(cardComponent);
+        bool success = targetSlot.TryPlaceCard(cardComponent);
+        if (success)
+        {
+            Debug.Log($"[CardDragHandler] Card {cardComponent.GetCardName()} placed in slot {targetSlot.SlotIndex + 1}");
+        }
+        
+        return success;
     }
     
     private bool HandleDropAreaDrop(DropAreaHandler dropArea)
@@ -268,15 +276,27 @@ public class CardDragHandler : MonoBehaviour, IBeginDragHandler, IDragHandler, I
         transform.SetSiblingIndex(originalSiblingIndex);
         rectTransform.anchoredPosition = originalPosition;
         
-        // If card was originally in a slot, try to restore it
+        // FIXED: If card was originally in a slot, try to restore it using CardSlotManager
         if (wasInSlotBefore && originalSlotIndex >= 0)
         {
-            CoreExtensions.TryWithManager<CardSlotManager>(this, csm => 
+            if (CardSlotManager.HasInstance && CardSlotManager.Instance.IsReady)
             {
                 Card cardComponent = GetComponent<Card>();
-                csm.TryPlaceCardInSlot(cardComponent, originalSlotIndex);
-                Debug.Log($"[CardDragHandler] Restored card to original slot {originalSlotIndex + 1}");
-            });
+                bool restored = CardSlotManager.Instance.TryPlaceCardInSlot(cardComponent, originalSlotIndex);
+                
+                if (restored)
+                {
+                    Debug.Log($"[CardDragHandler] Restored card to original slot {originalSlotIndex + 1}");
+                }
+                else
+                {
+                    Debug.LogWarning($"[CardDragHandler] Failed to restore card to slot {originalSlotIndex + 1}");
+                }
+            }
+            else
+            {
+                Debug.LogWarning("[CardDragHandler] CardSlotManager not available for slot restoration");
+            }
         }
     }
 
@@ -289,6 +309,45 @@ public class CardDragHandler : MonoBehaviour, IBeginDragHandler, IDragHandler, I
         Debug.Log($"  Original slot index: {originalSlotIndex}");
         Debug.Log($"  Original parent: {originalParent?.name ?? "null"}");
         Debug.Log($"  Current parent: {transform.parent?.name ?? "null"}");
+        
+        // FIXED: Debug CardSlotManager status
+        if (CardSlotManager.HasInstance)
+        {
+            var csm = CardSlotManager.Instance;
+            Debug.Log($"  CardSlotManager available: {csm.IsReady}");
+            Debug.Log($"  Slot system enabled: {csm.IsEnabled}");
+            Debug.Log($"  Available slots: {csm.EmptySlotCount}/{csm.SlotCount}");
+        }
+        else
+        {
+            Debug.Log($"  CardSlotManager: Not available");
+        }
+    }
+    
+    [ContextMenu("Test Slot Placement")]
+    private void TestSlotPlacement()
+    {
+        if (!CardSlotManager.HasInstance)
+        {
+            Debug.LogError("[CardDragHandler] CardSlotManager not available for testing");
+            return;
+        }
+        
+        Card cardComponent = GetComponent<Card>();
+        if (cardComponent == null)
+        {
+            Debug.LogError("[CardDragHandler] No Card component found");
+            return;
+        }
+        
+        var csm = CardSlotManager.Instance;
+        bool placed = csm.TryPlaceCardInSlot(cardComponent);
+        
+        Debug.Log($"[CardDragHandler] Test slot placement: {(placed ? "Success" : "Failed")}");
+        if (placed)
+        {
+            Debug.Log($"  Card placed in first available slot");
+        }
     }
 #endif
 }
