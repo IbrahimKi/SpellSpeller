@@ -104,7 +104,30 @@ public class CardSlotBehaviour : MonoBehaviour, IDropHandler, IPointerEnterHandl
     
     public bool CanAcceptCard(Card card)
     {
-        return _isEnabled && IsEmpty && card != null && card.IsPlayable();
+        bool enabled = _isEnabled;
+        bool empty = IsEmpty;
+        bool cardValid = card != null;
+        bool cardPlayable = card != null && card.IsPlayable();
+    
+        // FIXED: Detailliertes Debugging
+        Debug.Log($"[CardSlotBehaviour] CanAcceptCard check for slot {slotIndex + 1}:");
+        Debug.Log($"  _isEnabled: {enabled}");
+        Debug.Log($"  IsEmpty: {empty}");
+        Debug.Log($"  card != null: {cardValid}");
+        Debug.Log($"  card.IsPlayable(): {cardPlayable}");
+    
+        if (card != null)
+        {
+            Debug.Log($"  Card name: {card.GetCardName()}");
+            Debug.Log($"  Card state: {card.CurrentState}");
+            Debug.Log($"  Card interactable: {card.IsInteractable}");
+            Debug.Log($"  Card valid: {card.IsValid()}");
+        }
+    
+        bool result = enabled && empty && cardValid && cardPlayable;
+        Debug.Log($"  Final result: {result}");
+    
+        return result;
     }
     
     private void PlaceCard(Card card)
