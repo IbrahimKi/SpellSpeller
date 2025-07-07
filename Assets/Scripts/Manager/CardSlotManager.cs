@@ -15,22 +15,19 @@ public class CardSlotManager : SingletonBehaviour<CardSlotManager>, IGameManager
     [SerializeField] private float slotSpacing = 10f;
     [SerializeField] private Vector2 slotSize = new Vector2(120f, 180f);
     
-    // Runtime data
     private List<CardSlotBehaviour> _slots = new List<CardSlotBehaviour>();
     private bool _isInitialized = false;
     
-    // Events
     public static event System.Action<List<Card>> OnSlotSequenceChanged;
     public static event System.Action<CardSlotBehaviour, Card> OnCardPlacedInSlot;
     public static event System.Action<CardSlotBehaviour, Card> OnCardRemovedFromSlot;
     
-    // Properties
     public bool IsEnabled => enableSlotSystem;
     public bool IsReady => _isInitialized;
     public List<CardSlotBehaviour> Slots => _slots;
     public int SlotCount => _slots.Count;
-    public int FilledSlotCount => _slots.Count(s => s.IsFilled);
-    public int EmptySlotCount => _slots.Count(s => s.IsEmpty);
+    public int FilledSlotCount => _slots.Count(s => s != null && s.IsFilled);
+    public int EmptySlotCount => _slots.Count(s => s != null && s.IsEmpty);
     public bool HasEmptySlots => EmptySlotCount > 0;
     
     protected override void OnAwakeInitialize()
@@ -49,47 +46,68 @@ public class CardSlotManager : SingletonBehaviour<CardSlotManager>, IGameManager
         CleanupEventListeners();
     }
     
-    // === INITIALIZATION ===
-    
     private void SetupSlotContainer()
     {
         if (slotContainer == null)
         {
-            // Suche nach existierendem Container
-            var existingContainer = transform.Find("CardSlotContainer") ?? 
-                                  FindObjectOfType<Transform>().Find("CardSlotContainer");
-            
-            if (existingContainer != null)
-            {
-                slotContainer = existingContainer;
-                Debug.Log("[CardSlotManager] Found existing slot container");
-                return;
-            }
-            
-            // Erstelle neuen Container
-            GameObject container = new GameObject("CardSlotContainer");
-            container.transform.SetParent(transform, false);
-            slotContainer = container.transform;
-            
-            // Layout hinzufügen
-            var layoutGroup = container.AddComponent<UnityEngine.UI.HorizontalLayoutGroup>();
-            layoutGroup.spacing = slotSpacing;
-            layoutGroup.childAlignment = TextAnchor.MiddleCenter;
-            layoutGroup.childControlWidth = false;
-            layoutGroup.childControlHeight = false;
-            
-            Debug.Log("[CardSlotManager] Created new slot container");
+            slotContainer = FindSlotContainerInScene();
+            if (slotContainer == null)
+                CreateNewSlotContainer();
         }
+        
+        Debug.Log($"[CardSlotManager] Using slot container: {slotContainer.name}");
+    }
+    
+    private Transform FindSlotContainerInScene()
+    {
+        var possibleNames = new[] { "CardSlotArea", "SlotContainer", "Card Slot Container", "Slots" };
+        
+        foreach (var name in possibleNames)
+        {
+            var found = GameObject.Find(name);
+            if (found != null)
+            {
+                Debug.Log($"[CardSlotManager] Found existing container: {name}");
+                return found.transform;
+            }
+        }
+        
+        var allRectTransforms = FindObjectsOfType<RectTransform>();
+        foreach (var rect in allRectTransforms)
+        {
+            if (rect.GetComponentsInChildren<CardSlotBehaviour>().Length > 0)
+            {
+                Debug.Log($"[CardSlotManager] Found container with slots: {rect.name}");
+                return rect;
+            }
+        }
+        
+        return null;
+    }
+    
+    private void CreateNewSlotContainer()
+    {
+        GameObject container = new GameObject("CardSlotContainer");
+        container.transform.SetParent(transform, false);
+        slotContainer = container.transform;
+        
+        var layoutGroup = container.AddComponent<UnityEngine.UI.HorizontalLayoutGroup>();
+        layoutGroup.spacing = slotSpacing;
+        layoutGroup.childAlignment = TextAnchor.MiddleCenter;
+        layoutGroup.childControlWidth = false;
+        layoutGroup.childControlHeight = false;
+        
+        Debug.Log("[CardSlotManager] Created new slot container");
     }
     
     private void InitializeSlots()
     {
         if (_isInitialized) return;
         
-        // Bereinige existierende Slots falls vorhanden
+        Debug.Log("[CardSlotManager] Initializing slots...");
+        
         ClearExistingSlots();
         
-        // Überprüfe ob bereits Slots im Container existieren
         var existingSlots = slotContainer.GetComponentsInChildren<CardSlotBehaviour>();
         
         if (existingSlots.Length > 0)
@@ -103,8 +121,27 @@ public class CardSlotManager : SingletonBehaviour<CardSlotManager>, IGameManager
             CreateNewSlots();
         }
         
+        ValidateAllSlots();
+        
         _isInitialized = true;
-        Debug.Log($"[CardSlotManager] Initialized with {_slots.Count} slots");
+        Debug.Log($"[CardSlotManager] Initialized with {_slots.Count} valid slots");
+    }
+    
+    private void ValidateAllSlots()
+    {
+        for (int i = _slots.Count - 1; i >= 0; i--)
+        {
+            if (_slots[i] == null || _slots[i].gameObject == null)
+            {
+                Debug.LogWarning($"[CardSlotManager] Removing null slot at index {i}");
+                _slots.RemoveAt(i);
+            }
+        }
+        
+        for (int i = 0; i < _slots.Count; i++)
+        {
+            _slots[i].SetSlotIndex(i);
+        }
     }
     
     private void RegisterExistingSlots(CardSlotBehaviour[] existingSlots)
@@ -112,14 +149,21 @@ public class CardSlotManager : SingletonBehaviour<CardSlotManager>, IGameManager
         for (int i = 0; i < existingSlots.Length && i < maxSlots; i++)
         {
             var slot = existingSlots[i];
-            slot.SetSlotIndex(i);
-            _slots.Add(slot);
+            if (slot != null)
+            {
+                slot.SetSlotIndex(i);
+                _slots.Add(slot);
+                Debug.Log($"[CardSlotManager] Registered existing slot {i + 1}");
+            }
         }
         
-        // Entferne überschüssige Slots
         for (int i = maxSlots; i < existingSlots.Length; i++)
         {
-            DestroyImmediate(existingSlots[i].gameObject);
+            if (existingSlots[i] != null)
+            {
+                DestroyImmediate(existingSlots[i].gameObject);
+                Debug.Log($"[CardSlotManager] Removed excess slot {i + 1}");
+            }
         }
     }
     
@@ -136,19 +180,39 @@ public class CardSlotManager : SingletonBehaviour<CardSlotManager>, IGameManager
         GameObject slotObject = new GameObject($"Card Slot {index + 1}");
         slotObject.transform.SetParent(slotContainer, false);
         
-        // RectTransform Setup
         var rectTransform = slotObject.AddComponent<RectTransform>();
         rectTransform.sizeDelta = slotSize;
         
-        // Image Component
         var image = slotObject.AddComponent<UnityEngine.UI.Image>();
         image.color = new Color(0.8f, 0.8f, 0.8f, 0.3f);
         
-        // Slot Behaviour
+        CreateSlotNumberText(slotObject, index);
+        
         var slotBehaviour = slotObject.AddComponent<CardSlotBehaviour>();
         slotBehaviour.SetSlotIndex(index);
+        slotBehaviour.SetEnabled(enableSlotSystem);
         
         _slots.Add(slotBehaviour);
+        Debug.Log($"[CardSlotManager] Created slot {index + 1}");
+    }
+    
+    private void CreateSlotNumberText(GameObject slotObject, int index)
+    {
+        GameObject textObject = new GameObject("Slot Number");
+        textObject.transform.SetParent(slotObject.transform, false);
+        
+        var textRect = textObject.AddComponent<RectTransform>();
+        textRect.anchorMin = Vector2.zero;
+        textRect.anchorMax = Vector2.one;
+        textRect.offsetMin = Vector2.zero;
+        textRect.offsetMax = Vector2.zero;
+        
+        var textComponent = textObject.AddComponent<TMPro.TextMeshProUGUI>();
+        textComponent.text = (index + 1).ToString();
+        textComponent.fontSize = 24;
+        textComponent.color = Color.white;
+        textComponent.alignment = TMPro.TextAlignmentOptions.Center;
+        textComponent.raycastTarget = false;
     }
     
     private void ClearExistingSlots()
@@ -161,68 +225,104 @@ public class CardSlotManager : SingletonBehaviour<CardSlotManager>, IGameManager
         _slots.Clear();
     }
     
-    // === EVENT MANAGEMENT ===
-    
     private void SetupEventListeners()
     {
         CardSlotBehaviour.OnCardPlaced += HandleCardPlaced;
         CardSlotBehaviour.OnCardRemoved += HandleCardRemoved;
+        CardSlotBehaviour.OnSlotStateChanged += HandleSlotStateChanged;
     }
     
     private void CleanupEventListeners()
     {
         CardSlotBehaviour.OnCardPlaced -= HandleCardPlaced;
         CardSlotBehaviour.OnCardRemoved -= HandleCardRemoved;
+        CardSlotBehaviour.OnSlotStateChanged -= HandleSlotStateChanged;
     }
     
     private void HandleCardPlaced(CardSlotBehaviour slot, Card card)
     {
+        Debug.Log($"[CardSlotManager] Card {card.GetCardName()} placed in slot {slot.SlotIndex + 1}");
         OnCardPlacedInSlot?.Invoke(slot, card);
         NotifySlotSequenceChanged();
     }
     
     private void HandleCardRemoved(CardSlotBehaviour slot, Card card)
     {
+        Debug.Log($"[CardSlotManager] Card {card.GetCardName()} removed from slot {slot.SlotIndex + 1}");
         OnCardRemovedFromSlot?.Invoke(slot, card);
         NotifySlotSequenceChanged();
     }
     
-    // === SLOT MANAGEMENT ===
+    private void HandleSlotStateChanged(CardSlotBehaviour slot)
+    {
+        // Optional: Additional state change handling
+    }
     
     public bool TryPlaceCardInSlot(Card card, int slotIndex = -1)
     {
-        if (!enableSlotSystem || card == null) return false;
+        if (!enableSlotSystem || card == null || !card.IsPlayable()) 
+        {
+            Debug.LogWarning($"[CardSlotManager] Cannot place card: system={enableSlotSystem}, card={card?.GetCardName()}, playable={card?.IsPlayable()}");
+            return false;
+        }
         
         CardSlotBehaviour targetSlot = null;
         
         if (slotIndex >= 0 && slotIndex < _slots.Count)
         {
             targetSlot = _slots[slotIndex];
+            Debug.Log($"[CardSlotManager] Trying specific slot {slotIndex + 1}");
         }
         else
         {
-            targetSlot = _slots.FirstOrDefault(s => s.IsEmpty && s.CanAcceptCard(card));
+            targetSlot = _slots.FirstOrDefault(s => s != null && s.IsEmpty && s.CanAcceptCard(card));
+            if (targetSlot != null)
+                Debug.Log($"[CardSlotManager] Found available slot {targetSlot.SlotIndex + 1}");
         }
         
-        return targetSlot?.TryPlaceCard(card) ?? false;
+        if (targetSlot == null)
+        {
+            Debug.LogWarning("[CardSlotManager] No available slot found");
+            return false;
+        }
+        
+        bool success = targetSlot.TryPlaceCard(card);
+        Debug.Log($"[CardSlotManager] Place card result: {success}");
+        return success;
     }
     
     public Card RemoveCardFromSlot(int slotIndex)
     {
-        if (slotIndex < 0 || slotIndex >= _slots.Count) return null;
+        if (slotIndex < 0 || slotIndex >= _slots.Count || _slots[slotIndex] == null) 
+        {
+            Debug.LogWarning($"[CardSlotManager] Invalid slot index: {slotIndex}");
+            return null;
+        }
+        
         return _slots[slotIndex].RemoveCard();
     }
     
     public void ClearAllSlots()
     {
+        Debug.Log("[CardSlotManager] Clearing all slots...");
+        
+        int clearedCount = 0;
         foreach (var slot in _slots)
-            slot.RemoveCard();
+        {
+            if (slot != null && slot.IsFilled)
+            {
+                slot.RemoveCard();
+                clearedCount++;
+            }
+        }
+        
+        Debug.Log($"[CardSlotManager] Cleared {clearedCount} slots");
     }
     
     public List<Card> GetSlotSequence()
     {
         return _slots
-            .Where(s => s.IsFilled)
+            .Where(s => s != null && s.IsFilled && s.OccupyingCard != null)
             .OrderBy(s => s.SlotIndex)
             .Select(s => s.OccupyingCard)
             .ToList();
@@ -231,31 +331,59 @@ public class CardSlotManager : SingletonBehaviour<CardSlotManager>, IGameManager
     public bool PlayAllSlots()
     {
         var sequence = GetSlotSequence();
-        if (sequence.Count == 0) return false;
+        if (sequence.Count == 0) 
+        {
+            Debug.LogWarning("[CardSlotManager] No cards in slots to play");
+            return false;
+        }
         
-        return CoreExtensions.TryWithManager<SpellcastManager>(this, sm => 
+        Debug.Log($"[CardSlotManager] Playing {sequence.Count} cards from slots");
+        
+        bool success = CoreExtensions.TryWithManager<SpellcastManager>(this, sm => 
         {
             sm.ProcessCardPlay(sequence);
-            ClearAllSlots();
         });
+        
+        if (success)
+        {
+            ClearAllSlots();
+            Debug.Log("[CardSlotManager] Successfully played and cleared slots");
+        }
+        else
+        {
+            Debug.LogError("[CardSlotManager] Failed to process card play");
+        }
+        
+        return success;
     }
-    
-    // === UTILITY ===
     
     public string GetSlotLetterSequence()
     {
-        return GetSlotSequence().GetLetterSequence();
+        var sequence = GetSlotSequence();
+        if (sequence.Count == 0) return "";
+        
+        return sequence.GetLetterSequence();
     }
     
     public bool CanPlaySlotSequence()
     {
         var sequence = GetSlotSequence();
-        return sequence.Count > 0 && SpellcastManager.CheckCanPlayCards(sequence);
+        if (sequence.Count == 0) return false;
+        
+        bool isPlayerTurn = CoreExtensions.TryWithManager<CombatManager, bool>(this, cm => cm.IsPlayerTurn);
+        bool canPlayCards = SpellcastManager.CheckCanPlayCards(sequence);
+        
+        Debug.Log($"[CardSlotManager] Can play check: playerTurn={isPlayerTurn}, canPlay={canPlayCards}, cards={sequence.Count}");
+        
+        return isPlayerTurn && canPlayCards;
     }
     
     private void NotifySlotSequenceChanged()
     {
-        OnSlotSequenceChanged?.Invoke(GetSlotSequence());
+        var sequence = GetSlotSequence();
+        OnSlotSequenceChanged?.Invoke(sequence);
+        
+        Debug.Log($"[CardSlotManager] Sequence changed: {sequence.Count} cards, letters='{GetSlotLetterSequence()}'");
     }
     
     public void SetEnabled(bool enabled)
@@ -263,10 +391,37 @@ public class CardSlotManager : SingletonBehaviour<CardSlotManager>, IGameManager
         enableSlotSystem = enabled;
         
         foreach (var slot in _slots)
-            slot.SetEnabled(enabled);
+        {
+            if (slot != null)
+                slot.SetEnabled(enabled);
+        }
         
         if (slotContainer != null)
             slotContainer.gameObject.SetActive(enabled);
+            
+        Debug.Log($"[CardSlotManager] System {(enabled ? "enabled" : "disabled")}");
+    }
+    
+    public void ValidateSystem()
+    {
+        Debug.Log($"[CardSlotManager] System Validation:");
+        Debug.Log($"  Initialized: {_isInitialized}");
+        Debug.Log($"  Enabled: {enableSlotSystem}");
+        Debug.Log($"  Container: {slotContainer?.name ?? "null"}");
+        Debug.Log($"  Total Slots: {_slots.Count}");
+        Debug.Log($"  Filled Slots: {FilledSlotCount}");
+        Debug.Log($"  Empty Slots: {EmptySlotCount}");
+        Debug.Log($"  Current Sequence: '{GetSlotLetterSequence()}'");
+        Debug.Log($"  Can Play: {CanPlaySlotSequence()}");
+        
+        for (int i = 0; i < _slots.Count; i++)
+        {
+            var slot = _slots[i];
+            if (slot != null)
+                Debug.Log($"    Slot {i + 1}: {slot.GetSlotInfo()}");
+            else
+                Debug.LogWarning($"    Slot {i + 1}: NULL");
+        }
     }
 
 #if UNITY_EDITOR
@@ -283,15 +438,33 @@ public class CardSlotManager : SingletonBehaviour<CardSlotManager>, IGameManager
         ClearAllSlots();
     }
     
-    [ContextMenu("Log Slot Status")]
-    private void LogSlotStatus()
+    [ContextMenu("Validate System")]
+    private void EditorValidateSystem()
     {
-        Debug.Log($"[CardSlotManager] Status: {FilledSlotCount}/{SlotCount} slots filled");
-        Debug.Log($"  Sequence: '{GetSlotLetterSequence()}'");
-        Debug.Log($"  Can Play: {CanPlaySlotSequence()}");
+        ValidateSystem();
+    }
+    
+    [ContextMenu("Test Slot Placement")]
+    private void TestSlotPlacement()
+    {
+        Debug.Log("[CardSlotManager] Testing slot placement system...");
         
-        for (int i = 0; i < _slots.Count; i++)
-            Debug.Log($"    Slot {i + 1}: {_slots[i].GetSlotInfo()}");
+        if (!CardManager.HasInstance)
+        {
+            Debug.LogError("CardManager not available for testing");
+            return;
+        }
+        
+        var handCards = CardManager.Instance.GetHandCards();
+        if (handCards.Count == 0)
+        {
+            Debug.LogWarning("No cards in hand to test with");
+            return;
+        }
+        
+        var testCard = handCards.First();
+        bool placed = TryPlaceCardInSlot(testCard);
+        Debug.Log($"Test placement result: {placed}");
     }
 #endif
 }

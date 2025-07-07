@@ -12,7 +12,7 @@ public class GameManager : SingletonBehaviour<GameManager>
         new ManagerInitConfig { managerType = ManagerType.Card, priority = 0 },
         new ManagerInitConfig { managerType = ManagerType.Deck, priority = 1 },
         new ManagerInitConfig { managerType = ManagerType.HandLayout, priority = 2 },
-        new ManagerInitConfig { managerType = ManagerType.CardSlot, priority = 3 }, // FIXED: Now defined
+        new ManagerInitConfig { managerType = ManagerType.CardSlot, priority = 3 }, // DIESE ZEILE HINZUFÜGEN
         new ManagerInitConfig { managerType = ManagerType.Spellcast, priority = 4 },
         new ManagerInitConfig { managerType = ManagerType.Combat, priority = 5 },
         new ManagerInitConfig { managerType = ManagerType.Enemy, priority = 6 },
@@ -93,12 +93,12 @@ public class GameManager : SingletonBehaviour<GameManager>
         RegisterManagerSafely(ManagerType.Card, ManagerExtensions.TryGetManager<CardManager>());
         RegisterManagerSafely(ManagerType.Deck, ManagerExtensions.TryGetManager<DeckManager>());
         RegisterManagerSafely(ManagerType.HandLayout, ManagerExtensions.TryGetManager<HandLayoutManager>());
-        RegisterManagerSafely(ManagerType.CardSlot, ManagerExtensions.TryGetManager<CardSlotManager>()); // FIXED: Now properly defined
+        RegisterManagerSafely(ManagerType.CardSlot, ManagerExtensions.TryGetManager<CardSlotManager>()); // DIESE ZEILE HINZUFÜGEN
         RegisterManagerSafely(ManagerType.Spellcast, ManagerExtensions.TryGetManager<SpellcastManager>());
         RegisterManagerSafely(ManagerType.Combat, ManagerExtensions.TryGetManager<CombatManager>());
         RegisterManagerSafely(ManagerType.Enemy, ManagerExtensions.TryGetManager<EnemyManager>());
         RegisterManagerSafely(ManagerType.Unit, ManagerExtensions.TryGetManager<UnitManager>());
-        
+    
         Debug.Log($"[GameManager] Discovered {_managers.Count} managers");
     }
     
@@ -170,6 +170,8 @@ public class GameManager : SingletonBehaviour<GameManager>
     public UnitManager UnitManager => GetManager<UnitManager>(ManagerType.Unit);
     public HandLayoutManager HandLayoutManager => GetManager<HandLayoutManager>(ManagerType.HandLayout);
     public CardSlotManager CardSlotManager => GetManager<CardSlotManager>(ManagerType.CardSlot); // FIXED: Added
+    
+    
 
 #if UNITY_EDITOR
     [ContextMenu("Force Reinitialize")]

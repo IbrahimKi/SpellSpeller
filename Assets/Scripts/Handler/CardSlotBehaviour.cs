@@ -56,20 +56,17 @@ public class CardSlotBehaviour : MonoBehaviour, IDropHandler, IPointerEnterHandl
             
         if (cardContainer == null)
         {
-            var containerGO = new GameObject("Card Container");
-            cardContainer = containerGO.AddComponent<RectTransform>();
-            cardContainer.SetParent(transform, false);
-            cardContainer.anchorMin = Vector2.zero;
-            cardContainer.anchorMax = Vector2.one;
-            cardContainer.offsetMin = Vector2.zero;
-            cardContainer.offsetMax = Vector2.zero;
+            cardContainer = transform as RectTransform;
+            var existingContainer = transform.Find("Card Container");
+            if (existingContainer != null)
+                cardContainer = existingContainer as RectTransform;
         }
         
         if (slotNumberText == null)
         {
-            var numberObj = cardContainer.Find("Slot Number");
+            var numberObj = GetComponentInChildren<TextMeshProUGUI>();
             if (numberObj != null)
-                slotNumberText = numberObj.GetComponent<TextMeshProUGUI>();
+                slotNumberText = numberObj;
         }
     }
     
@@ -79,13 +76,12 @@ public class CardSlotBehaviour : MonoBehaviour, IDropHandler, IPointerEnterHandl
             slotNumberText.text = (slotIndex + 1).ToString();
     }
     
-    // === SLOT MANAGEMENT ===
-    
     public void SetSlotIndex(int index)
     {
         slotIndex = index;
         if (slotNumberText != null)
             slotNumberText.text = (index + 1).ToString();
+        gameObject.name = $"Card Slot {index + 1}";
     }
     
     public void SetEnabled(bool enabled)
@@ -96,7 +92,11 @@ public class CardSlotBehaviour : MonoBehaviour, IDropHandler, IPointerEnterHandl
     
     public bool TryPlaceCard(Card card)
     {
-        if (!CanAcceptCard(card)) return false;
+        if (!CanAcceptCard(card)) 
+        {
+            Debug.LogWarning($"[CardSlotBehaviour] Cannot accept card {card?.GetCardName()} in slot {slotIndex + 1}");
+            return false;
+        }
         
         PlaceCard(card);
         return true;
@@ -111,30 +111,46 @@ public class CardSlotBehaviour : MonoBehaviour, IDropHandler, IPointerEnterHandl
     {
         if (card == null) return;
         
-        // Remove from previous location
         RemoveCard(false);
-        
-        // Set new card
         _occupyingCard = card;
-        
-        // Position card in slot
-        card.transform.SetParent(cardContainer, false);
-        var cardRect = card.GetComponent<RectTransform>();
-        if (cardRect != null)
-        {
-            cardRect.anchoredPosition = Vector2.zero;
-            cardRect.localScale = Vector3.one * 0.85f; // Slightly smaller to fit in slot
-            cardRect.anchorMin = new Vector2(0.5f, 0.5f);
-            cardRect.anchorMax = new Vector2(0.5f, 0.5f);
-            cardRect.pivot = new Vector2(0.5f, 0.5f);
-        }
-        
+        SetupCardInSlot(card);
         UpdateVisuals();
         
         OnCardPlaced?.Invoke(this, card);
         OnSlotStateChanged?.Invoke(this);
         
         Debug.Log($"[CardSlotBehaviour] Card {card.GetCardName()} placed in slot {slotIndex + 1}");
+    }
+    
+    private void SetupCardInSlot(Card card)
+    {
+        var cardTransform = card.transform;
+        var cardRect = card.GetComponent<RectTransform>();
+        
+        if (cardRect == null)
+        {
+            Debug.LogError($"[CardSlotBehaviour] Card {card.GetCardName()} has no RectTransform!");
+            return;
+        }
+        
+        cardTransform.SetParent(cardContainer, false);
+        
+        cardRect.anchorMin = Vector2.one * 0.5f;
+        cardRect.anchorMax = Vector2.one * 0.5f;
+        cardRect.pivot = Vector2.one * 0.5f;
+        cardRect.anchoredPosition = Vector2.zero;
+        
+        Vector2 slotSize = (transform as RectTransform).sizeDelta;
+        Vector2 cardSize = cardRect.sizeDelta;
+        
+        float scaleX = (slotSize.x * 0.9f) / cardSize.x;
+        float scaleY = (slotSize.y * 0.9f) / cardSize.y;
+        float uniformScale = Mathf.Min(scaleX, scaleY, 1f);
+        
+        cardRect.localScale = Vector3.one * uniformScale;
+        cardTransform.SetAsLastSibling();
+        
+        Debug.Log($"[CardSlotBehaviour] Card positioned: scale={uniformScale:F2}");
     }
     
     public Card RemoveCard(bool triggerEvents = true)
@@ -153,11 +169,8 @@ public class CardSlotBehaviour : MonoBehaviour, IDropHandler, IPointerEnterHandl
         }
         
         Debug.Log($"[CardSlotBehaviour] Card {removedCard.GetCardName()} removed from slot {slotIndex + 1}");
-        
         return removedCard;
     }
-    
-    // === VISUAL UPDATES ===
     
     private void UpdateVisuals()
     {
@@ -175,25 +188,30 @@ public class CardSlotBehaviour : MonoBehaviour, IDropHandler, IPointerEnterHandl
             targetColor = emptyColor;
         
         slotImage.color = targetColor;
+        
+        if (slotNumberText != null)
+            slotNumberText.gameObject.SetActive(IsEmpty);
     }
-    
-    // === UI EVENT HANDLERS ===
     
     public void OnDrop(PointerEventData eventData)
     {
-        if (!_isEnabled) return;
+        if (!_isEnabled) 
+        {
+            Debug.LogWarning($"[CardSlotBehaviour] Slot {slotIndex + 1} is disabled");
+            return;
+        }
         
         var draggedCard = eventData.pointerDrag?.GetComponent<Card>();
         if (draggedCard != null)
         {
-            TryPlaceCard(draggedCard);
+            bool success = TryPlaceCard(draggedCard);
+            Debug.Log($"[CardSlotBehaviour] Drop attempt: {(success ? "Success" : "Failed")}");
         }
     }
     
     public void OnPointerEnter(PointerEventData eventData)
     {
         if (!_isEnabled) return;
-        
         _isHighlighted = true;
         UpdateVisuals();
     }
@@ -204,11 +222,29 @@ public class CardSlotBehaviour : MonoBehaviour, IDropHandler, IPointerEnterHandl
         UpdateVisuals();
     }
     
-    // === UTILITY ===
-    
     public string GetSlotInfo()
     {
         return $"Slot {slotIndex + 1}: {(IsFilled ? _occupyingCard.GetCardName() : "Empty")} (Enabled: {_isEnabled})";
+    }
+    
+    public void ForceRefreshVisuals()
+    {
+        UpdateVisuals();
+    }
+    
+    public bool ValidateCard()
+    {
+        if (_occupyingCard == null) return true;
+        
+        bool isCardValid = _occupyingCard.IsValid();
+        if (!isCardValid)
+        {
+            Debug.LogWarning($"[CardSlotBehaviour] Invalid card detected in slot {slotIndex + 1}, removing...");
+            RemoveCard();
+            return false;
+        }
+        
+        return true;
     }
 
 #if UNITY_EDITOR
@@ -216,6 +252,32 @@ public class CardSlotBehaviour : MonoBehaviour, IDropHandler, IPointerEnterHandl
     private void DebugSlotInfo()
     {
         Debug.Log($"[CardSlotBehaviour] {GetSlotInfo()}");
+        Debug.Log($"  CardContainer: {cardContainer?.name}");
+        Debug.Log($"  SlotImage: {slotImage?.name}");
+        Debug.Log($"  NumberText: {slotNumberText?.text}");
+        Debug.Log($"  Enabled: {_isEnabled}, Highlighted: {_isHighlighted}");
+        
+        if (_occupyingCard != null)
+        {
+            var cardRect = _occupyingCard.GetComponent<RectTransform>();
+            Debug.Log($"  Card Position: {cardRect.anchoredPosition}");
+            Debug.Log($"  Card Scale: {cardRect.localScale}");
+        }
+    }
+    
+    [ContextMenu("Force Remove Card")]
+    private void ForceRemoveCard()
+    {
+        RemoveCard();
+    }
+    
+    [ContextMenu("Test Card Placement")]
+    private void TestCardPlacement()
+    {
+        Debug.Log($"[CardSlotBehaviour] Testing slot {slotIndex + 1}:");
+        Debug.Log($"  IsEmpty: {IsEmpty}");
+        Debug.Log($"  IsEnabled: {IsEnabled}");
+        Debug.Log($"  CanAcceptCard: {CanAcceptCard(null)}");
     }
 #endif
 }
