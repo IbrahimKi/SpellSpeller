@@ -1,30 +1,25 @@
 using UnityEngine;
-using System.Collections.Generic;
-using System;
 using System.Collections;
-using System.Linq;
-using GameCore.Enums; // CRITICAL: SharedEnums import
-using GameCore.Data; // CRITICAL: SharedData import
+using System;
 
 [System.Serializable]
 public class Resource
 {
-    [SerializeField] private int _currentValue;
-    [SerializeField] private int _maxValue;
+    [SerializeField] private int _current;
+    [SerializeField] private int _max;
     
-    public int CurrentValue => _currentValue;
-    public int MaxValue => _maxValue;
-    public float Percentage => _maxValue > 0 ? (float)_currentValue / _maxValue : 0f;
+    public int CurrentValue => _current;
+    public int MaxValue => _max;
+    public float Percentage => _max > 0 ? (float)_current / _max : 0f;
     
-    public Resource(int startValue, int maxValue = -1)
+    public Resource(int start, int max = -1)
     {
-        _currentValue = startValue;
-        _maxValue = maxValue > 0 ? maxValue : startValue;
+        _current = start;
+        _max = max > 0 ? max : start;
     }
     
-    public void SetCurrent(int value) => _currentValue = Mathf.Clamp(value, 0, _maxValue);
-    public void ModifyBy(int delta) => SetCurrent(_currentValue + delta);
-    public void Reset() => _currentValue = _maxValue;
+    public void ModifyBy(int delta) => _current = Mathf.Clamp(_current + delta, 0, _max);
+    public void Reset() => _current = _max;
 }
 
 public class CombatManager : SingletonBehaviour<CombatManager>, IGameManager
@@ -34,85 +29,44 @@ public class CombatManager : SingletonBehaviour<CombatManager>, IGameManager
     [SerializeField] private int startCreativity = 3;
     [SerializeField] private int maxCreativity = 10;
     
-    [Header("Combat Settings")]
+    [Header("Combat")]
     [SerializeField] private int startingHandSize = 5;
-    [SerializeField] private float turnTransitionDelay = 0.5f;
     
     // Resources
     private Resource _life;
     private Resource _creativity;
     
-    // Turn state
+    // State
     private int _currentTurn = 1;
     private TurnPhase _currentPhase = TurnPhase.PlayerTurn;
-    private bool _isProcessingTurn = false;
-    private bool _isInCombat = false;
-    private bool _isReady = false;
+    private bool _isProcessingTurn;
+    private bool _isInCombat;
     
-    // Targeting
-    private List<EntityBehaviour> _currentTargets = new List<EntityBehaviour>();
+    public bool IsReady { get; private set; }
     
     // Events
     public static event Action<Resource> OnLifeChanged;
     public static event Action<Resource> OnCreativityChanged;
-    public static event Action<int> OnDeckSizeChanged;
     public static event Action<int> OnTurnChanged;
     public static event Action<TurnPhase> OnTurnPhaseChanged;
     public static event Action OnCombatStarted;
-    public static event Action OnCombatEnded;
     public static event Action OnPlayerDeath;
-    public static event Action<int> OnPlayerTurnStarted;
-    public static event Action<int> OnPlayerTurnEnded;
-    public static event Action<int> OnEnemyTurnStarted;
     
     // Properties
-    public bool IsReady => _isReady;
-    public bool IsInCombat => _isInCombat;
-    public bool IsProcessingTurn => _isProcessingTurn;
     public Resource Life => _life;
     public Resource Creativity => _creativity;
     public int CurrentTurn => _currentTurn;
     public TurnPhase CurrentPhase => _currentPhase;
-    public int DeckSize => CoreExtensions.TryWithManager<DeckManager, int>(this, dm => dm.DeckSize);
-    public int DiscardSize => CoreExtensions.TryWithManager<DeckManager, int>(this, dm => dm.DiscardSize);
-    public IReadOnlyList<EntityBehaviour> CurrentTargets => _currentTargets.AsReadOnly();
-    public bool CanEndTurn => _isInCombat && _currentPhase == TurnPhase.PlayerTurn && !_isProcessingTurn;
+    public bool IsInCombat => _isInCombat;
+    public bool IsProcessingTurn => _isProcessingTurn;
     public bool IsPlayerTurn => _currentPhase == TurnPhase.PlayerTurn;
+    public bool CanEndTurn => _isInCombat && IsPlayerTurn && !_isProcessingTurn;
     
     protected override void OnAwakeInitialize()
     {
-        InitializeResources();
-        _currentPhase = TurnPhase.PlayerTurn;
-        _isReady = true;
-    }
-    
-    private void OnEnable()
-    {
-        if (EnemyManager.HasInstance)
-        {
-            EnemyManager.OnEnemyKilled += HandleEnemyKilled;
-            EnemyManager.OnAllEnemiesDefeated += HandleAllEnemiesDefeated;
-        }
-        
-        CoreExtensions.TryWithManager<DeckManager>(this, dm => 
-        {
-            DeckManager.OnDeckSizeChanged += size => OnDeckSizeChanged?.Invoke(size);
-        });
-    }
-    
-    private void OnDisable()
-    {
-        if (EnemyManager.HasInstance)
-        {
-            EnemyManager.OnEnemyKilled -= HandleEnemyKilled;
-            EnemyManager.OnAllEnemiesDefeated -= HandleAllEnemiesDefeated;
-        }
-    }
-    
-    private void InitializeResources()
-    {
         _life = new Resource(startLife);
         _creativity = new Resource(startCreativity, maxCreativity);
+        IsReady = true;
     }
     
     public void StartCombat()
@@ -121,243 +75,106 @@ public class CombatManager : SingletonBehaviour<CombatManager>, IGameManager
         StartCoroutine(StartCombatSequence());
     }
     
-    private IEnumerator StartCombatSequence()
+    IEnumerator StartCombatSequence()
     {
         _isInCombat = true;
         _currentTurn = 1;
         _currentPhase = TurnPhase.PlayerTurn;
-        _isProcessingTurn = false;
         
-        CoreExtensions.TryWithManager<DeckManager>(this, dm => 
+        // Setup deck
+        var deck = GameExtensions.GetManager<DeckManager>();
+        if (deck?.DeckSize == 0) deck.GenerateTestDeck();
+        
+        // Draw starting hand
+        for (int i = 0; i < startingHandSize; i++)
         {
-            if (dm.DeckSize == 0)
-                dm.GenerateTestDeck();
-        });
-        yield return null;
-        
-        if (startingHandSize > 0)
-            yield return DrawCards(startingHandSize);
-        
-        CoreExtensions.TryWithManager<EnemyManager>(this, em => 
-        {
-            var firstEnemy = em.GetSmartTarget(TargetingStrategy.Optimal);
-            if (firstEnemy != null)
-                _currentTargets.Add(firstEnemy);
-        });
+            deck?.TryDrawCard();
+            yield return null;
+        }
         
         OnLifeChanged?.Invoke(_life);
         OnCreativityChanged?.Invoke(_creativity);
-        OnDeckSizeChanged?.Invoke(DeckSize);
         OnTurnChanged?.Invoke(_currentTurn);
         OnTurnPhaseChanged?.Invoke(_currentPhase);
         OnCombatStarted?.Invoke();
-        OnPlayerTurnStarted?.Invoke(_currentTurn);
     }
     
     public void EndPlayerTurn()
     {
-        if (!this.CanEndTurnSafely()) return;
-        
-        OnPlayerTurnEnded?.Invoke(_currentTurn);
-        StartCoroutine(ProcessTurnTransition());
+        if (!CanEndTurn) return;
+        StartCoroutine(ProcessTurn());
     }
     
-    private IEnumerator ProcessTurnTransition()
+    IEnumerator ProcessTurn()
     {
-        _currentPhase = TurnPhase.TurnTransition;
         _isProcessingTurn = true;
+        _currentPhase = TurnPhase.TurnTransition;
         OnTurnPhaseChanged?.Invoke(_currentPhase);
         
-        // Smart resource recovery using extensions
-        var situation = this.GetCombatSituation();
-        if (situation.UrgencyLevel >= UrgencyLevel.High)
-        {
-            this.TryOptimalRecovery(ResourceType.Creativity, _creativity.MaxValue);
-        }
-        else
-        {
-            _creativity.Reset();
-        }
+        // Reset creativity
+        _creativity.Reset();
         OnCreativityChanged?.Invoke(_creativity);
         
-        int cardsToRefill = Mathf.Max(0, startingHandSize - CoreExtensions.TryWithManager<CardManager, int>(this, cm => cm.HandSize));
-        if (cardsToRefill > 0)
-            yield return DrawCards(cardsToRefill);
+        // Refill hand
+        var cardManager = GameExtensions.GetManager<CardManager>();
+        var deckManager = GameExtensions.GetManager<DeckManager>();
+        if (cardManager != null && deckManager != null)
+        {
+            int toDraw = startingHandSize - cardManager.HandSize;
+            for (int i = 0; i < toDraw; i++)
+            {
+                deckManager.TryDrawCard();
+                yield return null;
+            }
+        }
         
-        yield return new WaitForSeconds(turnTransitionDelay);
+        yield return new WaitForSeconds(0.5f);
         
+        // Enemy turn
         _currentPhase = TurnPhase.EnemyTurn;
-        _isProcessingTurn = true;
         OnTurnPhaseChanged?.Invoke(_currentPhase);
-        OnEnemyTurnStarted?.Invoke(_currentTurn);
         
-        yield return ProcessEnemyTurn();
-        
-        _currentTurn++;
-        OnTurnChanged?.Invoke(_currentTurn);
-        
-        _currentPhase = TurnPhase.PlayerTurn;
-        _isProcessingTurn = false;
-        OnTurnPhaseChanged?.Invoke(_currentPhase);
-        OnPlayerTurnStarted?.Invoke(_currentTurn);
-    }
-    
-    private IEnumerator ProcessEnemyTurn()
-    {
         yield return new WaitForSeconds(1f);
         
-        if (_life.CurrentValue > 0)
-        {
-            var difficulty = this.GetCombatDifficulty();
-            var situation = this.GetCombatSituation();
-            
-            int baseDamage = difficulty switch
-            {
-                CombatDifficulty.Easy => UnityEngine.Random.Range(3, 8),
-                CombatDifficulty.Moderate => UnityEngine.Random.Range(5, 12),
-                CombatDifficulty.Hard => UnityEngine.Random.Range(8, 18),
-                CombatDifficulty.Desperate => UnityEngine.Random.Range(12, 25),
-                _ => UnityEngine.Random.Range(5, 15)
-            };
-            
-            if (situation.HealthStatus <= HealthStatus.Critical)
-                baseDamage = Mathf.RoundToInt(baseDamage * 0.7f);
-            
-            ModifyLife(-baseDamage);
-            yield return new WaitForSeconds(0.5f);
-        }
-    }
-    
-    private IEnumerator DrawCards(int count)
-    {
-        for (int i = 0; i < count; i++)
-        {
-            if (CoreExtensions.TryWithManager<DeckManager>(this, dm => dm.TryDrawCard()))
-                yield return null;
-        }
+        // Simple enemy damage
+        ModifyLife(-UnityEngine.Random.Range(5, 15));
+        
+        yield return new WaitForSeconds(0.5f);
+        
+        // Next turn
+        _currentTurn++;
+        _currentPhase = TurnPhase.PlayerTurn;
+        _isProcessingTurn = false;
+        
+        OnTurnChanged?.Invoke(_currentTurn);
+        OnTurnPhaseChanged?.Invoke(_currentPhase);
     }
     
     public void ModifyLife(int delta)
     {
-        int oldValue = _life.CurrentValue;
         _life.ModifyBy(delta);
+        OnLifeChanged?.Invoke(_life);
         
-        if (_life.CurrentValue != oldValue)
-        {
-            OnLifeChanged?.Invoke(_life);
-            
-            if (_life.IsExhausted())
-                OnPlayerDeath?.Invoke();
-        }
+        if (_life.CurrentValue <= 0)
+            OnPlayerDeath?.Invoke();
     }
     
     public void ModifyCreativity(int delta)
     {
-        int oldValue = _creativity.CurrentValue;
         _creativity.ModifyBy(delta);
-        
-        if (_creativity.CurrentValue != oldValue)
-            OnCreativityChanged?.Invoke(_creativity);
+        OnCreativityChanged?.Invoke(_creativity);
     }
     
-    // INTEGRATION: Simplified using ResourceExtensions
-    public bool CanSpendCreativity(int amount) 
-        => _creativity.CanAfford(new ResourceCost { ResourceType = ResourceType.Creativity, Amount = amount });
-
-    public bool SpendCreativity(int amount)
-        => _creativity.TryApplyCost(new ResourceCost { ResourceType = ResourceType.Creativity, Amount = amount });
-    
-    public void AddTarget(EntityBehaviour target)
+    public void DealDamageToTargets(int damage)
     {
-        if (target != null && target.IsAlive && !_currentTargets.Contains(target))
+        GameExtensions.TryManager<EnemyManager>(em => 
         {
-            _currentTargets.Clear();
-            _currentTargets.Add(target);
-        }
-    }
-    
-    public void AddSmartTarget(TargetingStrategy strategy = TargetingStrategy.Optimal)
-        => CoreExtensions.TryWithManager<EnemyManager>(this, em => 
-        {
-            var smartTarget = em.GetSmartTarget(strategy);
-            if (smartTarget != null)
-                AddTarget(smartTarget);
-        });
-    
-    // CRITICAL FIX: Enhanced DealDamageToTargets with proper tracking
-    public void DealDamageToTargets(int damage, DamageType damageType = DamageType.Normal)
-    {
-        Debug.Log($"[CombatManager] Dealing {damage} {damageType} damage to {_currentTargets.Count} targets");
-        
-        if (_currentTargets.Count == 0)
-        {
-            Debug.LogWarning("[CombatManager] No targets selected for damage");
-            return;
-        }
-        
-        // INTEGRATION: Use EnemyManager for proper damage handling with events
-        CoreExtensions.TryWithManager<EnemyManager>(this, em => 
-        {
-            foreach (var target in _currentTargets.ToList())
-            {
-                if (target != null && target.IsValidTarget())
-                {
-                    int healthBefore = target.CurrentHealth;
-                    target.TakeDamage(damage, damageType);
-                    int actualDamage = healthBefore - target.CurrentHealth;
-                    
-                    Debug.Log($"[CombatManager] Target {target.EntityName}: {healthBefore} -> {target.CurrentHealth} (-{actualDamage})");
-                    
-                    // The EnemyManager will handle the OnEnemyDamaged event via HandleEntityHealthChanged
-                }
-            }
+            var target = em.AliveEnemies.GetWeakest();
+            target?.DamageTarget(damage);
         });
     }
     
-    public bool TrySmartHealing(int healAmount, HealingMode mode = HealingMode.Self)
-        => this.TrySmartHeal(healAmount, mode);
-    
-    private void HandleEnemyKilled(EntityBehaviour enemy)
-    {
-        _currentTargets.Remove(enemy);
-        
-        if (_currentTargets.Count == 0)
-            AddSmartTarget(TargetingStrategy.Optimal);
-    }
-    
-    private void HandleAllEnemiesDefeated()
-    {
-        _currentTargets.Clear();
-        EndCombat();
-    }
-    
-    public void EndCombat()
-    {
-        _isInCombat = false;
-        _currentTargets.Clear();
-        _currentPhase = TurnPhase.CombatEnd;
-        OnCombatEnded?.Invoke();
-    }
-
-#if UNITY_EDITOR
-    [ContextMenu("Analyze Resources")]
-    public void DebugAnalyzeResources()
-    {
-        var portfolio = this.GetResourcePortfolio();
-        Debug.Log($"[CombatManager] Resource Analysis:");
-        Debug.Log($"  Life: {_life.GetResourceHealth()} ({_life.Percentage:P0})");
-        Debug.Log($"  Creativity: {_creativity.GetResourceHealth()} ({_creativity.Percentage:P0})");
-        Debug.Log($"  Overall Health Score: {portfolio.OverallHealth.HealthScore:P0}");
-    }
-    
-    [ContextMenu("Get Combat Assessment")]
-    public void DebugCombatAssessment()
-    {
-        var assessment = this.GetCombatAssessment();
-        Debug.Log($"[CombatManager] Combat Assessment:");
-        Debug.Log($"  Difficulty: {assessment.Difficulty}");
-        Debug.Log($"  Health Status: {assessment.Situation.HealthStatus}");
-        Debug.Log($"  Recommended Action: {assessment.Situation.RecommendedAction}");
-    }
-#endif
+    // Simple helper methods
+    public bool CanSpendCreativity(int amount) => _creativity.CanAfford(amount);
+    public void SpendCreativity(int amount) => _creativity.Spend(amount);
 }

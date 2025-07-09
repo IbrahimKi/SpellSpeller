@@ -289,7 +289,21 @@ public class DeckManager : SingletonBehaviour<DeckManager>, IGameManager
         LogDebug($"[DeckManager] Shuffle complete. Deck size: {DeckSize}");
     }
 
-// Add this method to add cards to bottom of deck (for played cards)
+    public bool TryDrawCard()
+    {
+        if (IsDeckEmpty) return false;
+    
+        var cardData = DrawCard();
+        if (cardData != null)
+        {
+            // Spawn card in hand
+            GameExtensions.TryManager<CardManager>(cm => 
+                cm.SpawnCard(cardData, null, true)
+            );
+            return true;
+        }
+        return false;
+    }
     
     public void ForceInitialization()
     {
