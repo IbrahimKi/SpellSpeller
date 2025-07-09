@@ -1,8 +1,7 @@
 using UnityEngine;
 using System.Collections.Generic;
 using System.Linq; // CRITICAL: LINQ für Any/All operations
-using GameCore.Enums;
-using GameCore.Data;
+
 
 [CreateAssetMenu(fileName = "New Card Slot", menuName = "Card System/Card Slot")]
 public class CardSlotAsset : ScriptableObject

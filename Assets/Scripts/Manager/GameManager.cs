@@ -2,7 +2,7 @@ using UnityEngine;
 using System.Collections;
 using System.Collections.Generic;
 using System;
-using GameCore.Enums; // CRITICAL: SharedEnums import
+
 
 public class GameManager : SingletonBehaviour<GameManager>
 {
@@ -225,20 +225,3 @@ public class ManagerInitConfig
 }
 
 // FIXED: Updated ManagerType enum with CardSlot
-public enum ManagerType
-{
-    Card,
-    Deck,
-    HandLayout,
-    Spellcast,
-    Combat,
-    Enemy,
-    Unit,
-    CardSlot  // FIXED: Added CardSlot
-}
-
-// Interface für alle Manager
-public interface IGameManager
-{
-    bool IsReady { get; }
-}

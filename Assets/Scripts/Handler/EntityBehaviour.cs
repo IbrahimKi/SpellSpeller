@@ -1,7 +1,6 @@
 using UnityEngine;
 using UnityEngine.EventSystems;
-using GameCore.Enums; // CRITICAL: SharedEnums import
-using GameCore.Data; // CRITICAL: SharedData import
+
 
 public class EntityBehaviour : MonoBehaviour, IPointerClickHandler, IPointerEnterHandler, IPointerExitHandler
 {
@@ -33,17 +32,10 @@ public class EntityBehaviour : MonoBehaviour, IPointerClickHandler, IPointerEnte
     public static event System.Action<EntityBehaviour, int, int> OnEntityHealthChanged;
     
     // Properties
-    public EntityAsset Asset => entityAsset;
-    public EntityType Type => entityAsset?.Type ?? EntityType.Enemy;
-    public string EntityName => entityAsset?.EntityName ?? "Unknown";
+    public bool IsAlive => currentHealth > 0;
+    public bool IsTargetable => entityAsset?.IsTargetable ?? false;
     public int CurrentHealth => currentHealth;
     public int MaxHealth => maxHealth;
-    public float HealthPercentage => maxHealth > 0 ? (float)currentHealth / maxHealth : 0f;
-    public bool IsAlive => currentHealth > 0;
-    public bool IsTargeted => isTargeted;
-    public bool IsTargetable => entityAsset?.IsTargetable ?? false;
-    public float TargetPriority => entityAsset?.TargetPriority ?? 1f;
-    public Vector3 TargetPosition => transform.position + (entityAsset?.TargetOffset ?? Vector3.up);
     
     private void Awake()
     {
@@ -167,12 +159,14 @@ public class EntityBehaviour : MonoBehaviour, IPointerClickHandler, IPointerEnte
         }
     }
     
+    public void TakeDamage(int amount, DamageType damageType = DamageType.Normal)
+    {
+        if (amount > 0) ModifyHealth(-amount);
+    }
+
     public void Heal(int amount)
     {
-        if (amount > 0)
-        {
-            ModifyHealth(amount);
-        }
+        if (amount > 0) ModifyHealth(amount);
     }
     
     private void Die()
@@ -180,10 +174,6 @@ public class EntityBehaviour : MonoBehaviour, IPointerClickHandler, IPointerEnte
         Destroy(gameObject, 0.1f);
     }
     
-    public void TakeDamage(int amount, DamageType damageType = DamageType.Normal)
-    {
-        Damage(amount);
-    }
     
     // Targeting
     public void SetTargeted(bool targeted)

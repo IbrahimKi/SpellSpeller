@@ -4,8 +4,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 using System.Collections;
-using GameCore.Enums;
-using GameCore.Data;
+
 
 public class GameUIHandler : MonoBehaviour
 {

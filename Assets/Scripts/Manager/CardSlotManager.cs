@@ -1,8 +1,7 @@
 using UnityEngine;
 using System.Collections.Generic;
 using System.Linq;
-using GameCore.Enums;
-using GameCore.Data;
+
 
 public class CardSlotManager : SingletonBehaviour<CardSlotManager>, IGameManager
 {

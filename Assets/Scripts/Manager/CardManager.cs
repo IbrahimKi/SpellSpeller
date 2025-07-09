@@ -2,8 +2,6 @@ using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 using System.Collections;
-using GameCore.Enums; // CRITICAL: SharedEnums import
-using GameCore.Data; // CRITICAL: SharedData import
 
 public class CardManager : SingletonBehaviour<CardManager>, IGameManager
 {
