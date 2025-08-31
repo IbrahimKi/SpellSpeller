@@ -37,18 +37,3 @@ public class CardData : ScriptableObject
         return letterValues.ToCharArray();
     }
 }
-
-public enum CardType
-{
-    Vowel,
-    Consonant,
-    Special
-}
-
-public enum CardSubType
-{
-    Basic,
-    Element,
-    School,
-    Ender
-}

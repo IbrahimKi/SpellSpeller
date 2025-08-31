@@ -32,6 +32,12 @@ public class Card : MonoBehaviour, IPointerClickHandler, IPointerEnterHandler, I
     public bool IsInteractable => isInteractable;
     public CardState CurrentState { get; private set; } = CardState.Idle;
     
+    public CardType GetCardType() => cardData?.cardType ?? CardType.Consonant;
+    public CardSubType GetCardSubType() => cardData?.CardSubType ?? CardSubType.Basic;
+    public int GetTier() => cardData?.tier ?? 1;
+    public string GetCardName() => cardData?.cardName ?? "Unknown Card";
+    public bool HasTag(string tag) => false; // Placeholder - Tags nicht implementiert
+    
     void Awake()
     {
         if (!cardBackground) cardBackground = GetComponent<Image>();
@@ -95,7 +101,19 @@ public class Card : MonoBehaviour, IPointerClickHandler, IPointerEnterHandler, I
         UpdateVisuals();
         OnCardDeselected?.Invoke(this);
     }
-    
+    public bool TrySelect()
+    {
+        if (!isInteractable || isSelected) return false;
+        Select();
+        return true;
+    }
+
+    public bool TryDeselect() 
+    {
+        if (!isSelected) return false;
+        Deselect();
+        return true;
+    }
     void UpdateVisuals(bool hover = false)
     {
         if (!cardBackground) return;

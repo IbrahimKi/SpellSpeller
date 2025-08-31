@@ -177,4 +177,42 @@ public class CombatManager : SingletonBehaviour<CombatManager>, IGameManager
     // Simple helper methods
     public bool CanSpendCreativity(int amount) => _creativity.CanAfford(amount);
     public void SpendCreativity(int amount) => _creativity.Spend(amount);
-}
+    
+    public bool CanPerformPlayerAction(PlayerActionType actionType)
+    {
+        return IsPlayerTurn && !IsProcessingTurn;
+    }
+
+    public bool CanSpendResource(ResourceType resourceType, int amount)
+    {
+        return resourceType switch
+        {
+            ResourceType.Creativity => _creativity.CanAfford(amount),
+            ResourceType.Life => _life.CanAfford(amount),
+            _ => false
+        };
+    }
+
+    public bool TryModifyResource(ResourceType resourceType, int delta)
+    {
+        switch (resourceType)
+        {
+            case ResourceType.Creativity:
+                ModifyCreativity(delta);
+                return true;
+            case ResourceType.Life:
+                ModifyLife(delta);
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    public int DeckSize => GameExtensions.TryManager<DeckManager, int>(this, dm => dm.DeckSize);
+    public int DiscardSize => GameExtensions.TryManager<DeckManager, int>(this, dm => dm.DiscardSize);
+
+    public static event System.Action<int> OnDeckSizeChanged
+    {
+        add => DeckManager.OnDeckSizeChanged += value;
+        remove => DeckManager.OnDeckSizeChanged -= value;
+    }}

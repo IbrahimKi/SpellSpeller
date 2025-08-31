@@ -78,7 +78,7 @@ public class GameManager : SingletonBehaviour<GameManager>
         Debug.Log("[GameManager] All managers initialized successfully!");
         
         // Log status using ManagerExtensions
-        ManagerExtensions.LogManagerPerformance();
+        CoreExtensions.LogManagerPerformance();
         
         // Step 5: Auto-start combat if enabled
         if (autoStartCombat)
@@ -90,14 +90,14 @@ public class GameManager : SingletonBehaviour<GameManager>
     
     private void DiscoverManagers()
     {
-        RegisterManagerSafely(ManagerType.Card, ManagerExtensions.TryGetManager<CardManager>());
-        RegisterManagerSafely(ManagerType.Deck, ManagerExtensions.TryGetManager<DeckManager>());
-        RegisterManagerSafely(ManagerType.HandLayout, ManagerExtensions.TryGetManager<HandLayoutManager>());
-        RegisterManagerSafely(ManagerType.CardSlot, ManagerExtensions.TryGetManager<CardSlotManager>()); // DIESE ZEILE HINZUFÜGEN
-        RegisterManagerSafely(ManagerType.Spellcast, ManagerExtensions.TryGetManager<SpellcastManager>());
-        RegisterManagerSafely(ManagerType.Combat, ManagerExtensions.TryGetManager<CombatManager>());
-        RegisterManagerSafely(ManagerType.Enemy, ManagerExtensions.TryGetManager<EnemyManager>());
-        RegisterManagerSafely(ManagerType.Unit, ManagerExtensions.TryGetManager<UnitManager>());
+        RegisterManagerSafely(ManagerType.Card, CoreExtensions.TryGetManager<CardManager>());
+        RegisterManagerSafely(ManagerType.Deck, CoreExtensions.TryGetManager<DeckManager>());
+        RegisterManagerSafely(ManagerType.HandLayout, CoreExtensions.TryGetManager<HandLayoutManager>());
+        RegisterManagerSafely(ManagerType.CardSlot, CoreExtensions.TryGetManager<CardSlotManager>()); // DIESE ZEILE HINZUFÜGEN
+        RegisterManagerSafely(ManagerType.Spellcast, CoreExtensions.TryGetManager<SpellcastManager>());
+        RegisterManagerSafely(ManagerType.Combat, CoreExtensions.TryGetManager<CombatManager>());
+        RegisterManagerSafely(ManagerType.Enemy, CoreExtensions.TryGetManager<EnemyManager>());
+        RegisterManagerSafely(ManagerType.Unit, CoreExtensions.TryGetManager<UnitManager>());
     
         Debug.Log($"[GameManager] Discovered {_managers.Count} managers");
     }
@@ -187,7 +187,7 @@ public class GameManager : SingletonBehaviour<GameManager>
     public void LogManagerStatus()
     {
         // Use ManagerExtensions for comprehensive status
-        ManagerExtensions.LogManagerPerformance();
+        CoreExtensions.LogManagerPerformance();
         
         Debug.Log($"[GameManager] Detailed Status - Initialized: {_isInitialized}");
         foreach (var kvp in _managers)

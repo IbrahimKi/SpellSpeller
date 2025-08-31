@@ -22,7 +22,13 @@ public enum ComboState { Empty, Building, Ready, Invalid }
 
 // Manager System
 public enum ManagerType { Card, Deck, HandLayout, Spellcast, Combat, Enemy, Unit, CardSlot }
-
+public enum PlayerActionType { PlayCards, DiscardCard, DrawCard, EndTurn }
+public enum FormationType { Line, Circle, Grid }
+public enum TargetingStrategy { Optimal, Weakest, Strongest, Nearest, Priority, Random }
+public enum HealthComparison { Below, Above, Equal, BelowOrEqual, AboveOrEqual }
+public enum HealthStatus { Dead, Critical, Low, Moderate, Healthy, Full }
+public enum ThreatLevel { None, Low, Medium, High, Extreme }
+public enum UnitGroupStatus { None, Critical, Damaged, Moderate, Healthy }
 // Interface für alle Manager
 public interface IGameManager
 {

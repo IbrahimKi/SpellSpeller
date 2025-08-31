@@ -98,21 +98,3 @@ public class EntityAsset : ScriptableObject
     }
 }
 
-// Enums for entity classification
-public enum EntityType
-{
-    Enemy,
-    Unit,
-    Neutral,
-    Environmental
-}
-
-public enum EntityCategory
-{
-    Standard,
-    Elite,
-    Boss,
-    Minion,
-    Summon,
-    Special
-}

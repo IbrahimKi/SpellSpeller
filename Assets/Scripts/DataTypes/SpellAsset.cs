@@ -57,12 +57,6 @@ public class SpellEffect
     }
 }
 
-public enum SpellType
-{
-    Basic,
-    Element,
-    School
-}
 
 public enum SpellSubtype
 {
@@ -76,16 +70,4 @@ public enum SpellSubtype
     Defense,
     Support,
     Disrupt
-}
-
-public enum SpellEffectType
-{
-    Damage,
-    Heal,
-    Buff,
-    Debuff,
-    Summon,
-    Teleport,
-    Shield,
-    Custom
 }

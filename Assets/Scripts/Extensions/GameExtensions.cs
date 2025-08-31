@@ -37,8 +37,6 @@ public static class GameExtensions
 
     // === CARD ESSENTIALS (30 Zeilen statt 400) ===
     
-    public static bool IsPlayable(this Card card) 
-        => card.IsValid() && card.IsInteractable && card.CardData != null;
     
     public static string GetLetters(this Card card) 
         => card?.CardData?.letterValues ?? "";
@@ -52,6 +50,24 @@ public static class GameExtensions
         var available = cards.GetLetterSequence();
         return spellCode.All(letter => available.Count(c => c == letter) >= spellCode.Count(sc => sc == letter));
     }
+    public static bool IsPlayable(this Card card) 
+        => card.IsValid() && card.IsInteractable && card.CardData != null;
+
+    public static string GetCardName(this Card card)
+        => card?.CardData?.cardName ?? "Unknown";
+
+// Collection Extensions
+    public static IEnumerable<Card> GetValidCards(this IEnumerable<Card> cards)
+        => cards?.Where(c => c.IsValid()) ?? Enumerable.Empty<Card>();
+
+    public static int GetValidCardCount(this IEnumerable<Card> cards)
+        => cards?.Count(c => c.IsValid()) ?? 0;
+
+    public static bool HasValidCards(this IEnumerable<Card> cards)
+        => cards?.Any(c => c.IsValid()) ?? false;
+
+    public static bool HasPlayableCards(this IEnumerable<Card> cards)
+        => cards?.Any(c => c.IsPlayable()) ?? false;
 
     // === COMBAT ESSENTIALS (25 Zeilen statt 300) ===
     
