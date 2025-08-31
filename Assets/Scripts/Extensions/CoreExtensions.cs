@@ -1,20 +1,22 @@
 using UnityEngine;
 
+/// <summary>
+/// CoreExtensions - NUR Manager Access Pattern
+/// Keine Überschneidungen mit GameExtensions
+/// </summary>
 public static class CoreExtensions
 {
-    // Basis Null-Check für Unity Objects
+    // === NULL SAFETY ===
     public static bool IsValidReference<T>(this T obj) where T : class
         => obj != null && !(obj is UnityEngine.Object unityObj && unityObj == null);
     
-    // GameObject aktiv und gültig
     public static bool IsActiveAndValid(this GameObject obj)
         => obj.IsValidReference() && obj.activeInHierarchy;
     
-    // Component aktiv und gültig
     public static bool IsActiveAndValid<T>(this T component) where T : Component
         => component.IsValidReference() && component.gameObject.IsActiveAndValid();
     
-    // Manager Access Pattern für CardSlotAsset
+    // === MANAGER ACCESS PATTERN ===
     public static bool TryWithManager<T>(Component context, System.Action<T> action) where T : SingletonBehaviour<T>
     {
         if (!SingletonBehaviour<T>.HasInstance) return false;

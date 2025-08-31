@@ -1,8 +1,6 @@
 using UnityEngine;
 using System.Collections;
 using System.Collections.Generic;
-using System;
-
 
 public class GameManager : SingletonBehaviour<GameManager>
 {
@@ -12,7 +10,7 @@ public class GameManager : SingletonBehaviour<GameManager>
         new ManagerInitConfig { managerType = ManagerType.Card, priority = 0 },
         new ManagerInitConfig { managerType = ManagerType.Deck, priority = 1 },
         new ManagerInitConfig { managerType = ManagerType.HandLayout, priority = 2 },
-        new ManagerInitConfig { managerType = ManagerType.CardSlot, priority = 3 }, // DIESE ZEILE HINZUFÜGEN
+        new ManagerInitConfig { managerType = ManagerType.CardSlot, priority = 3 },
         new ManagerInitConfig { managerType = ManagerType.Spellcast, priority = 4 },
         new ManagerInitConfig { managerType = ManagerType.Combat, priority = 5 },
         new ManagerInitConfig { managerType = ManagerType.Enemy, priority = 6 },
@@ -28,21 +26,17 @@ public class GameManager : SingletonBehaviour<GameManager>
     private Dictionary<ManagerType, IGameManager> _managers = new Dictionary<ManagerType, IGameManager>();
     private bool _isInitialized = false;
     
-    // Events
-    public static event Action<ManagerType> OnManagerInitialized;
-    public static event Action OnAllManagersReady;
-    public static event Action<string> OnInitializationError;
+    // Events - FIXED: Korrekte System.Action Syntax
+    public static event System.Action<ManagerType> OnManagerInitialized;
+    public static event System.Action OnAllManagersReady;
+    public static event System.Action<string> OnInitializationError;
     
     // Properties
     public bool IsInitialized => _isInitialized;
     public bool IsReady => _isInitialized; // IGameManager implementation
     public IReadOnlyDictionary<ManagerType, IGameManager> Managers => _managers;
     
-    protected override void OnAwakeInitialize()
-    {
-        // Sort by priority
-        managerInitOrder.Sort((a, b) => a.priority.CompareTo(b.priority));
-    }
+    
     
     private void Start()
     {
@@ -65,8 +59,8 @@ public class GameManager : SingletonBehaviour<GameManager>
             yield return new WaitForSeconds(initStepDelay);
         }
         
-        // Step 3: Verify all critical managers using ManagerExtensions
-        if (!this.AreAllCriticalManagersReady())
+        // Step 3: Verify all critical managers
+        if (!GameExtensions.AreAllCriticalManagersReady())
         {
             OnInitializationError?.Invoke("Critical managers missing!");
             yield break;
@@ -77,27 +71,27 @@ public class GameManager : SingletonBehaviour<GameManager>
         OnAllManagersReady?.Invoke();
         Debug.Log("[GameManager] All managers initialized successfully!");
         
-        // Log status using ManagerExtensions
-        CoreExtensions.LogManagerPerformance();
+        // Log status using GameExtensions
+        GameExtensions.LogManagerPerformance();
         
         // Step 5: Auto-start combat if enabled
         if (autoStartCombat)
         {
             yield return new WaitForSeconds(0.1f);
-            this.TryStartCombat();
+            GameExtensions.TryStartCombat();
         }
     }
     
     private void DiscoverManagers()
     {
-        RegisterManagerSafely(ManagerType.Card, CoreExtensions.TryGetManager<CardManager>());
-        RegisterManagerSafely(ManagerType.Deck, CoreExtensions.TryGetManager<DeckManager>());
-        RegisterManagerSafely(ManagerType.HandLayout, CoreExtensions.TryGetManager<HandLayoutManager>());
-        RegisterManagerSafely(ManagerType.CardSlot, CoreExtensions.TryGetManager<CardSlotManager>()); // DIESE ZEILE HINZUFÜGEN
-        RegisterManagerSafely(ManagerType.Spellcast, CoreExtensions.TryGetManager<SpellcastManager>());
-        RegisterManagerSafely(ManagerType.Combat, CoreExtensions.TryGetManager<CombatManager>());
-        RegisterManagerSafely(ManagerType.Enemy, CoreExtensions.TryGetManager<EnemyManager>());
-        RegisterManagerSafely(ManagerType.Unit, CoreExtensions.TryGetManager<UnitManager>());
+        RegisterManagerSafely(ManagerType.Card, GameExtensions.GetManager<CardManager>());
+        RegisterManagerSafely(ManagerType.Deck, GameExtensions.GetManager<DeckManager>());
+        RegisterManagerSafely(ManagerType.HandLayout, GameExtensions.GetManager<HandLayoutManager>());
+        RegisterManagerSafely(ManagerType.CardSlot, GameExtensions.GetManager<CardSlotManager>());
+        RegisterManagerSafely(ManagerType.Spellcast, GameExtensions.GetManager<SpellcastManager>());
+        RegisterManagerSafely(ManagerType.Combat, GameExtensions.GetManager<CombatManager>());
+        RegisterManagerSafely(ManagerType.Enemy, GameExtensions.GetManager<EnemyManager>());
+        RegisterManagerSafely(ManagerType.Unit, GameExtensions.GetManager<UnitManager>());
     
         Debug.Log($"[GameManager] Discovered {_managers.Count} managers");
     }
@@ -152,8 +146,8 @@ public class GameManager : SingletonBehaviour<GameManager>
     
     public void StartCombat()
     {
-        // Use ManagerExtensions for safer combat start
-        this.TryStartCombat();
+        // Use GameExtensions for safer combat start
+        GameExtensions.TryStartCombat();
     }
     
     public T GetManager<T>(ManagerType type) where T : class, IGameManager
@@ -169,8 +163,7 @@ public class GameManager : SingletonBehaviour<GameManager>
     public EnemyManager EnemyManager => GetManager<EnemyManager>(ManagerType.Enemy);
     public UnitManager UnitManager => GetManager<UnitManager>(ManagerType.Unit);
     public HandLayoutManager HandLayoutManager => GetManager<HandLayoutManager>(ManagerType.HandLayout);
-    public CardSlotManager CardSlotManager => GetManager<CardSlotManager>(ManagerType.CardSlot); // FIXED: Added
-    
+    public CardSlotManager CardSlotManager => GetManager<CardSlotManager>(ManagerType.CardSlot);
     
 
 #if UNITY_EDITOR
@@ -186,8 +179,8 @@ public class GameManager : SingletonBehaviour<GameManager>
     [ContextMenu("Log Manager Status")]
     public void LogManagerStatus()
     {
-        // Use ManagerExtensions for comprehensive status
-        CoreExtensions.LogManagerPerformance();
+        // Use GameExtensions for comprehensive status
+        GameExtensions.LogManagerPerformance();
         
         Debug.Log($"[GameManager] Detailed Status - Initialized: {_isInitialized}");
         foreach (var kvp in _managers)
@@ -223,5 +216,3 @@ public class ManagerInitConfig
     public int priority = 0;
     public bool enabled = true;
 }
-
-// FIXED: Updated ManagerType enum with CardSlot

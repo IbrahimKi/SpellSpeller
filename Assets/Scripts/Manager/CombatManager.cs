@@ -169,7 +169,7 @@ public class CombatManager : SingletonBehaviour<CombatManager>, IGameManager
     {
         GameExtensions.TryManager<EnemyManager>(em => 
         {
-            var target = em.AliveEnemies.GetWeakest();
+            var target = GameExtensions.GetWeakest(em.AliveEnemies);
             target?.DamageTarget(damage);
         });
     }
@@ -208,8 +208,24 @@ public class CombatManager : SingletonBehaviour<CombatManager>, IGameManager
         }
     }
 
-    public int DeckSize => GameExtensions.TryManager<DeckManager, int>(this, dm => dm.DeckSize);
-    public int DiscardSize => GameExtensions.TryManager<DeckManager, int>(this, dm => dm.DiscardSize);
+    public int DeckSize
+    {
+        get
+        {
+            int size = 0;
+            GameExtensions.TryManager<DeckManager>(dm => size = dm.DeckSize);
+            return size;
+        }
+    }
+    public int DiscardSize
+    {
+        get
+        {
+            int size = 0;
+            GameExtensions.TryManager<DeckManager>(dm => size = dm.DiscardSize);
+            return size;
+        }
+    }
 
     public static event System.Action<int> OnDeckSizeChanged
     {

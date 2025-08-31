@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Collections;
 
+// FIXED: Using Aliases für ambiguous references
+using UnityRandom = UnityEngine.Random;
 
 public class EnemyManager : SingletonBehaviour<EnemyManager>, IGameManager
 {
@@ -29,7 +31,7 @@ public class EnemyManager : SingletonBehaviour<EnemyManager>, IGameManager
     
     public bool IsReady => _isReady;
     
-    // Events
+    // Events - FIXED: Korrekte System.Action Syntax
     public static event System.Action<EntityBehaviour> OnEnemySpawned;
     public static event System.Action<EntityBehaviour> OnEnemyDespawned;
     public static event System.Action<EntityBehaviour> OnEnemyTargeted;
@@ -166,7 +168,8 @@ public class EnemyManager : SingletonBehaviour<EnemyManager>, IGameManager
             return SpawnEnemy(enemyAsset, Vector3.zero);
         }
         
-        Transform spawnPoint = spawnPoints[Random.Range(0, spawnPoints.Count)];
+        // FIXED: UnityRandom instead of Random
+        Transform spawnPoint = spawnPoints[UnityRandom.Range(0, spawnPoints.Count)];
         return SpawnEnemy(enemyAsset, spawnPoint.position, spawnPoint.rotation);
     }
     
@@ -483,7 +486,8 @@ public class EnemyManager : SingletonBehaviour<EnemyManager>, IGameManager
             TargetingStrategy.Weakest => enemies.OrderBy(e => e.CurrentHealth).Take(maxTargets).ToList(),
             TargetingStrategy.Strongest => enemies.OrderByDescending(e => e.CurrentHealth).Take(maxTargets).ToList(),
             TargetingStrategy.Priority => enemies.OrderByDescending(e => e.TargetPriority).Take(maxTargets).ToList(),
-            TargetingStrategy.Random => enemies.OrderBy(x => System.Guid.NewGuid()).Take(maxTargets).ToList(),
+            // FIXED: UnityRandom instead of System.Guid
+            TargetingStrategy.Random => enemies.OrderBy(x => UnityRandom.value).Take(maxTargets).ToList(),
             _ => GetOptimalTargetGroup(enemies, maxTargets)
         };
     }
@@ -575,9 +579,9 @@ public class EnemyManager : SingletonBehaviour<EnemyManager>, IGameManager
         
         if (AliveEnemies.Count > 0)
         {
-            assessment.AverageHealth = AliveEnemies.Average(e => e.HealthPercentage);
-            assessment.LowestHealth = AliveEnemies.Min(e => e.HealthPercentage);
-            assessment.HighestHealth = AliveEnemies.Max(e => e.HealthPercentage);
+            assessment.AverageHealth = AliveEnemies.Average(e => e.HealthPercentage());
+            assessment.LowestHealth = AliveEnemies.Min(e => e.HealthPercentage());
+            assessment.HighestHealth = AliveEnemies.Max(e => e.HealthPercentage());
             
             float threatScore = assessment.TotalEnemies * 1f +
                               assessment.EliteCount * 2f +
@@ -640,7 +644,7 @@ public class EnemyManager : SingletonBehaviour<EnemyManager>, IGameManager
                 Debug.Log($"    - Health: {enemy.CurrentHealth}/{enemy.MaxHealth} ({healthStatus})");
                 Debug.Log($"    - IsAlive: {enemy.IsAlive}");
                 Debug.Log($"    - IsTargetable: {enemy.IsTargetable}");
-                Debug.Log($"    - IsTargeted: {enemy.IsTargeted}");
+                Debug.Log($"    - IsTargeted: {enemy.IsTargeted()}");
                 Debug.Log($"    - Position: {enemy.transform.position}");
                 
                 // Component validation

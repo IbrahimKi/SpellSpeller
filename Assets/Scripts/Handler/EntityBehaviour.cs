@@ -5,10 +5,11 @@ using UnityEngine.EventSystems;
 public class EntityBehaviour : MonoBehaviour, IPointerClickHandler, IPointerEnterHandler, IPointerExitHandler
 {
     [Header("Runtime Data")]
-    [SerializeField] private EntityAsset entityAsset;
+    [SerializeField]
+    internal EntityAsset entityAsset;
     [SerializeField] private int currentHealth;
     [SerializeField] private int maxHealth;
-    [SerializeField] private bool isTargeted = false;
+    [SerializeField] internal bool isTargeted = false;
     [SerializeField] private bool isHovered = false;
     
     [Header("Visual Feedback")]
@@ -31,11 +32,20 @@ public class EntityBehaviour : MonoBehaviour, IPointerClickHandler, IPointerEnte
     public static event System.Action<EntityBehaviour> OnEntityDestroyed;
     public static event System.Action<EntityBehaviour, int, int> OnEntityHealthChanged;
     
-    // Properties
+    // Properties - FIXED: Alle fehlenden Properties hinzugefügt
     public bool IsAlive => currentHealth > 0;
     public bool IsTargetable => entityAsset?.IsTargetable ?? false;
     public int CurrentHealth => currentHealth;
     public int MaxHealth => maxHealth;
+    
+    // FIXED: Direct property access (nicht rekursiv)
+    public EntityType Type => entityAsset?.Type ?? EntityType.Neutral;
+    public EntityCategory Category => entityAsset?.Category ?? EntityCategory.Standard;
+    public string EntityName => entityAsset?.EntityName ?? "Unknown Entity";
+    public float HealthPercentage => maxHealth > 0 ? (float)currentHealth / maxHealth : 0f;
+    public float TargetPriority => entityAsset?.TargetPriority ?? 1f;
+    public Vector3 TargetPosition => transform.position + (entityAsset?.TargetOffset ?? Vector3.up);
+    public EntityAsset Asset => entityAsset;
     
     private void Awake()
     {

@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Collections;
 
+// FIXED: Using Aliases für ambiguous references
+using UnityRandom = UnityEngine.Random;
 
 public class UnitManager : SingletonBehaviour<UnitManager>, IGameManager
 {
@@ -32,7 +34,7 @@ public class UnitManager : SingletonBehaviour<UnitManager>, IGameManager
     private bool _isReady = false;
     public bool IsReady => _isReady;
     
-    // Events
+    // Events - FIXED: Korrekte System.Action Syntax
     public static event System.Action<EntityBehaviour> OnUnitSpawned;
     public static event System.Action<EntityBehaviour> OnUnitDespawned;
     public static event System.Action<EntityBehaviour> OnUnitSelected;
@@ -371,7 +373,7 @@ public class UnitManager : SingletonBehaviour<UnitManager>, IGameManager
         var criticalUnits = GetCriticalUnits();
         if (criticalUnits.Count > 0)
         {
-            return criticalUnits.OrderBy(u => u.HealthPercentage).First();
+            return criticalUnits.OrderBy(u => u.HealthPercentage()).First();
         }
         
         return GetLowestHealthUnit();
@@ -381,8 +383,8 @@ public class UnitManager : SingletonBehaviour<UnitManager>, IGameManager
     {
         // Prioritize healthy units that can make best use of buffs
         return AliveUnits
-            .Where(u => u.HealthPercentage > 0.5f)
-            .OrderByDescending(u => u.TargetPriority)
+            .Where(u => u.HealthPercentage() > 0.5f)
+            .OrderByDescending(u => u.TargetPriority())
             .FirstOrDefault();
     }
     
@@ -460,9 +462,9 @@ public class UnitManager : SingletonBehaviour<UnitManager>, IGameManager
         
         if (AliveUnits.Count > 0)
         {
-            report.AverageHealth = AliveUnits.Average(u => u.HealthPercentage);
-            report.LowestHealth = AliveUnits.Min(u => u.HealthPercentage);
-            report.HighestHealth = AliveUnits.Max(u => u.HealthPercentage);
+            report.AverageHealth = AliveUnits.Average(u => u.HealthPercentage());
+            report.LowestHealth = AliveUnits.Min(u => u.HealthPercentage());
+            report.HighestHealth = AliveUnits.Max(u => u.HealthPercentage());
             
             // Overall unit status
             if (report.CriticalUnits > report.TotalUnits / 2)

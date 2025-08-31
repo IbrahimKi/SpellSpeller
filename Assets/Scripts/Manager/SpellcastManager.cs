@@ -1,7 +1,6 @@
 using UnityEngine;
 using System.Collections.Generic;
 using System.Linq;
-using System;
 
 public class SpellcastManager : SingletonBehaviour<SpellcastManager>, IGameManager
 {
@@ -15,11 +14,13 @@ public class SpellcastManager : SingletonBehaviour<SpellcastManager>, IGameManag
     
     public bool IsReady { get; private set; }
     
-    // Events
-    public static event Action<string, ComboState> OnComboStateChanged;
-    public static event Action<SpellAsset, List<CardData>> OnSpellCast;
-    public static event Action<SpellAsset, int> OnSpellDamageDealt;
-    public static event Action OnComboCleared;
+    // Events - FIXED: Korrekte System.Action Syntax
+    public static event System.Action<string, ComboState> OnComboStateChanged;
+    public static event System.Action<SpellAsset, List<CardData>> OnSpellCast;
+    public static event System.Action<SpellAsset, int> OnSpellDamageDealt;
+    public static event System.Action OnComboCleared;
+    public static event System.Action<SpellAsset, string> OnSpellFound;
+    public static event System.Action<string> OnSpellNotFound;
     
     // Properties
     public string CurrentCombo => _currentCombo;
@@ -39,7 +40,7 @@ public class SpellcastManager : SingletonBehaviour<SpellcastManager>, IGameManag
     void Update()
     {
         if (Input.GetKeyDown(KeyCode.Space) && CurrentComboState == ComboState.Ready)
-            CastCurrentCombo();
+            TryCastCurrentCombo();
     }
     
     public void ProcessCardPlay(List<Card> cards)
@@ -72,6 +73,8 @@ public class SpellcastManager : SingletonBehaviour<SpellcastManager>, IGameManag
         else if (_spellCache.ContainsKey(_currentCombo))
         {
             CurrentComboState = ComboState.Ready;
+            // Fire spell found event
+            OnSpellFound?.Invoke(_spellCache[_currentCombo], _currentCombo);
         }
         else if (_spellCache.Keys.Any(k => k.StartsWith(_currentCombo)))
         {
@@ -80,13 +83,14 @@ public class SpellcastManager : SingletonBehaviour<SpellcastManager>, IGameManag
         else
         {
             CurrentComboState = ComboState.Invalid;
+            OnSpellNotFound?.Invoke(_currentCombo);
             Invoke(nameof(ClearCombo), 0.5f);
         }
         
         OnComboStateChanged?.Invoke(_currentCombo, CurrentComboState);
     }
     
-    void CastCurrentCombo()
+    public void TryCastCurrentCombo()
     {
         if (CurrentComboState != ComboState.Ready) return;
         
@@ -99,7 +103,7 @@ public class SpellcastManager : SingletonBehaviour<SpellcastManager>, IGameManag
     
     void ExecuteSpell(SpellAsset spell)
     {
-        OnSpellCast?.Invoke(spell, _comboCardData);
+        OnSpellCast?.Invoke(spell, new List<CardData>(_comboCardData));
         
         int totalDamage = 0;
         
@@ -148,17 +152,17 @@ public class SpellcastManager : SingletonBehaviour<SpellcastManager>, IGameManag
         OnComboStateChanged?.Invoke("", ComboState.Empty);
     }
     
+    public void ClearSelection()
+    {
+        GameExtensions.GetManager<CardManager>()?.ClearSelection();
+    }
+    
     // UI Support
     public void PlaySelectedCards()
     {
         var cardManager = GameExtensions.GetManager<CardManager>();
         if (cardManager?.SelectedCards?.Count > 0)
             ProcessCardPlay(cardManager.SelectedCards);
-    }
-    
-    public void ClearSelection()
-    {
-        GameExtensions.GetManager<CardManager>()?.ClearSelection();
     }
     
     public void DrawCard()
