@@ -102,30 +102,11 @@ public class CardSlotBehaviour : MonoBehaviour, IDropHandler, IPointerEnterHandl
     
     public bool CanAcceptCard(Card card)
     {
-        bool enabled = _isEnabled;
-        bool empty = IsEmpty;
-        bool cardValid = card != null;
-        bool cardPlayable = card != null && card.IsPlayable();
-    
-        // FIXED: Detailliertes Debugging
-        Debug.Log($"[CardSlotBehaviour] CanAcceptCard check for slot {slotIndex + 1}:");
-        Debug.Log($"  _isEnabled: {enabled}");
-        Debug.Log($"  IsEmpty: {empty}");
-        Debug.Log($"  card != null: {cardValid}");
-        Debug.Log($"  card.IsPlayable(): {cardPlayable}");
-    
-        if (card != null)
-        {
-            Debug.Log($"  Card name: {card.GetCardName()}");
-            Debug.Log($"  Card state: {card.CurrentState}");
-            Debug.Log($"  Card interactable: {card.IsInteractable}");
-            Debug.Log($"  Card valid: {card.IsValid()}");
-        }
-    
-        bool result = enabled && empty && cardValid && cardPlayable;
-        Debug.Log($"  Final result: {result}");
-    
-        return result;
+        if (!_isEnabled || !IsEmpty || card == null) 
+            return false;
+        
+        // Simplified validation
+        return card.IsInteractable && card.CardData != null;
     }
     
     private void PlaceCard(Card card)
@@ -154,13 +135,19 @@ public class CardSlotBehaviour : MonoBehaviour, IDropHandler, IPointerEnterHandl
             return;
         }
         
+        // Erst Parent setzen
         cardTransform.SetParent(cardContainer, false);
         
+        // Dann Anchors/Pivot RICHTIG setzen für centered positioning
         cardRect.anchorMin = Vector2.one * 0.5f;
         cardRect.anchorMax = Vector2.one * 0.5f;
         cardRect.pivot = Vector2.one * 0.5f;
         cardRect.anchoredPosition = Vector2.zero;
         
+        // LocalPosition explizit auf zero
+        cardRect.localPosition = Vector3.zero;
+        
+        // Calculate scale
         Vector2 slotSize = (transform as RectTransform).sizeDelta;
         Vector2 cardSize = cardRect.sizeDelta;
         
@@ -169,9 +156,12 @@ public class CardSlotBehaviour : MonoBehaviour, IDropHandler, IPointerEnterHandl
         float uniformScale = Mathf.Min(scaleX, scaleY, 1f);
         
         cardRect.localScale = Vector3.one * uniformScale;
-        cardTransform.SetAsLastSibling();
         
-        Debug.Log($"[CardSlotBehaviour] Card positioned: scale={uniformScale:F2}");
+        // Force Layout Update
+        cardTransform.SetAsLastSibling();
+        LayoutRebuilder.ForceRebuildLayoutImmediate(cardRect);
+        
+        Debug.Log($"[CardSlotBehaviour] Card positioned - Pos: {cardRect.anchoredPosition}, Scale: {uniformScale:F2}");
     }
     
     public Card RemoveCard(bool triggerEvents = true)

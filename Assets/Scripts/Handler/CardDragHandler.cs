@@ -3,7 +3,6 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.Events;
 
-
 public class CardDragHandler : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler
 {
     private RectTransform rectTransform;
@@ -17,10 +16,10 @@ public class CardDragHandler : MonoBehaviour, IBeginDragHandler, IDragHandler, I
     private Vector2 dragOffset;
     private Camera eventCamera;
     
-    // FIXED: Slot system support - korrigierte Variablen
+    // Slot system support
     private bool wasInSlotBefore = false;
     private int originalSlotIndex = -1;
-    private CardSlotBehaviour originalSlot = null; // FIXED: Direkte Slot-Referenz
+    private CardSlotBehaviour originalSlot = null;
     
     // Events
     public static UnityEvent<GameObject> OnCardDragStart = new UnityEvent<GameObject>();
@@ -61,7 +60,7 @@ public class CardDragHandler : MonoBehaviour, IBeginDragHandler, IDragHandler, I
         originalParent = transform.parent;
         originalSiblingIndex = transform.GetSiblingIndex();
         
-        // FIXED: Check if card was in a slot before dragging
+        // Check if card was in a slot before dragging
         CheckIfInSlot();
         
         eventCamera = eventData.pressEventCamera;
@@ -109,6 +108,8 @@ public class CardDragHandler : MonoBehaviour, IBeginDragHandler, IDragHandler, I
 
     public void OnEndDrag(PointerEventData eventData)
     {
+        Debug.Log("[CardDragHandler] === OnEndDrag START ===");
+        
         GameObject dropTarget = null;
         bool successfulDrop = false;
         
@@ -116,14 +117,19 @@ public class CardDragHandler : MonoBehaviour, IBeginDragHandler, IDragHandler, I
         var raycastResults = new List<RaycastResult>();
         EventSystem.current.RaycastAll(eventData, raycastResults);
         
+        Debug.Log($"[CardDragHandler] Raycast hits: {raycastResults.Count}");
+        
         foreach (var result in raycastResults)
         {
+            Debug.Log($"  - Hit: {result.gameObject.name} (Layer: {result.gameObject.layer})");
+            
             if (result.gameObject != gameObject)
             {
                 // Check for slot drop (highest priority)
                 var slotBehaviour = result.gameObject.GetComponent<CardSlotBehaviour>();
                 if (slotBehaviour != null)
                 {
+                    Debug.Log($"  -> Found Slot: {slotBehaviour.SlotIndex + 1}");
                     dropTarget = result.gameObject;
                     successfulDrop = HandleSlotDrop(slotBehaviour);
                     break;
@@ -133,6 +139,7 @@ public class CardDragHandler : MonoBehaviour, IBeginDragHandler, IDragHandler, I
                 var dropArea = result.gameObject.GetComponent<DropAreaHandler>();
                 if (dropArea != null)
                 {
+                    Debug.Log($"  -> Found DropArea");
                     dropTarget = result.gameObject;
                     successfulDrop = HandleDropAreaDrop(dropArea);
                     break;
@@ -141,12 +148,14 @@ public class CardDragHandler : MonoBehaviour, IBeginDragHandler, IDragHandler, I
                 // Legacy tag-based drop areas
                 if (result.gameObject.CompareTag("PlayArea"))
                 {
+                    Debug.Log($"  -> Found PlayArea (Tag)");
                     dropTarget = result.gameObject;
                     successfulDrop = HandlePlayAreaDrop(dropTarget);
                     break;
                 }
                 else if (result.gameObject.CompareTag("DiscardArea"))
                 {
+                    Debug.Log($"  -> Found DiscardArea (Tag)");
                     dropTarget = result.gameObject;
                     successfulDrop = HandleDiscardAreaDrop(dropTarget);
                     break;
@@ -154,26 +163,29 @@ public class CardDragHandler : MonoBehaviour, IBeginDragHandler, IDragHandler, I
             }
         }
         
-        // FIXED: Immer zurücksetzen wenn kein erfolgreicher Drop
+        Debug.Log($"[CardDragHandler] Drop result: {(successfulDrop ? "SUCCESS" : "FAILED")}");
+        
+        // Handle drop result
         if (!successfulDrop)
         {
             ReturnToOriginalPosition();
         }
         
-        // FIXED: Visual feedback IMMER zurücksetzen
+        // Always reset visual feedback
         ResetVisualFeedback();
         
         OnCardDragEnd?.Invoke(gameObject);
+        
+        Debug.Log("[CardDragHandler] === OnEndDrag END ===");
     }
     
-    // FIXED: Neue Methode für Visual Reset
     private void ResetVisualFeedback()
     {
         canvasGroup.alpha = 1f;
         canvasGroup.blocksRaycasts = true;
     }
     
-    // === SLOT SYSTEM SUPPORT - FIXED ===
+    // === SLOT SYSTEM SUPPORT ===
     
     private void CheckIfInSlot()
     {
@@ -181,18 +193,25 @@ public class CardDragHandler : MonoBehaviour, IBeginDragHandler, IDragHandler, I
         originalSlotIndex = -1;
         originalSlot = null;
         
-        // FIXED: Check if parent has a CardSlotBehaviour
+        // Check if parent has a CardSlotBehaviour
         var parentSlot = GetComponentInParent<CardSlotBehaviour>();
+        
+        Debug.Log($"[CardDragHandler] CheckIfInSlot - Parent: {transform.parent?.name}, ParentSlot: {parentSlot?.name}");
+        
         if (parentSlot != null && parentSlot.OccupyingCard == GetComponent<Card>())
         {
             wasInSlotBefore = true;
             originalSlotIndex = parentSlot.SlotIndex;
-            originalSlot = parentSlot; // FIXED: Direkte Referenz speichern
+            originalSlot = parentSlot;
             
-            Debug.Log($"[CardDragHandler] Card was in slot {originalSlotIndex + 1}, removing from slot");
+            Debug.Log($"[CardDragHandler] Card WAS in slot {originalSlotIndex + 1}");
             
-            // Clear the slot since we're dragging out
-            parentSlot.RemoveCard(false);
+            // Clear the slot's reference but keep our reference
+            parentSlot.RemoveCard(false); // WICHTIG: Slot muss geleert werden!
+        }
+        else
+        {
+            Debug.Log($"[CardDragHandler] Card was NOT in a slot");
         }
     }
     
@@ -200,31 +219,57 @@ public class CardDragHandler : MonoBehaviour, IBeginDragHandler, IDragHandler, I
     {
         Card cardComponent = GetComponent<Card>();
         
-        // FIXED: Bessere Debugging
-        Debug.Log($"[CardDragHandler] Attempting to place {cardComponent.GetCardName()} in slot {targetSlot.SlotIndex + 1}");
-        Debug.Log($"  Card IsPlayable: {cardComponent.IsPlayable()}");
-        Debug.Log($"  Slot IsEnabled: {targetSlot.IsEnabled}");
-        Debug.Log($"  Slot IsEmpty: {targetSlot.IsEmpty}");
-        Debug.Log($"  Slot CanAcceptCard: {targetSlot.CanAcceptCard(cardComponent)}");
+        Debug.Log($"[CardDragHandler] HandleSlotDrop - Target Slot: {targetSlot.SlotIndex + 1}");
+        Debug.Log($"  - Target IsEmpty: {targetSlot.IsEmpty}");
+        Debug.Log($"  - Target IsEnabled: {targetSlot.IsEnabled}");
+        Debug.Log($"  - Card IsPlayable: {cardComponent.IsPlayable()}");
+        Debug.Log($"  - Card IsInteractable: {cardComponent.IsInteractable}");
+        Debug.Log($"  - Card CardData: {cardComponent.CardData?.name ?? "NULL"}");
         
         if (!cardComponent.IsPlayable())
         {
-            Debug.LogWarning("[CardDragHandler] Card not playable for slot");
+            Debug.LogWarning("[CardDragHandler] Card not playable!");
+            return false;
+        }
+        
+        // Wenn die Karte vom gleichen Slot kommt, abbrechen
+        if (originalSlot == targetSlot)
+        {
+            Debug.Log("[CardDragHandler] Same slot - canceling drop");
             return false;
         }
         
         bool success = targetSlot.TryPlaceCard(cardComponent);
+        
         if (success)
         {
-            Debug.Log($"[CardDragHandler] Card {cardComponent.GetCardName()} successfully placed in slot {targetSlot.SlotIndex + 1}");
+            Debug.Log($"[CardDragHandler] SUCCESS - Card placed in slot {targetSlot.SlotIndex + 1}");
             
-            // FIXED: Clear original slot state since we placed successfully
-            wasInSlotBefore = false;
-            originalSlot = null;
+            // Update original references für nächsten Drag
+            originalParent = transform.parent;
+            originalPosition = rectTransform.anchoredPosition;
+            originalSiblingIndex = transform.GetSiblingIndex();
+            
+            // Update slot tracking
+            wasInSlotBefore = true;
+            originalSlot = targetSlot;
+            originalSlotIndex = targetSlot.SlotIndex;
+            
+            // Clear old slot reference if needed
+            if (originalSlot != null && originalSlot != targetSlot)
+            {
+                originalSlot.RemoveCard(false);
+            }
+            
+            // Remove from hand
+            CoreExtensions.TryWithManager<CardManager>(this, cm => 
+            {
+                cm.RemoveCardFromHand(cardComponent);
+            });
         }
         else
         {
-            Debug.LogWarning($"[CardDragHandler] Failed to place card in slot {targetSlot.SlotIndex + 1}");
+            Debug.LogError($"[CardDragHandler] FAILED - Could not place card in slot {targetSlot.SlotIndex + 1}");
         }
         
         return success;
@@ -293,27 +338,26 @@ public class CardDragHandler : MonoBehaviour, IBeginDragHandler, IDragHandler, I
         });
     }
 
-    // FIXED: Komplett überarbeitete ReturnToOriginalPosition
     private void ReturnToOriginalPosition()
     {
         Debug.Log($"[CardDragHandler] Returning card to original position");
         
-        // FIXED: Erst parent zurücksetzen
+        // Erst parent zurücksetzen
         transform.SetParent(originalParent);
         transform.SetSiblingIndex(originalSiblingIndex);
         
-        // FIXED: Dann position zurücksetzen
+        // Dann position zurücksetzen
         rectTransform.anchoredPosition = originalPosition;
         
-        // FIXED: Scale zurücksetzen falls verändert
+        // Scale zurücksetzen falls verändert
         rectTransform.localScale = Vector3.one;
         
-        // FIXED: Anchors zurücksetzen für Hand-Layout
+        // Anchors zurücksetzen für Hand-Layout
         rectTransform.anchorMin = new Vector2(0.5f, 0.5f);
         rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
         rectTransform.pivot = new Vector2(0.5f, 0.5f);
         
-        // FIXED: Wenn Card ursprünglich in einem Slot war, versuche sie zurückzusetzen
+        // Wenn Card ursprünglich in einem Slot war, versuche sie zurückzusetzen
         if (wasInSlotBefore && originalSlot != null)
         {
             Debug.Log($"[CardDragHandler] Attempting to restore card to original slot {originalSlotIndex + 1}");
@@ -328,7 +372,6 @@ public class CardDragHandler : MonoBehaviour, IBeginDragHandler, IDragHandler, I
             else
             {
                 Debug.LogWarning($"[CardDragHandler] Failed to restore card to slot {originalSlotIndex + 1}, leaving in hand");
-                // Falls Slot-Restore fehlschlägt, trotzdem zur Hand zurückkehren
                 EnsureCardInHand();
             }
         }
@@ -339,12 +382,11 @@ public class CardDragHandler : MonoBehaviour, IBeginDragHandler, IDragHandler, I
         }
     }
     
-    // FIXED: Neue Methode um sicherzustellen dass Card in Hand ist
     private void EnsureCardInHand()
     {
         Card cardComponent = GetComponent<Card>();
         
-        // FIXED: Sicherstellen dass Card im CardManager registriert ist
+        // Sicherstellen dass Card im CardManager registriert ist
         CoreExtensions.TryWithManager<CardManager>(this, cm => 
         {
             if (!cm.GetHandCards().Contains(cardComponent))
@@ -354,7 +396,7 @@ public class CardDragHandler : MonoBehaviour, IBeginDragHandler, IDragHandler, I
             }
         });
         
-        // FIXED: Hand Layout Update triggern
+        // Hand Layout Update triggern
         CoreExtensions.TryWithManager<HandLayoutManager>(this, hlm => 
         {
             hlm.UpdateLayout();

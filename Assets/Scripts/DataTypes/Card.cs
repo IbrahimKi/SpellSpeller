@@ -59,7 +59,10 @@ public class Card : MonoBehaviour, IPointerClickHandler, IPointerEnterHandler, I
             cardImage.gameObject.SetActive(true);
         }
     }
-    
+    public bool IsPlayable()
+    {
+        return IsInteractable && CardData != null && gameObject.activeInHierarchy;
+    }
     public void OnPointerClick(PointerEventData eventData)
     {
         if (!isInteractable || eventData.button != PointerEventData.InputButton.Left) return;
