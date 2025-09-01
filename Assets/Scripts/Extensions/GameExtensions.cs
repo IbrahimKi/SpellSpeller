@@ -221,7 +221,6 @@ public static class GameExtensions
         LogManagerStatus<EnemyManager>("EnemyManager");
         LogManagerStatus<UnitManager>("UnitManager");
         LogManagerStatus<HandLayoutManager>("HandLayoutManager");
-        LogManagerStatus<CardSlotManager>("CardSlotManager");
     }
 
     private static void LogManagerStatus<T>(string name) where T : SingletonBehaviour<T>

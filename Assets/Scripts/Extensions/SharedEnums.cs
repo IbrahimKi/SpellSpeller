@@ -21,7 +21,7 @@ public enum SpellEffectType { Damage, Heal, Buff, Debuff, Summon, Shield, Custom
 public enum ComboState { Empty, Building, Ready, Invalid }
 
 // Manager System
-public enum ManagerType { Card, Deck, HandLayout, Spellcast, Combat, Enemy, Unit, CardSlot }
+public enum ManagerType { Card, Deck, HandLayout, Spellcast, Combat, Enemy, Unit }
 public enum PlayerActionType { PlayCards, DiscardCard, DrawCard, EndTurn }
 public enum FormationType { Line, Circle, Grid }
 public enum TargetingStrategy { Optimal, Weakest, Strongest, Nearest, Priority, Random }

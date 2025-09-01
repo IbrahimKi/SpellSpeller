@@ -3,7 +3,6 @@ using UnityEngine.EventSystems;
 using UnityEngine.UI;
 using System.Collections.Generic;
 
-
 public class DropAreaHandler : MonoBehaviour, IDropHandler, IPointerEnterHandler, IPointerExitHandler
 {
     [Header("Visual Feedback")]
@@ -22,7 +21,7 @@ public class DropAreaHandler : MonoBehaviour, IDropHandler, IPointerEnterHandler
     {
         PlayArea,
         DiscardArea,
-        SlotArea
+        DeckArea
     }
     
     void Awake()
@@ -51,8 +50,6 @@ public class DropAreaHandler : MonoBehaviour, IDropHandler, IPointerEnterHandler
         if (dropAreaImage.color.a == 0)
             dropAreaImage.color = normalColor;
     }
-    
-    // === DRAG EVENT HANDLERS ===
     
     private void OnCardDragStart(GameObject card)
     {
@@ -84,12 +81,10 @@ public class DropAreaHandler : MonoBehaviour, IDropHandler, IPointerEnterHandler
             return;
         }
         
-        // Validiere basierend auf Area Type
         canAcceptDrop = areaType switch
         {
             DropAreaType.PlayArea => ValidatePlayAreaDrop(cardComponent),
             DropAreaType.DiscardArea => ValidateDiscardAreaDrop(cardComponent),
-            DropAreaType.SlotArea => ValidateSlotAreaDrop(cardComponent),
             _ => false
         };
         
@@ -111,14 +106,6 @@ public class DropAreaHandler : MonoBehaviour, IDropHandler, IPointerEnterHandler
                    cm.CanSpendResource(ResourceType.Creativity, 1));
     }
     
-    private bool ValidateSlotAreaDrop(Card card)
-    {
-        return CoreExtensions.TryWithManager<CardSlotManager, bool>(this, csm => 
-            csm.IsEnabled && csm.HasEmptySlots);
-    }
-    
-    // === UI EVENT HANDLERS ===
-    
     public void OnPointerEnter(PointerEventData eventData)
     {
         if (currentDraggedCard != null && canAcceptDrop)
@@ -139,73 +126,12 @@ public class DropAreaHandler : MonoBehaviour, IDropHandler, IPointerEnterHandler
     
     public void OnDrop(PointerEventData eventData)
     {
-        if (eventData.pointerDrag != null && canAcceptDrop)
-        {
-            Card cardComponent = eventData.pointerDrag.GetComponent<Card>();
-            if (cardComponent != null)
-            {
-                HandleDrop(cardComponent, eventData);
-            }
-        }
-        
+        // CardDragHandler handles the actual drop logic
         Invoke(nameof(ResetColor), 0.1f);
-    }
-    
-    private void HandleDrop(Card card, PointerEventData eventData)
-    {
-        switch (areaType)
-        {
-            case DropAreaType.SlotArea:
-                HandleSlotAreaDrop(card, eventData);
-                break;
-                
-            case DropAreaType.PlayArea:
-                // Handled by CardDragHandler
-                break;
-                
-            case DropAreaType.DiscardArea:
-                // Handled by CardDragHandler
-                break;
-        }
-    }
-    
-    private void HandleSlotAreaDrop(Card card, PointerEventData eventData)
-    {
-        CoreExtensions.TryWithManager<CardSlotManager>(this, csm => 
-        {
-            if (csm.IsEnabled && csm.HasEmptySlots)
-            {
-                csm.TryPlaceCardInSlot(card);
-            }
-        });
     }
     
     private void ResetColor()
     {
         dropAreaImage.color = normalColor;
     }
-    
-    // === PUBLIC API ===
-    
-    public void RefreshDropValidity()
-    {
-        if (currentDraggedCard != null)
-            UpdateDropValidity();
-    }
-    
-    public void SetAreaType(DropAreaType type)
-    {
-        areaType = type;
-        RefreshDropValidity();
-    }
-
-#if UNITY_EDITOR
-    [ContextMenu("Test Drop Validation")]
-    private void TestDropValidation()
-    {
-        Debug.Log($"[DropAreaHandler] Area Type: {areaType}");
-        Debug.Log($"  Can Accept Drop: {canAcceptDrop}");
-        Debug.Log($"  Current Dragged Card: {currentDraggedCard?.name ?? "None"}");
-    }
-#endif
 }

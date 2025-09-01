@@ -10,11 +10,10 @@ public class GameManager : SingletonBehaviour<GameManager>
         new ManagerInitConfig { managerType = ManagerType.Card, priority = 0 },
         new ManagerInitConfig { managerType = ManagerType.Deck, priority = 1 },
         new ManagerInitConfig { managerType = ManagerType.HandLayout, priority = 2 },
-        new ManagerInitConfig { managerType = ManagerType.CardSlot, priority = 3 },
-        new ManagerInitConfig { managerType = ManagerType.Spellcast, priority = 4 },
-        new ManagerInitConfig { managerType = ManagerType.Combat, priority = 5 },
-        new ManagerInitConfig { managerType = ManagerType.Enemy, priority = 6 },
-        new ManagerInitConfig { managerType = ManagerType.Unit, priority = 7 }
+        new ManagerInitConfig { managerType = ManagerType.Spellcast, priority = 3 },
+        new ManagerInitConfig { managerType = ManagerType.Combat, priority = 4 },
+        new ManagerInitConfig { managerType = ManagerType.Enemy, priority = 5 },
+        new ManagerInitConfig { managerType = ManagerType.Unit, priority = 6 }
     };
     
     [Header("Settings")]
@@ -87,7 +86,6 @@ public class GameManager : SingletonBehaviour<GameManager>
         RegisterManagerSafely(ManagerType.Card, CoreExtensions.GetManager<CardManager>());
         RegisterManagerSafely(ManagerType.Deck, CoreExtensions.GetManager<DeckManager>());
         RegisterManagerSafely(ManagerType.HandLayout, CoreExtensions.GetManager<HandLayoutManager>());
-        RegisterManagerSafely(ManagerType.CardSlot, CoreExtensions.GetManager<CardSlotManager>());
         RegisterManagerSafely(ManagerType.Spellcast, CoreExtensions.GetManager<SpellcastManager>());
         RegisterManagerSafely(ManagerType.Combat, CoreExtensions.GetManager<CombatManager>());
         RegisterManagerSafely(ManagerType.Enemy, CoreExtensions.GetManager<EnemyManager>());
@@ -163,7 +161,7 @@ public class GameManager : SingletonBehaviour<GameManager>
     public EnemyManager EnemyManager => GetManager<EnemyManager>(ManagerType.Enemy);
     public UnitManager UnitManager => GetManager<UnitManager>(ManagerType.Unit);
     public HandLayoutManager HandLayoutManager => GetManager<HandLayoutManager>(ManagerType.HandLayout);
-    public CardSlotManager CardSlotManager => GetManager<CardSlotManager>(ManagerType.CardSlot);
+
     
 
 #if UNITY_EDITOR
@@ -189,23 +187,6 @@ public class GameManager : SingletonBehaviour<GameManager>
         }
     }
     
-    [ContextMenu("Test Card Slot System")]
-    public void TestCardSlotSystem()
-    {
-        var csm = CardSlotManager;
-        if (csm != null)
-        {
-            Debug.Log($"[GameManager] CardSlotManager Test:");
-            Debug.Log($"  IsReady: {csm.IsReady}");
-            Debug.Log($"  IsEnabled: {csm.IsEnabled}");
-            Debug.Log($"  SlotCount: {csm.SlotCount}");
-            Debug.Log($"  FilledSlots: {csm.FilledSlotCount}");
-        }
-        else
-        {
-            Debug.LogError("[GameManager] CardSlotManager not found!");
-        }
-    }
 #endif
     protected override void OnAwakeInitialize()
     {
