@@ -401,7 +401,7 @@ public class EnemyManager : SingletonBehaviour<EnemyManager>, IGameManager
     public void DamageAllEnemies(int damage)
     {
         Debug.Log($"[EnemyManager] Dealing {damage} damage to all enemies");
-        
+    
         int enemiesDamaged = 0;
         foreach (var enemy in AliveEnemies.ToList())
         {
@@ -415,7 +415,7 @@ public class EnemyManager : SingletonBehaviour<EnemyManager>, IGameManager
                 }
             }
         }
-        
+    
         Debug.Log($"[EnemyManager] Damaged {enemiesDamaged} enemies");
     }
     

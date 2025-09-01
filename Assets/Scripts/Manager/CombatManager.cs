@@ -82,7 +82,7 @@ public class CombatManager : SingletonBehaviour<CombatManager>, IGameManager
         _currentPhase = TurnPhase.PlayerTurn;
         
         // Setup deck
-        var deck = GameExtensions.GetManager<DeckManager>();
+        var deck = CoreExtensions.GetManager<DeckManager>();
         if (deck?.DeckSize == 0) deck.GenerateTestDeck();
         
         // Draw starting hand
@@ -116,8 +116,8 @@ public class CombatManager : SingletonBehaviour<CombatManager>, IGameManager
         OnCreativityChanged?.Invoke(_creativity);
         
         // Refill hand
-        var cardManager = GameExtensions.GetManager<CardManager>();
-        var deckManager = GameExtensions.GetManager<DeckManager>();
+        var cardManager = CoreExtensions.GetManager<CardManager>();
+        var deckManager = CoreExtensions.GetManager<DeckManager>();
         if (cardManager != null && deckManager != null)
         {
             int toDraw = startingHandSize - cardManager.HandSize;
@@ -165,14 +165,6 @@ public class CombatManager : SingletonBehaviour<CombatManager>, IGameManager
         OnCreativityChanged?.Invoke(_creativity);
     }
     
-    public void DealDamageToTargets(int damage)
-    {
-        GameExtensions.TryManager<EnemyManager>(em => 
-        {
-            var target = GameExtensions.GetWeakest(em.AliveEnemies);
-            target?.DamageTarget(damage);
-        });
-    }
     
     // Simple helper methods
     public bool CanSpendCreativity(int amount) => _creativity.CanAfford(amount);
@@ -207,25 +199,31 @@ public class CombatManager : SingletonBehaviour<CombatManager>, IGameManager
                 return false;
         }
     }
+    public void DealDamageToTargets(int damage)
+    {
+        CoreExtensions.TryWithManagerStatic<EnemyManager>( em => 
+        {
+            var target = em.AliveEnemies.GetWeakest();
+            target?.TakeDamage(damage, DamageType.Normal);
+        });
+    }
 
     public int DeckSize
     {
         get
         {
-            int size = 0;
-            GameExtensions.TryManager<DeckManager>(dm => size = dm.DeckSize);
-            return size;
+            return CoreExtensions.TryWithManagerStatic<DeckManager, int>(null, dm => dm.DeckSize);
         }
     }
+
     public int DiscardSize
     {
         get
         {
-            int size = 0;
-            GameExtensions.TryManager<DeckManager>(dm => size = dm.DiscardSize);
-            return size;
+            return CoreExtensions.TryWithManagerStatic<DeckManager, int>(null, dm => dm.DiscardSize);
         }
     }
+
 
     public static event System.Action<int> OnDeckSizeChanged
     {

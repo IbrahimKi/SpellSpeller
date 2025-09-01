@@ -335,14 +335,14 @@ public class CardSlotManager : SingletonBehaviour<CardSlotManager>, IGameManager
             Debug.LogWarning("[CardSlotManager] No cards in slots to play");
             return false;
         }
-        
+    
         Debug.Log($"[CardSlotManager] Playing {sequence.Count} cards from slots");
-        
-        bool success = CoreExtensions.TryWithManager<SpellcastManager>(this, sm => 
+    
+        bool success = CoreExtensions.TryWithManagerStatic<SpellcastManager>( sm => 
         {
             sm.ProcessCardPlay(sequence);
         });
-        
+    
         if (success)
         {
             ClearAllSlots();
@@ -352,7 +352,7 @@ public class CardSlotManager : SingletonBehaviour<CardSlotManager>, IGameManager
         {
             Debug.LogError("[CardSlotManager] Failed to process card play");
         }
-        
+    
         return success;
     }
     
@@ -368,14 +368,15 @@ public class CardSlotManager : SingletonBehaviour<CardSlotManager>, IGameManager
     {
         var sequence = GetSlotSequence();
         if (sequence.Count == 0) return false;
-        
-        bool isPlayerTurn = CoreExtensions.TryWithManager<CombatManager, bool>(this, cm => cm.IsPlayerTurn);
+    
+        bool isPlayerTurn = CoreExtensions.TryWithManagerStatic<CombatManager, bool>(null, cm => cm.IsPlayerTurn);
         bool canPlayCards = SpellcastManager.CheckCanPlayCards(sequence);
-        
+    
         Debug.Log($"[CardSlotManager] Can play check: playerTurn={isPlayerTurn}, canPlay={canPlayCards}, cards={sequence.Count}");
-        
+    
         return isPlayerTurn && canPlayCards;
     }
+
     
     private void NotifySlotSequenceChanged()
     {

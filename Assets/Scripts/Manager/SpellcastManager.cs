@@ -51,7 +51,7 @@ public class SpellcastManager : SingletonBehaviour<SpellcastManager>, IGameManag
         string letters = cards.GetLetterSequence();
         if (string.IsNullOrEmpty(letters)) return;
         
-        var cardManager = GameExtensions.GetManager<CardManager>();
+        var cardManager = CoreExtensions.GetManager<CardManager>();
         foreach (var card in cards.Where(c => c.IsPlayable()))
         {
             _comboCardData.Add(card.CardData);
@@ -104,9 +104,9 @@ public class SpellcastManager : SingletonBehaviour<SpellcastManager>, IGameManag
     void ExecuteSpell(SpellAsset spell)
     {
         OnSpellCast?.Invoke(spell, new List<CardData>(_comboCardData));
-        
+    
         int totalDamage = 0;
-        
+    
         // Simple effect execution
         foreach (var effect in spell.Effects)
         {
@@ -114,29 +114,29 @@ public class SpellcastManager : SingletonBehaviour<SpellcastManager>, IGameManag
             {
                 case SpellEffectType.Damage:
                     int damage = (int)effect.value;
-                    GameExtensions.TryManager<EnemyManager>(em => 
+                    CoreExtensions.TryWithManagerStatic<EnemyManager>( em => 
                     {
                         var target = em.AliveEnemies.GetWeakest();
                         if (target != null)
                         {
-                            target.DamageTarget(damage);
+                            target.TakeDamage(damage, DamageType.Normal);
                             totalDamage += damage;
                         }
                     });
                     break;
-                    
+                
                 case SpellEffectType.Heal:
-                    GameExtensions.TryManager<CombatManager>(cm => 
+                    CoreExtensions.TryWithManagerStatic<CombatManager>( cm => 
                         cm.ModifyLife((int)effect.value));
                     break;
             }
         }
-        
+    
         if (totalDamage > 0)
             OnSpellDamageDealt?.Invoke(spell, totalDamage);
-        
+    
         // Return cards to deck
-        GameExtensions.TryManager<DeckManager>(dm => 
+        CoreExtensions.TryWithManagerStatic<DeckManager>( dm => 
         {
             foreach (var card in _comboCardData)
                 dm.AddCardToBottom(card);
@@ -154,34 +154,33 @@ public class SpellcastManager : SingletonBehaviour<SpellcastManager>, IGameManag
     
     public void ClearSelection()
     {
-        GameExtensions.GetManager<CardManager>()?.ClearSelection();
+        CoreExtensions.GetManager<CardManager>()?.ClearSelection();
     }
     
     // UI Support
     public void PlaySelectedCards()
     {
-        var cardManager = GameExtensions.GetManager<CardManager>();
+        var cardManager = CoreExtensions.GetManager<CardManager>();
         if (cardManager?.SelectedCards?.Count > 0)
             ProcessCardPlay(cardManager.SelectedCards);
     }
     
     public void DrawCard()
     {
-        GameExtensions.TryManager<DeckManager>(dm => dm.TryDrawCard());
+        CoreExtensions.TryWithManagerStatic<DeckManager>( dm => dm.TryDrawCard());
     }
     
     // Static helpers for UI
     public static bool CheckCanPlayCards(List<Card> cards = null)
     {
         if (!HasInstance) return false;
-        var combat = GameExtensions.GetManager<CombatManager>();
-        return combat != null && combat.CanAct();
+        return CoreExtensions.TryWithManagerStatic<CombatManager, bool>(null, combat => combat.CanAct());
     }
-    
+
     public static bool CheckCanDiscardCard(Card card = null)
     {
         if (!HasInstance) return false;
-        var combat = GameExtensions.GetManager<CombatManager>();
-        return combat != null && combat.CanAct() && combat.Creativity.CanAfford(1);
+        return CoreExtensions.TryWithManagerStatic<CombatManager, bool>(null, combat => 
+            combat.CanAct() && combat.Creativity.CanAfford(1));
     }
 }

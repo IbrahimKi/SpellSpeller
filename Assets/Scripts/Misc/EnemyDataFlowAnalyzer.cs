@@ -115,7 +115,7 @@ public class EnemyDataFlowAnalyzer : MonoBehaviour
             if (logEventDetails)
             {
                 Debug.Log($"[EnemyAnalyzer] 🎯 TARGET EVENT: {entity.EntityName}");
-                Debug.Log($"  - IsTargeted: {entity.IsTargeted}");
+                Debug.Log($"  - IsTargeted: {entity.IsTargeted()}");
             }
         }
     }
@@ -190,7 +190,7 @@ public class EnemyDataFlowAnalyzer : MonoBehaviour
             EntityType = entity.Type,
             IsAlive = entity.IsAlive,
             IsTargetable = entity.IsTargetable,
-            IsTargeted = entity.IsTargeted,
+            IsTargeted = entity.IsTargeted(),
             
             // Health data
             CurrentHealth = entity.CurrentHealth,
@@ -420,7 +420,7 @@ public class EnemyDataFlowAnalyzer : MonoBehaviour
         Debug.Log($"  - Type: {entity.Type}");
         Debug.Log($"  - IsAlive: {entity.IsAlive}");
         Debug.Log($"  - IsTargetable: {entity.IsTargetable}");
-        Debug.Log($"  - IsTargeted: {entity.IsTargeted}");
+        Debug.Log($"  - IsTargeted: {entity.IsTargeted()}");
         Debug.Log($"  - Health: {entity.CurrentHealth}/{entity.MaxHealth} ({entity.HealthPercentage:P0})");
         
         Debug.Log($"GameObject Info:");

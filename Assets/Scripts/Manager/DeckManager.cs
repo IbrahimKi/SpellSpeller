@@ -292,12 +292,12 @@ public class DeckManager : SingletonBehaviour<DeckManager>, IGameManager
     public bool TryDrawCard()
     {
         if (IsDeckEmpty) return false;
-    
+
         var cardData = DrawCard();
         if (cardData != null)
         {
             // Spawn card in hand
-            GameExtensions.TryManager<CardManager>(cm => 
+            CoreExtensions.TryWithManagerStatic<CardManager>( cm => 
                 cm.SpawnCard(cardData, null, true)
             );
             return true;

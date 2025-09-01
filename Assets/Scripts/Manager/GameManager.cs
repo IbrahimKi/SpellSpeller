@@ -84,14 +84,14 @@ public class GameManager : SingletonBehaviour<GameManager>
     
     private void DiscoverManagers()
     {
-        RegisterManagerSafely(ManagerType.Card, GameExtensions.GetManager<CardManager>());
-        RegisterManagerSafely(ManagerType.Deck, GameExtensions.GetManager<DeckManager>());
-        RegisterManagerSafely(ManagerType.HandLayout, GameExtensions.GetManager<HandLayoutManager>());
-        RegisterManagerSafely(ManagerType.CardSlot, GameExtensions.GetManager<CardSlotManager>());
-        RegisterManagerSafely(ManagerType.Spellcast, GameExtensions.GetManager<SpellcastManager>());
-        RegisterManagerSafely(ManagerType.Combat, GameExtensions.GetManager<CombatManager>());
-        RegisterManagerSafely(ManagerType.Enemy, GameExtensions.GetManager<EnemyManager>());
-        RegisterManagerSafely(ManagerType.Unit, GameExtensions.GetManager<UnitManager>());
+        RegisterManagerSafely(ManagerType.Card, CoreExtensions.GetManager<CardManager>());
+        RegisterManagerSafely(ManagerType.Deck, CoreExtensions.GetManager<DeckManager>());
+        RegisterManagerSafely(ManagerType.HandLayout, CoreExtensions.GetManager<HandLayoutManager>());
+        RegisterManagerSafely(ManagerType.CardSlot, CoreExtensions.GetManager<CardSlotManager>());
+        RegisterManagerSafely(ManagerType.Spellcast, CoreExtensions.GetManager<SpellcastManager>());
+        RegisterManagerSafely(ManagerType.Combat, CoreExtensions.GetManager<CombatManager>());
+        RegisterManagerSafely(ManagerType.Enemy, CoreExtensions.GetManager<EnemyManager>());
+        RegisterManagerSafely(ManagerType.Unit, CoreExtensions.GetManager<UnitManager>());
     
         Debug.Log($"[GameManager] Discovered {_managers.Count} managers");
     }
@@ -207,6 +207,11 @@ public class GameManager : SingletonBehaviour<GameManager>
         }
     }
 #endif
+    protected override void OnAwakeInitialize()
+    {
+        // GameManager implementation
+        Debug.Log("[GameManager] GameManager Awake Initialize");
+    }
 }
 
 [System.Serializable]

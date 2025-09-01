@@ -401,12 +401,11 @@ public class CardManager : SingletonBehaviour<CardManager>, IGameManager
     public bool CanDrawCard()
     {
         if (!IsReady) return false;
-        
+    
         return !IsHandFull && 
-               CoreExtensions.TryWithManager<DeckManager, bool>(this, dm => !dm.IsDeckEmpty) &&
-               CoreExtensions.TryWithManager<CombatManager, bool>(this, cm => cm.IsPlayerTurn);
+               CoreExtensions.TryWithManagerStatic<DeckManager, bool>(null, dm => !dm.IsDeckEmpty) &&
+               CoreExtensions.TryWithManagerStatic<CombatManager, bool>(null, cm => cm.IsPlayerTurn);
     }
-
 #if UNITY_EDITOR
     [ContextMenu("Analyze Hand")]
     public void DebugAnalyzeHand()

@@ -129,7 +129,7 @@ public class GameUIHandler : MonoBehaviour
     {
         return CoreExtensions.TryWithManager<EnemyManager, EntityBehaviour>(this, em =>
         {
-            var targetedEnemy = em.AllEnemies.FirstOrDefault(e => e != null && e.IsTargeted);
+            var targetedEnemy = em.AllEnemies.FirstOrDefault(e => e != null && e.IsTargeted());
             if (targetedEnemy != null) return targetedEnemy;
             
             var boss = em.AllEnemies.FirstOrDefault(e => e != null && e.IsBoss() && e.IsValidEntity());
