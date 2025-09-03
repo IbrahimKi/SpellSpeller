@@ -22,6 +22,10 @@ public class Card : MonoBehaviour, IPointerClickHandler, IPointerEnterHandler, I
     [SerializeField] private TextMeshProUGUI letterValuesText;
     [SerializeField] private Image cardImage;
     
+    public static System.Action<Card> OnCardHighlighted;
+    public static System.Action<Card> OnCardUnhighlighted;
+    public static System.Action<Card, int> OnCardHandIndexChanged;
+    
     // Events
     public static System.Action<Card> OnCardSelected;
     public static System.Action<Card> OnCardDeselected;
@@ -31,6 +35,11 @@ public class Card : MonoBehaviour, IPointerClickHandler, IPointerEnterHandler, I
     public bool IsSelected => isSelected;
     public bool IsInteractable => isInteractable;
     public CardState CurrentState { get; private set; } = CardState.Idle;
+    
+    public int HandIndex { get; set; } = -1;
+    public bool IsHighlighted => CurrentState == CardState.Highlighted;
+    public bool IsDragging => CurrentState == CardState.Dragging;
+    public Vector3 DragOffset { get; set; }
     
     public CardType GetCardType() => cardData?.cardType ?? CardType.Consonant;
     public CardSubType GetCardSubType() => cardData?.CardSubType ?? CardSubType.Basic;
@@ -117,11 +126,21 @@ public class Card : MonoBehaviour, IPointerClickHandler, IPointerEnterHandler, I
         Deselect();
         return true;
     }
+    
     void UpdateVisuals(bool hover = false)
     {
         if (!cardBackground) return;
-        cardBackground.color = CurrentState == CardState.Selected ? selectedColor : 
-                              hover ? hoverColor : normalColor;
+    
+        Color targetColor = CurrentState switch
+        {
+            CardState.Selected => selectedColor,
+            CardState.Highlighted => new Color(0.8f, 1f, 0.8f), // Light green
+            CardState.Dragging => new Color(0.9f, 0.9f, 0.9f, 0.8f), // Semi-transparent
+            CardState.Disabled => new Color(0.5f, 0.5f, 0.5f),
+            _ => hover ? hoverColor : normalColor
+        };
+    
+        cardBackground.color = targetColor;
     }
     
     public void SetInteractable(bool interactable)
@@ -130,6 +149,49 @@ public class Card : MonoBehaviour, IPointerClickHandler, IPointerEnterHandler, I
         CurrentState = interactable ? CardState.Idle : CardState.Disabled;
         if (!interactable) isSelected = false;
         UpdateVisuals();
+    }
+    
+    public void Highlight()
+    {
+        if (!isInteractable || CurrentState == CardState.Highlighted) return;
+    
+        // Deselect first if selected
+        if (isSelected) Deselect();
+    
+        CurrentState = CardState.Highlighted;
+        UpdateVisuals();
+        OnCardHighlighted?.Invoke(this);
+    }
+
+    public void Unhighlight()
+    {
+        if (CurrentState != CardState.Highlighted) return;
+    
+        CurrentState = CardState.Idle;
+        UpdateVisuals();
+        OnCardUnhighlighted?.Invoke(this);
+    }
+
+    public void StartDrag()
+    {
+        if (!isInteractable) return;
+        CurrentState = CardState.Dragging;
+        UpdateVisuals();
+    }
+
+    public void EndDrag()
+    {
+        if (CurrentState != CardState.Dragging) return;
+        CurrentState = isSelected ? CardState.Selected : CardState.Idle;
+        UpdateVisuals();
+    }
+
+    public void SetHandIndex(int index)
+    {
+        int oldIndex = HandIndex;
+        HandIndex = index;
+        if (oldIndex != index)
+            OnCardHandIndexChanged?.Invoke(this, index);
     }
     
     public void ResetCardState()

@@ -1,3 +1,4 @@
+
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
@@ -42,6 +43,11 @@ public class HandLayoutManager : SingletonBehaviour<HandLayoutManager>, IGameMan
     // PERFORMANCE FIX: Batch Layout Updates statt redundante Updates
     private bool _layoutDirty = false;
     private List<Card> _trackedCards = new List<Card>();
+    
+    // Card Ordering & Drop Preview
+    private Dictionary<Card, int> _cardIndices = new Dictionary<Card, int>();
+    private GameObject _dropPreview;
+    private int _dropPreviewIndex = -1;
     
     // State
     private bool _isReady = false;
@@ -152,7 +158,7 @@ public class HandLayoutManager : SingletonBehaviour<HandLayoutManager>, IGameMan
         if (card != null && card.transform.parent == transform)
         {
             SetupNewCard(card);
-            MarkLayoutDirty();
+            InsertCardAtPosition(card, HandPosition.Left); // Cards spawn on left
         }
     }
     
@@ -223,6 +229,174 @@ public class HandLayoutManager : SingletonBehaviour<HandLayoutManager>, IGameMan
         {
             _trackedCards.AddRange(newCards.Where(c => c != null && c.transform.parent == transform));
         }
+        UpdateCardIndices();
+    }
+    
+    // CARD ORDERING METHODS
+    public void MoveCardsToIndex(List<Card> cards, int targetIndex)
+    {
+        if (cards == null || cards.Count == 0) return;
+        
+        // Remove cards from current positions
+        foreach (var card in cards)
+        {
+            _trackedCards.Remove(card);
+        }
+        
+        // Insert at target position
+        targetIndex = Mathf.Clamp(targetIndex, 0, _trackedCards.Count);
+        _trackedCards.InsertRange(targetIndex, cards);
+        
+        // Update indices
+        UpdateCardIndices();
+        MarkLayoutDirty();
+    }
+    
+    public int GetDropIndex(Vector2 screenPosition)
+    {
+        if (_trackedCards.Count == 0) return 0;
+        
+        // Convert screen position to local position
+        RectTransformUtility.ScreenPointToLocalPointInRectangle(
+            _rectTransform,
+            screenPosition,
+            null,
+            out Vector2 localPoint
+        );
+        
+        // Find closest card position
+        float closestDistance = float.MaxValue;
+        int closestIndex = 0;
+        
+        for (int i = 0; i < _trackedCards.Count; i++)
+        {
+            var card = _trackedCards[i];
+            if (card == null) continue;
+            
+            var cardRect = card.GetComponent<RectTransform>();
+            if (cardRect == null) continue;
+            
+            float distance = Mathf.Abs(cardRect.anchoredPosition.x - localPoint.x);
+            if (distance < closestDistance)
+            {
+                closestDistance = distance;
+                closestIndex = i;
+                
+                // Check if we're past the midpoint
+                if (localPoint.x > cardRect.anchoredPosition.x)
+                    closestIndex = i + 1;
+            }
+        }
+        
+        return Mathf.Clamp(closestIndex, 0, _trackedCards.Count);
+    }
+    
+    public void ShowDropPreview(int index)
+    {
+        if (_dropPreviewIndex == index) return;
+        
+        _dropPreviewIndex = index;
+        
+        if (_dropPreview == null)
+        {
+            CreateDropPreview();
+        }
+        
+        if (_dropPreview != null)
+        {
+            _dropPreview.SetActive(true);
+            PositionDropPreview(index);
+        }
+    }
+    
+    public void HideDropPreview()
+    {
+        _dropPreviewIndex = -1;
+        if (_dropPreview != null)
+            _dropPreview.SetActive(false);
+    }
+    
+    private void CreateDropPreview()
+    {
+        _dropPreview = new GameObject("DropPreview");
+        _dropPreview.transform.SetParent(transform, false);
+        
+        var image = _dropPreview.AddComponent<UnityEngine.UI.Image>();
+        image.color = new Color(0, 1, 0, 0.3f);
+        
+        var rect = _dropPreview.GetComponent<RectTransform>();
+        rect.sizeDelta = new Vector2(5, cardPreferredSize.y);
+    }
+    
+    private void PositionDropPreview(int index)
+    {
+        if (_dropPreview == null) return;
+        
+        var rect = _dropPreview.GetComponent<RectTransform>();
+        
+        if (index >= _trackedCards.Count)
+        {
+            // Position at end
+            if (_trackedCards.Count > 0)
+            {
+                var lastCard = _trackedCards[_trackedCards.Count - 1];
+                var lastRect = lastCard.GetComponent<RectTransform>();
+                rect.anchoredPosition = new Vector2(
+                    lastRect.anchoredPosition.x + cardPreferredSize.x + cardSpacing,
+                    0
+                );
+            }
+            else
+            {
+                rect.anchoredPosition = Vector2.zero;
+            }
+        }
+        else if (index > 0)
+        {
+            // Position between cards
+            var prevCard = _trackedCards[index - 1];
+            var prevRect = prevCard.GetComponent<RectTransform>();
+            rect.anchoredPosition = new Vector2(
+                prevRect.anchoredPosition.x + (cardPreferredSize.x + cardSpacing) / 2,
+                0
+            );
+        }
+        else
+        {
+            // Position at start
+            rect.anchoredPosition = new Vector2(-cardSpacing / 2, 0);
+        }
+    }
+    
+    private void UpdateCardIndices()
+    {
+        _cardIndices.Clear();
+        for (int i = 0; i < _trackedCards.Count; i++)
+        {
+            var card = _trackedCards[i];
+            if (card != null)
+            {
+                _cardIndices[card] = i;
+                card.SetHandIndex(i);
+            }
+        }
+    }
+    
+    public void InsertCardAtPosition(Card card, HandPosition position)
+    {
+        if (card == null) return;
+        
+        int targetIndex = position switch
+        {
+            HandPosition.Left => 0,
+            HandPosition.Right => _trackedCards.Count,
+            HandPosition.Center => _trackedCards.Count / 2,
+            _ => _trackedCards.Count
+        };
+        
+        _trackedCards.Insert(targetIndex, card);
+        UpdateCardIndices();
+        MarkLayoutDirty();
     }
     
     private void ApplyDynamicScaling()

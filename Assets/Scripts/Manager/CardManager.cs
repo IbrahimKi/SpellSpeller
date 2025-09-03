@@ -28,7 +28,6 @@ public class CardManager : SingletonBehaviour<CardManager>, IGameManager
     private Dictionary<int, Card> _allCards = new Dictionary<int, Card>();
     private Dictionary<Card, int> _cardToId = new Dictionary<Card, int>();
     private List<Card> _handCards = new List<Card>();
-    private List<Card> _selectedCards = new List<Card>();
     private Queue<GameObject> _cardPool = new Queue<GameObject>();
     private int _nextCardId = 0;
     
@@ -43,13 +42,27 @@ public class CardManager : SingletonBehaviour<CardManager>, IGameManager
     public static event System.Action<List<Card>> OnSelectionChanged;
     public static event System.Action OnCardManagerInitialized;
     
-    // Properties - Simplified using CardExtensions
+    // Properties - Using SelectionManager
     public bool IsInitialized { get; private set; }
-    public List<Card> SelectedCards => _selectedCards.GetValidCards().ToList();
+    public List<Card> SelectedCards 
+    {
+        get
+        {
+            var selectionManager = CoreExtensions.GetManager<SelectionManager>();
+            return selectionManager?.SelectedCards.ToList() ?? new List<Card>();
+        }
+    }
     public List<Card> GetHandCards() => _handCards.GetValidCards().ToList();
     public bool IsHandFull => _handCards.GetValidCardCount() >= maxHandSize;
     public int HandSize => _handCards.GetValidCardCount();
-    public bool HasValidSelection => _selectedCards.HasValidCards();
+    public bool HasValidSelection 
+    {
+        get
+        {
+            var selectionManager = CoreExtensions.GetManager<SelectionManager>();
+            return selectionManager?.HasSelection ?? false;
+        }
+    }
     public bool HasPlayableCards => _handCards.HasPlayableCards();
     
     protected override void OnAwakeInitialize()
@@ -68,7 +81,7 @@ public class CardManager : SingletonBehaviour<CardManager>, IGameManager
     
     private void OnDisable()
     {
-        Card.OnCardSelected -= HandleCardSelected;
+        Card.OnCardSelected -= HandleCardSelected;  // KORRIGIERT
         Card.OnCardDeselected -= HandleCardDeselected;
     }
     
@@ -171,7 +184,11 @@ public class CardManager : SingletonBehaviour<CardManager>, IGameManager
     private void RemoveCardFromCollections(Card card)
     {
         _handCards.Remove(card);
-        _selectedCards.Remove(card);
+        
+        // Remove from SelectionManager
+        var selectionManager = CoreExtensions.GetManager<SelectionManager>();
+        selectionManager?.RemoveFromSelection(card);
+        
         _handLayoutManager?.CleanupCardReference(card);
         
         if (_cardToId.TryGetValue(card, out int cardId))
@@ -240,38 +257,31 @@ public class CardManager : SingletonBehaviour<CardManager>, IGameManager
         ResetCardTransform(card.gameObject);
     }
     
+    // NEUE INTEGRATION MIT SELECTIONMANAGER
     private void HandleCardSelected(Card card)
     {
-        if (!card.IsValid() || _selectedCards.Contains(card)) return;
+        // Delegiere an SelectionManager
+        var selectionManager = CoreExtensions.GetManager<SelectionManager>();
+        selectionManager?.AddToSelection(card);
         
-        if (!allowMultiSelect)
-        {
-            foreach (var selectedCard in _selectedCards.GetValidCards().ToList())
-                selectedCard.TryDeselect();
-            _selectedCards.Clear();
-        }
-        else if (_selectedCards.GetValidCardCount() >= maxSelectedCards)
-        {
-            var oldestCard = _selectedCards.GetValidCards().FirstOrDefault();
-            oldestCard?.TryDeselect();
-            _selectedCards.Remove(oldestCard);
-        }
-        
-        _selectedCards.Add(card);
+        // Fire event for UI
         OnSelectionChanged?.Invoke(SelectedCards);
     }
     
     private void HandleCardDeselected(Card card)
     {
-        if (_selectedCards.Remove(card))
-            OnSelectionChanged?.Invoke(SelectedCards);
+        // Delegiere an SelectionManager
+        var selectionManager = CoreExtensions.GetManager<SelectionManager>();
+        selectionManager?.RemoveFromSelection(card);
+        
+        // Fire event for UI
+        OnSelectionChanged?.Invoke(SelectedCards);
     }
     
     public void ClearSelection()
     {
-        foreach (var card in _selectedCards.GetValidCards().ToList())
-            card.TryDeselect();
-        _selectedCards.Clear();
+        var selectionManager = CoreExtensions.GetManager<SelectionManager>();
+        selectionManager?.ClearSelection();
         OnSelectionChanged?.Invoke(new List<Card>());
     }
     
@@ -310,7 +320,10 @@ public class CardManager : SingletonBehaviour<CardManager>, IGameManager
         if (!card.IsValid() || !_handCards.Remove(card))
             return false;
         
-        _selectedCards.Remove(card);
+        // Remove from SelectionManager
+        var selectionManager = CoreExtensions.GetManager<SelectionManager>();
+        selectionManager?.RemoveFromSelection(card);
+        
         _handLayoutManager?.CleanupCardReference(card);
         
         RequestLayoutUpdate();
@@ -349,6 +362,11 @@ public class CardManager : SingletonBehaviour<CardManager>, IGameManager
     {
         if (IsHandFull || maxCards <= 0) return false;
         
+        var selectionManager = CoreExtensions.GetManager<SelectionManager>();
+        if (selectionManager == null) return false;
+        
+        selectionManager.ClearSelection();
+        
         var candidates = _handCards
             .GetValidCards()
             .Where(c => !c.IsSelected)
@@ -358,8 +376,8 @@ public class CardManager : SingletonBehaviour<CardManager>, IGameManager
         bool anySelected = false;
         foreach (var card in candidates)
         {
-            if (card.TrySelect())
-                anySelected = true;
+            selectionManager.AddToSelection(card);
+            anySelected = true;
         }
         
         return anySelected;
@@ -385,9 +403,14 @@ public class CardManager : SingletonBehaviour<CardManager>, IGameManager
         
         try
         {
-            ClearSelection();
+            var selectionManager = CoreExtensions.GetManager<SelectionManager>();
+            if (selectionManager == null) return false;
+            
+            selectionManager.ClearSelection();
             foreach (var card in cards.Where(c => c.IsValid()))
-                card.TrySelect();
+            {
+                selectionManager.AddToSelection(card);
+            }
             return true;
         }
         catch (System.Exception ex)
@@ -397,7 +420,6 @@ public class CardManager : SingletonBehaviour<CardManager>, IGameManager
         }
     }
     
-    // FIX: Fehlende Methode für GameUIHandler Integration
     public bool CanDrawCard()
     {
         if (!IsReady) return false;
@@ -406,6 +428,7 @@ public class CardManager : SingletonBehaviour<CardManager>, IGameManager
                CoreExtensions.TryWithManagerStatic<DeckManager, bool>(null, dm => !dm.IsDeckEmpty) &&
                CoreExtensions.TryWithManagerStatic<CombatManager, bool>(null, cm => cm.IsPlayerTurn);
     }
+
 #if UNITY_EDITOR
     [ContextMenu("Analyze Hand")]
     public void DebugAnalyzeHand()
@@ -419,6 +442,24 @@ public class CardManager : SingletonBehaviour<CardManager>, IGameManager
         
         var potential = GetHandSpellPotential();
         Debug.Log($"  Spell Potential: {potential.OverallScore:P0}");
+    }
+    
+    [ContextMenu("Test Selection Manager")]
+    public void DebugTestSelectionManager()
+    {
+        var selectionManager = CoreExtensions.GetManager<SelectionManager>();
+        if (selectionManager != null)
+        {
+            Debug.Log($"[CardManager] SelectionManager Status:");
+            Debug.Log($"  Has Selection: {selectionManager.HasSelection}");
+            Debug.Log($"  Selected Count: {selectionManager.SelectedCards.Count}");
+            Debug.Log($"  Has Highlight: {selectionManager.HasHighlight}");
+            Debug.Log($"  Highlighted Count: {selectionManager.HighlightedCards.Count}");
+        }
+        else
+        {
+            Debug.LogError("[CardManager] SelectionManager not found!");
+        }
     }
 #endif
 }

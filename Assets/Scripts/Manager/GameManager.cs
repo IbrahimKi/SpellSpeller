@@ -9,12 +9,14 @@ public class GameManager : SingletonBehaviour<GameManager>
     {
         new ManagerInitConfig { managerType = ManagerType.Card, priority = 0 },
         new ManagerInitConfig { managerType = ManagerType.Deck, priority = 1 },
-        new ManagerInitConfig { managerType = ManagerType.HandLayout, priority = 2 },
-        new ManagerInitConfig { managerType = ManagerType.Spellcast, priority = 3 },
-        new ManagerInitConfig { managerType = ManagerType.Combat, priority = 4 },
-        new ManagerInitConfig { managerType = ManagerType.Enemy, priority = 5 },
-        new ManagerInitConfig { managerType = ManagerType.Unit, priority = 6 }
+        new ManagerInitConfig { managerType = ManagerType.Selection, priority = 2 }, // NEU
+        new ManagerInitConfig { managerType = ManagerType.HandLayout, priority = 3 },
+        new ManagerInitConfig { managerType = ManagerType.Spellcast, priority = 4 },
+        new ManagerInitConfig { managerType = ManagerType.Combat, priority = 5 },
+        new ManagerInitConfig { managerType = ManagerType.Enemy, priority = 6 },
+        new ManagerInitConfig { managerType = ManagerType.Unit, priority = 7 }
     };
+
     
     [Header("Settings")]
     [SerializeField] private float initStepDelay = 0.05f;
@@ -90,7 +92,8 @@ public class GameManager : SingletonBehaviour<GameManager>
         RegisterManagerSafely(ManagerType.Combat, CoreExtensions.GetManager<CombatManager>());
         RegisterManagerSafely(ManagerType.Enemy, CoreExtensions.GetManager<EnemyManager>());
         RegisterManagerSafely(ManagerType.Unit, CoreExtensions.GetManager<UnitManager>());
-    
+        RegisterManagerSafely(ManagerType.Selection, CoreExtensions.GetManager<SelectionManager>());
+
         Debug.Log($"[GameManager] Discovered {_managers.Count} managers");
     }
     
@@ -113,6 +116,8 @@ public class GameManager : SingletonBehaviour<GameManager>
             yield return null; // Wait one frame
             DiscoverManagers(); // Try again
         }
+        
+
         
         if (!_managers.TryGetValue(type, out var manager))
         {
@@ -161,6 +166,8 @@ public class GameManager : SingletonBehaviour<GameManager>
     public EnemyManager EnemyManager => GetManager<EnemyManager>(ManagerType.Enemy);
     public UnitManager UnitManager => GetManager<UnitManager>(ManagerType.Unit);
     public HandLayoutManager HandLayoutManager => GetManager<HandLayoutManager>(ManagerType.HandLayout);
+
+    public SelectionManager SelectionManager => GetManager<SelectionManager>(ManagerType.Selection);
 
     
 

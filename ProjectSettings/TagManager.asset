@@ -7,7 +7,7 @@ TagManager:
   - Card
   - DiscardArea
   - PlayArea
-  - CardSlot
+  - DeckArea
   layers:
   - Default
   - TransparentFX
@@ -16,7 +16,7 @@ TagManager:
   - Water
   - UI
   - Cards
-  - 
+  - Deck
   - 
   - 
   - 

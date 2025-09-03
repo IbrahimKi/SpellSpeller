@@ -115,6 +115,18 @@ public class CombatManager : SingletonBehaviour<CombatManager>, IGameManager
         _creativity.Reset();
         OnCreativityChanged?.Invoke(_creativity);
         
+        var inputController = CardInputController.Instance;
+        if (inputController != null)
+            inputController.OnTurnEnd();
+
+        // Reset selections
+        var selectionManager = CoreExtensions.GetManager<SelectionManager>();
+        if (selectionManager != null)
+        {
+            selectionManager.ClearSelection();
+            selectionManager.ClearHighlight();
+        }
+        
         // Refill hand
         var cardManager = CoreExtensions.GetManager<CardManager>();
         var deckManager = CoreExtensions.GetManager<DeckManager>();
