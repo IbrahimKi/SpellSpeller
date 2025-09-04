@@ -19,6 +19,7 @@ namespace Handler
         // Drag state
         private Vector2 dragOffset;
         private Camera eventCamera;
+        private bool _isPartOfGroupDrag = false; // FIX: Track if part of group drag
     
         // Events
         public static UnityEvent<GameObject> OnCardDragStart = new UnityEvent<GameObject>();
@@ -61,13 +62,16 @@ namespace Handler
             if (selectionManager != null && selectionManager.HasSelection && 
                 selectionManager.SelectedCards.Contains(card))
             {
-                // Start group drag
+                // FIX: Mark as group drag and let GroupDragHandler handle it
+                _isPartOfGroupDrag = true;
                 var groupHandler = GroupDragHandler.Instance;
                 groupHandler.StartGroupDrag(selectionManager.SelectedCards.ToList(), eventData.position);
+                OnCardDragStart?.Invoke(gameObject);
                 return;
             }
             
-            // Original single card drag code...
+            // Single card drag
+            _isPartOfGroupDrag = false;
             originalPosition = rectTransform.anchoredPosition;
             originalParent = transform.parent;
             originalSiblingIndex = transform.GetSiblingIndex();
@@ -99,15 +103,14 @@ namespace Handler
 
         public void OnDrag(PointerEventData eventData)
         {
-            // Check if group dragging
-            var groupHandler = GroupDragHandler.Instance;
-            if (groupHandler.IsGroupDragging)
+            // FIX: Check if group dragging
+            if (_isPartOfGroupDrag)
             {
-                groupHandler.UpdateGroupDrag(eventData.position);
+                GroupDragHandler.Instance.UpdateGroupDrag(eventData.position);
                 return;
             }
             
-            // Original single drag code...
+            // Single drag
             if (canvas == null) return;
             
             Vector2 localPointerPosition;
@@ -123,11 +126,10 @@ namespace Handler
 
         public void OnEndDrag(PointerEventData eventData)
         {
-            // Check if group dragging
-            var groupHandler = GroupDragHandler.Instance;
-            if (groupHandler.IsGroupDragging)
+            // FIX: Check if group dragging
+            if (_isPartOfGroupDrag)
             {
-                // Find drop target
+                // Find drop target for group
                 var groupRaycastResults = new List<RaycastResult>();
                 EventSystem.current.RaycastAll(eventData, groupRaycastResults);
 
@@ -141,12 +143,13 @@ namespace Handler
                     }
                 }
                 
-                groupHandler.EndGroupDrag(dropTarget);
+                GroupDragHandler.Instance.EndGroupDrag(dropTarget);
                 OnCardDragEnd?.Invoke(gameObject);
+                _isPartOfGroupDrag = false;
                 return;
             }
             
-            // Rest of original OnEndDrag code...
+            // Single card drop logic
             bool successfulDrop = false;
             
             Debug.Log("[CardDragHandler] OnEndDrag - Checking for drop targets...");
@@ -191,12 +194,11 @@ namespace Handler
             
             Debug.Log($"[CardDragHandler] Drop result: {(successfulDrop ? "SUCCESS" : "FAILED")}");
             
-            // WICHTIG: Nur zurück zur Hand wenn KEIN erfolgreicher Drop
+            // Return to original position if drop failed
             if (!successfulDrop)
             {
                 ReturnToOriginalPosition();
             }
-            // Bei erfolgreichem Drop wird die Karte durch die Handler-Methoden verarbeitet
             
             // Reset visual feedback
             ResetVisualFeedback();
@@ -212,9 +214,7 @@ namespace Handler
     
         private bool HandleDropAreaDrop(DropAreaHandler dropArea)
         {
-            // DropAreaHandler hat schon validiert, also nichts tun
-            // Die eigentliche Action passiert in HandlePlayAreaDrop/HandleDiscardAreaDrop
-            return false; // Return false damit die Tag-basierte Logik greift
+            return false; // Let tag-based logic handle it
         }
     
         private bool HandlePlayAreaDrop(GameObject playArea)
@@ -243,17 +243,16 @@ namespace Handler
             
             Debug.Log("[CardDragHandler] Playing card...");
             
-            // WICHTIG: Erst zur Hand zurück, DANN verarbeiten
-            // Damit die Karte an der richtigen Stelle ist bevor sie zerstört wird
+            // Return to original position first
             ReturnToOriginalPosition();
             
-            // Karte selektieren falls noch nicht
+            // Select if not selected
             if (!cardComponent.IsSelected)
             {
                 cardComponent.TrySelect();
             }
             
-            // Karte spielen
+            // Play the card
             bool played = false;
             CoreExtensions.TryWithManager<SpellcastManager>(this, sm => 
             {
@@ -263,7 +262,7 @@ namespace Handler
             
             Debug.Log($"[CardDragHandler] Card play result: {played}");
             
-            return played; // Return true damit die Karte NICHT nochmal zur Hand zurückgeht
+            return played;
         }
     
         private bool HandleDiscardAreaDrop(GameObject discardArea)
@@ -366,30 +365,5 @@ namespace Handler
                 hlm.UpdateLayout();
             });
         }
-
-#if UNITY_EDITOR
-        [ContextMenu("Debug Drop Areas")]
-        private void DebugDropAreas()
-        {
-            var playArea = GameObject.FindGameObjectWithTag("PlayArea");
-            var discardArea = GameObject.FindGameObjectWithTag("DiscardArea");
-            
-            Debug.Log($"PlayArea found: {playArea?.name ?? "NOT FOUND"}");
-            if (playArea != null)
-            {
-                var image = playArea.GetComponent<Image>();
-                Debug.Log($"  Has Image: {image != null}");
-                Debug.Log($"  Raycast Target: {image?.raycastTarget ?? false}");
-            }
-            
-            Debug.Log($"DiscardArea found: {discardArea?.name ?? "NOT FOUND"}");
-            if (discardArea != null)
-            {
-                var image = discardArea.GetComponent<Image>();
-                Debug.Log($"  Has Image: {image != null}");
-                Debug.Log($"  Raycast Target: {image?.raycastTarget ?? false}");
-            }
-        }
-#endif
     }
 }

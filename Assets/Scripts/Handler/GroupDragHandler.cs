@@ -1,4 +1,3 @@
-// NEUE DATEI: Assets/Scripts/Handler/GroupDragHandler.cs
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -28,14 +27,17 @@ namespace Handler
         
         // Drag state
         private List<Card> _draggedCards = new List<Card>();
-        private Dictionary<Card, Vector2> _originalPositions = new Dictionary<Card, Vector2>();  // GEÄNDERT: Vector3 -> Vector2
+        private Dictionary<Card, Vector2> _originalPositions = new Dictionary<Card, Vector2>();
         private Dictionary<Card, Transform> _originalParents = new Dictionary<Card, Transform>();
         private Dictionary<Card, int> _originalSiblingIndices = new Dictionary<Card, int>();
-        private Vector2 _dragStartPosition;
+        
+        // FIX 1: Besseres Drag-Offset Management
+        private Vector2 _groupCenterOffset;
+        private Vector2 _lastMousePosition;
+        
         private Canvas _canvas;
         private bool _isGroupDragging = false;
         
-        // Properties
         public bool IsGroupDragging => _isGroupDragging;
         public List<Card> DraggedCards => new List<Card>(_draggedCards);
         
@@ -54,28 +56,31 @@ namespace Handler
             _canvas = FindObjectOfType<Canvas>();
         }
         
-        public void StartGroupDrag(List<Card> cards, Vector2 startPosition)
+        public void StartGroupDrag(List<Card> cards, Vector2 mousePosition)
         {
             if (cards == null || cards.Count == 0) return;
             
             _isGroupDragging = true;
             _draggedCards = new List<Card>(cards.Where(c => c != null));
-            _dragStartPosition = startPosition;
+            _lastMousePosition = mousePosition;
             
-            // Sort by hand index for proper visual ordering
+            // Sort by hand index
             _draggedCards = _draggedCards.OrderBy(c => c.HandIndex).ToList();
             
-            // Store original state and prepare for drag
+            // FIX 1: Calculate group center offset from mouse
+            CalculateGroupCenterOffset(mousePosition);
+            
+            // Store original state
             foreach (var card in _draggedCards)
             {
                 var rectTransform = card.GetComponent<RectTransform>();
                 if (rectTransform == null) continue;
                 
-                _originalPositions[card] = rectTransform.anchoredPosition;  // Bereits Vector2
+                _originalPositions[card] = rectTransform.anchoredPosition;
                 _originalParents[card] = rectTransform.parent;
                 _originalSiblingIndices[card] = rectTransform.GetSiblingIndex();
                 
-                // Move to canvas for proper rendering
+                // Move to canvas
                 rectTransform.SetParent(_canvas.transform);
                 rectTransform.SetAsLastSibling();
                 
@@ -89,16 +94,60 @@ namespace Handler
                 }
             }
             
+            // Initial positioning
+            UpdateGroupDrag(mousePosition);
+            
             // Notify selection manager
-            var selectionManager = CoreExtensions.GetManager<SelectionManager>();
-            selectionManager?.StartGroupDrag(_draggedCards);
+            CoreExtensions.TryWithManagerStatic<SelectionManager>(sm => sm?.StartGroupDrag(_draggedCards));
         }
         
-        public void UpdateGroupDrag(Vector2 currentPosition)
+        // FIX 1: Proper offset calculation
+        private void CalculateGroupCenterOffset(Vector2 mousePosition)
+        {
+            if (_draggedCards.Count == 0) return;
+            
+            // Get mouse position in canvas space
+            Vector2 localMousePosition;
+            RectTransformUtility.ScreenPointToLocalPointInRectangle(
+                _canvas.transform as RectTransform,
+                mousePosition,
+                null,
+                out localMousePosition
+            );
+            
+            // Calculate center of selected cards
+            Vector2 groupCenter = Vector2.zero;
+            foreach (var card in _draggedCards)
+            {
+                var rect = card.GetComponent<RectTransform>();
+                if (rect != null)
+                    groupCenter += rect.anchoredPosition;
+            }
+            groupCenter /= _draggedCards.Count;
+            
+            // Store offset from mouse to group center
+            _groupCenterOffset = groupCenter - localMousePosition;
+        }
+        
+        public void UpdateGroupDrag(Vector2 mousePosition)
         {
             if (!_isGroupDragging) return;
             
-            Vector2 delta = currentPosition - _dragStartPosition;
+            // FIX 1: Convert mouse to canvas space properly
+            Vector2 localMousePosition;
+            RectTransformUtility.ScreenPointToLocalPointInRectangle(
+                _canvas.transform as RectTransform,
+                mousePosition,
+                null,
+                out localMousePosition
+            );
+            
+            // Apply offset so cards follow mouse naturally
+            Vector2 groupPosition = localMousePosition + _groupCenterOffset;
+            
+            // Position each card relative to group center
+            float totalWidth = (_draggedCards.Count - 1) * cardSpacing;
+            float startX = -totalWidth / 2f;
             
             for (int i = 0; i < _draggedCards.Count; i++)
             {
@@ -108,20 +157,15 @@ namespace Handler
                 var rectTransform = card.GetComponent<RectTransform>();
                 if (rectTransform == null) continue;
                 
-                // Position cards with spacing
-                Vector2 offset = new Vector2(i * cardSpacing, 0);
-                
-                // KORRIGIERT: Explizit Vector2 Addition
-                if (_originalPositions.ContainsKey(card))
-                {
-                    Vector2 originalPos = _originalPositions[card];
-                    Vector2 newPosition = originalPos + delta + offset;
-                    rectTransform.anchoredPosition = newPosition;
-                }
+                // Position relative to group center
+                Vector2 cardPosition = groupPosition + new Vector2(startX + (i * cardSpacing), 0);
+                rectTransform.anchoredPosition = cardPosition;
             }
             
+            _lastMousePosition = mousePosition;
+            
             // Update drop preview
-            UpdateDropPreview(currentPosition);
+            UpdateDropPreview(mousePosition);
         }
         
         public void EndGroupDrag(GameObject dropTarget)
@@ -147,7 +191,7 @@ namespace Handler
                 }
                 else
                 {
-                    // Check if dropped on another card (reordering)
+                    // Check for reordering
                     var targetCard = dropTarget.GetComponent<Card>();
                     if (targetCard != null && !_draggedCards.Contains(targetCard))
                     {
@@ -162,7 +206,7 @@ namespace Handler
                 ReturnCardsToOriginalPositions();
             }
             
-            // Clean up
+            // Clean up visual state
             foreach (var card in _draggedCards)
             {
                 if (card != null)
@@ -184,26 +228,19 @@ namespace Handler
             _originalSiblingIndices.Clear();
             _isGroupDragging = false;
             
-            // Notify selection manager
-            var selectionManager = CoreExtensions.GetManager<SelectionManager>();
-            selectionManager?.EndGroupDrag();
-            
-            // Update layout
-            var handLayoutManager = CoreExtensions.GetManager<HandLayoutManager>();
-            handLayoutManager?.UpdateLayout();
+            // Notify managers
+            CoreExtensions.TryWithManagerStatic<SelectionManager>(sm => sm?.EndGroupDrag());
+            CoreExtensions.TryWithManagerStatic<HandLayoutManager>(hlm => hlm?.UpdateLayout());
         }
         
         bool HandlePlayAreaDrop()
         {
-            var spellcastManager = CoreExtensions.GetManager<SpellcastManager>();
-            if (spellcastManager == null) return false;
-            
             // Return cards to hand first
             ReturnCardsToOriginalPositions();
             
-            // Process in order
-            spellcastManager.ProcessCardPlay(_draggedCards);
-            return true;
+            // Process play
+            return CoreExtensions.TryWithManagerStatic<SpellcastManager, bool>(null, 
+                sm => { sm.ProcessCardPlay(_draggedCards); return true; });
         }
         
         bool HandleDiscardAreaDrop()
@@ -218,7 +255,6 @@ namespace Handler
             if (!combatManager.CanSpendResource(ResourceType.Creativity, cost))
                 return false;
             
-            // Return cards to hand first
             ReturnCardsToOriginalPositions();
             
             combatManager.TryModifyResource(ResourceType.Creativity, -cost);
@@ -243,11 +279,9 @@ namespace Handler
             
             if (deckManager == null) return false;
             
-            // Return cards to hand first
             ReturnCardsToOriginalPositions();
             
             int cardsReturned = 0;
-            
             foreach (var card in _draggedCards)
             {
                 if (card.CardData != null)
@@ -259,7 +293,6 @@ namespace Handler
                 }
             }
             
-            // Draw equal number
             for (int i = 0; i < cardsReturned; i++)
             {
                 deckManager.TryDrawCard();
@@ -270,17 +303,15 @@ namespace Handler
         
         bool HandleCardReorder(Card targetCard)
         {
-            var handLayoutManager = CoreExtensions.GetManager<HandLayoutManager>();
-            if (handLayoutManager == null) return false;
-            
-            // Return cards to hand first
-            ReturnCardsToOriginalPositions();
-            
-            // Insert at target position
-            int targetIndex = targetCard.HandIndex;
-            handLayoutManager.MoveCardsToIndex(_draggedCards, targetIndex);
-            
-            return true;
+            // FIX 2&3: Use HandLayoutManager for reordering
+            return CoreExtensions.TryWithManagerStatic<HandLayoutManager, bool>(null, hlm =>
+            {
+                ReturnCardsToOriginalPositions();
+                
+                int targetIndex = targetCard.HandIndex;
+                hlm.MoveCardsToPosition(_draggedCards, targetIndex);
+                return true;
+            });
         }
         
         void ReturnCardsToOriginalPositions()
@@ -296,26 +327,21 @@ namespace Handler
                 {
                     rectTransform.SetParent(_originalParents[card]);
                     rectTransform.SetSiblingIndex(_originalSiblingIndices[card]);
-                    rectTransform.anchoredPosition = _originalPositions[card];  // Bereits Vector2
+                    rectTransform.anchoredPosition = _originalPositions[card];
                 }
             }
         }
         
         void UpdateDropPreview(Vector2 position)
         {
-            // Visual feedback for drop position
-            var handLayoutManager = CoreExtensions.GetManager<HandLayoutManager>();
-            if (handLayoutManager == null) return;
-            
-            int dropIndex = handLayoutManager.GetDropIndex(position);
-            if (dropIndex >= 0)
+            CoreExtensions.TryWithManagerStatic<HandLayoutManager>(hlm =>
             {
-                handLayoutManager.ShowDropPreview(dropIndex);
-            }
-            else
-            {
-                handLayoutManager.HideDropPreview();
-            }
+                int dropIndex = hlm.GetDropIndexFromScreenPosition(position);
+                if (dropIndex >= 0)
+                    hlm.ShowDropPreview(dropIndex);
+                else
+                    hlm.HideDropPreview();
+            });
         }
     }
 }

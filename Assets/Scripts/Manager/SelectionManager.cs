@@ -1,4 +1,4 @@
-// NEUE DATEI: Assets/Scripts/Manager/SelectionManager.cs
+// FIXED VERSION: Assets/Scripts/Manager/SelectionManager.cs
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
@@ -119,7 +119,9 @@ public class SelectionManager : SingletonBehaviour<SelectionManager>, IGameManag
     
     public void ClearSelection()
     {
-        foreach (var card in _selectedCards.ToList())
+        // FIX: Kopie erstellen um Modifikation während Iteration zu vermeiden
+        var cardsToDeselect = _selectedCards.ToList();
+        foreach (var card in cardsToDeselect)
         {
             if (card != null && card.IsSelected)
                 card.Deselect();
@@ -152,17 +154,26 @@ public class SelectionManager : SingletonBehaviour<SelectionManager>, IGameManag
     
     public void HighlightSelection()
     {
+        // FIX: Kopie der selected cards erstellen BEVOR clear
+        var cardsToHighlight = _selectedCards.ToList();
+        
         ClearHighlight();
-        foreach (var card in _selectedCards)
+        
+        // Erst alle highlighten
+        foreach (var card in cardsToHighlight)
         {
             AddToHighlight(card);
         }
+        
+        // Dann selection clearen
         ClearSelection();
     }
     
     public void ClearHighlight()
     {
-        foreach (var card in _highlightedCards.ToList())
+        // FIX: Kopie erstellen für sichere Iteration
+        var cardsToUnhighlight = _highlightedCards.ToList();
+        foreach (var card in cardsToUnhighlight)
         {
             if (card != null && card.IsHighlighted)
                 card.Unhighlight();
@@ -206,14 +217,14 @@ public class SelectionManager : SingletonBehaviour<SelectionManager>, IGameManag
         {
             var leftmost = _selectedCards.First();
             int targetIndex = Mathf.Max(0, leftmost.HandIndex - 1);
-            handLayoutManager.MoveCardsToIndex(_selectedCards, targetIndex);
+            handLayoutManager.MoveCardsToPosition(_selectedCards, targetIndex);
         }
         else if (direction == CardMoveDirection.Right)
         {
             var rightmost = _selectedCards.Last();
             var handSize = CoreExtensions.GetManager<CardManager>()?.HandSize ?? 0;
             int targetIndex = Mathf.Min(handSize - 1, rightmost.HandIndex + 1);
-            handLayoutManager.MoveCardsToIndex(_selectedCards, targetIndex);
+            handLayoutManager.MoveCardsToPosition(_selectedCards, targetIndex);
         }
     }
     
@@ -228,12 +239,12 @@ public class SelectionManager : SingletonBehaviour<SelectionManager>, IGameManag
         
         if (direction == CardMoveDirection.Left)
         {
-            handLayoutManager.MoveCardsToIndex(_selectedCards, 0);
+            handLayoutManager.MoveCardsToPosition(_selectedCards, 0);
         }
         else if (direction == CardMoveDirection.Right)
         {
             var handSize = CoreExtensions.GetManager<CardManager>()?.HandSize ?? 0;
-            handLayoutManager.MoveCardsToIndex(_selectedCards, handSize - _selectedCards.Count);
+            handLayoutManager.MoveCardsToPosition(_selectedCards, handSize - _selectedCards.Count);
         }
     }
     
@@ -266,11 +277,12 @@ public class SelectionManager : SingletonBehaviour<SelectionManager>, IGameManag
         RemoveFromHighlight(card);
     }
     
-    // Process actions in order
+    // Process actions in order - FIX: Sichere Iteration mit ToList()
     public void ProcessSelectedInOrder(System.Action<Card> action)
     {
         SortSelectionByHandIndex();
-        foreach (var card in _selectedCards.ToList())
+        var cardsToProcess = _selectedCards.ToList();
+        foreach (var card in cardsToProcess)
         {
             action?.Invoke(card);
         }
@@ -284,4 +296,14 @@ public class SelectionManager : SingletonBehaviour<SelectionManager>, IGameManag
             action?.Invoke(card);
         }
     }
+    
+#if UNITY_EDITOR
+    [ContextMenu("Debug Selection State")]
+    public void DebugSelectionState()
+    {
+        Debug.Log($"[SelectionManager] Selected: {_selectedCards.Count}, Highlighted: {_highlightedCards.Count}");
+        Debug.Log($"Selected Cards: {string.Join(", ", _selectedCards.Select(c => c.GetCardName()))}");
+        Debug.Log($"Highlighted Cards: {string.Join(", ", _highlightedCards.Select(c => c.GetCardName()))}");
+    }
+#endif
 }

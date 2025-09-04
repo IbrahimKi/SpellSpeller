@@ -1,4 +1,3 @@
-// NEUE DATEI: Assets/Scripts/Handler/CardInputController.cs
 using UnityEngine;
 using UnityEngine.EventSystems;
 using System.Collections;
@@ -58,56 +57,64 @@ public class CardInputController : MonoBehaviour
         var selectionManager = CoreExtensions.GetManager<SelectionManager>();
         if (selectionManager == null) return;
         
-        // Ctrl + Arrow Keys: Move selected cards
-        if (ctrl && selectionManager.HasSelection)
+        // FIX: Separate logic for selected vs highlighted cards
+        
+        // When cards are SELECTED (not highlighted)
+        if (selectionManager.HasSelection && !selectionManager.HasHighlight)
         {
-            if (Input.GetKeyDown(KeyCode.LeftArrow))
+            if (ctrl)
             {
-                if (shift) // Double press simulation
-                    selectionManager.MoveSelectionToEnd(CardMoveDirection.Left);
-                else
-                    selectionManager.MoveSelection(CardMoveDirection.Left);
+                // Ctrl + Arrows: Move selected cards
+                if (Input.GetKeyDown(KeyCode.LeftArrow))
+                {
+                    if (shift)
+                        selectionManager.MoveSelectionToEnd(CardMoveDirection.Left);
+                    else
+                        selectionManager.MoveSelection(CardMoveDirection.Left);
+                }
+                else if (Input.GetKeyDown(KeyCode.RightArrow))
+                {
+                    if (shift)
+                        selectionManager.MoveSelectionToEnd(CardMoveDirection.Right);
+                    else
+                        selectionManager.MoveSelection(CardMoveDirection.Right);
+                }
             }
-            else if (Input.GetKeyDown(KeyCode.RightArrow))
+            
+            // FIX: Up arrow HIGHLIGHTS selected cards, doesn't play them
+            if (Input.GetKeyDown(KeyCode.UpArrow))
             {
-                if (shift)
-                    selectionManager.MoveSelectionToEnd(CardMoveDirection.Right);
-                else
-                    selectionManager.MoveSelection(CardMoveDirection.Right);
-            }
-            else if (Input.GetKeyDown(KeyCode.UpArrow))
-            {
-                // Highlight selected cards
                 selectionManager.HighlightSelection();
             }
             else if (Input.GetKeyDown(KeyCode.DownArrow))
             {
-                // Deselect all
+                // Down arrow deselects all
                 selectionManager.ClearSelection();
             }
         }
         
-        // Highlighted card controls
+        // When cards are HIGHLIGHTED
         if (selectionManager.HasHighlight)
         {
+            // FIX: Highlighted cards have different controls
             if (Input.GetKeyDown(KeyCode.UpArrow))
             {
-                // Play highlighted cards
+                // Up arrow PLAYS highlighted cards
                 PlayHighlightedCards();
             }
             else if (Input.GetKeyDown(KeyCode.LeftArrow))
             {
-                // Return highlighted to deck
+                // Left arrow returns highlighted to deck
                 ReturnHighlightedToDeck();
             }
             else if (Input.GetKeyDown(KeyCode.RightArrow))
             {
-                // Discard highlighted
+                // Right arrow discards highlighted
                 DiscardHighlightedCards();
             }
             else if (Input.GetKeyDown(KeyCode.DownArrow))
             {
-                // Clear highlight
+                // Down arrow clears highlight
                 selectionManager.ClearHighlight();
             }
         }
@@ -275,6 +282,7 @@ public class CardInputController : MonoBehaviour
         
         if (selectionManager == null || spellcastManager == null) return;
         
+        // Process highlighted cards
         selectionManager.ProcessHighlightedInOrder(card =>
         {
             var cardList = new List<Card> { card };
@@ -346,4 +354,19 @@ public class CardInputController : MonoBehaviour
     {
         ResetDrawCost();
     }
+    
+#if UNITY_EDITOR
+    [ContextMenu("Debug Input State")]
+    public void DebugInputState()
+    {
+        var selectionManager = CoreExtensions.GetManager<SelectionManager>();
+        if (selectionManager != null)
+        {
+            Debug.Log($"[CardInputController] Has Selection: {selectionManager.HasSelection}");
+            Debug.Log($"[CardInputController] Has Highlight: {selectionManager.HasHighlight}");
+            Debug.Log($"[CardInputController] Selected Count: {selectionManager.SelectedCards.Count}");
+            Debug.Log($"[CardInputController] Highlighted Count: {selectionManager.HighlightedCards.Count}");
+        }
+    }
+#endif
 }
