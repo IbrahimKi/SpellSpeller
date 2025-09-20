@@ -15,11 +15,14 @@ namespace Handler
         private Vector2 originalPosition;
         private Transform originalParent;
         private int originalSiblingIndex;
+        private int originalHandIndex; // NEU: Track original hand position
     
         // Drag state
         private Vector2 dragOffset;
         private Camera eventCamera;
-        private bool _isPartOfGroupDrag = false; // FIX: Track if part of group drag
+        private bool _isPartOfGroupDrag = false;
+        private bool _isDraggingInHand = false; // NEU: Track if dragging within hand
+        private int _currentDropIndex = -1; // NEU: Current drop preview index
     
         // Events
         public static UnityEvent<GameObject> OnCardDragStart = new UnityEvent<GameObject>();
@@ -55,14 +58,13 @@ namespace Handler
             if (canvas == null) FindCanvas();
             if (canvas == null) return;
             
-            // Check if part of selection for group drag
             var selectionManager = CoreExtensions.GetManager<SelectionManager>();
             var card = GetComponent<Card>();
             
+            // Check if part of selection for group drag
             if (selectionManager != null && selectionManager.HasSelection && 
                 selectionManager.SelectedCards.Contains(card))
             {
-                // FIX: Mark as group drag and let GroupDragHandler handle it
                 _isPartOfGroupDrag = true;
                 var groupHandler = GroupDragHandler.Instance;
                 groupHandler.StartGroupDrag(selectionManager.SelectedCards.ToList(), eventData.position);
@@ -70,29 +72,51 @@ namespace Handler
                 return;
             }
             
-            // Single card drag
+            // Single card drag - store original state
             _isPartOfGroupDrag = false;
             originalPosition = rectTransform.anchoredPosition;
             originalParent = transform.parent;
             originalSiblingIndex = transform.GetSiblingIndex();
+            originalHandIndex = GetCardHandIndex(card); // NEU: Store original hand index
             
             eventCamera = eventData.pressEventCamera;
             
-            transform.SetParent(canvas.transform);
-            transform.SetAsLastSibling();
+            // NEU: Check if dragging within hand container
+            var handLayoutManager = CoreExtensions.GetManager<HandLayoutManager>();
+            _isDraggingInHand = (handLayoutManager != null && transform.parent == handLayoutManager.transform);
             
-            Vector2 localPointerPosition;
-            if (RectTransformUtility.ScreenPointToLocalPointInRectangle(
-                    canvas.transform as RectTransform,
-                    eventData.position,
-                    eventCamera,
-                    out localPointerPosition))
+            if (_isDraggingInHand)
             {
-                dragOffset = rectTransform.anchoredPosition - localPointerPosition;
+                // NEU: For hand reordering, calculate offset relative to parent
+                Vector2 localPointerPosition;
+                if (RectTransformUtility.ScreenPointToLocalPointInRectangle(
+                        transform.parent as RectTransform,
+                        eventData.position,
+                        eventCamera,
+                        out localPointerPosition))
+                {
+                    dragOffset = rectTransform.anchoredPosition - localPointerPosition;
+                }
             }
             else
             {
-                dragOffset = Vector2.zero;
+                // External drag - move to canvas
+                transform.SetParent(canvas.transform);
+                transform.SetAsLastSibling();
+                
+                Vector2 localPointerPosition;
+                if (RectTransformUtility.ScreenPointToLocalPointInRectangle(
+                        canvas.transform as RectTransform,
+                        eventData.position,
+                        eventCamera,
+                        out localPointerPosition))
+                {
+                    dragOffset = rectTransform.anchoredPosition - localPointerPosition;
+                }
+                else
+                {
+                    dragOffset = Vector2.zero;
+                }
             }
             
             canvasGroup.alpha = 0.8f;
@@ -103,30 +127,60 @@ namespace Handler
 
         public void OnDrag(PointerEventData eventData)
         {
-            // FIX: Check if group dragging
             if (_isPartOfGroupDrag)
             {
                 GroupDragHandler.Instance.UpdateGroupDrag(eventData.position);
                 return;
             }
             
-            // Single drag
             if (canvas == null) return;
             
             Vector2 localPointerPosition;
+            RectTransform parentRect = _isDraggingInHand ? 
+                transform.parent as RectTransform : 
+                canvas.transform as RectTransform;
+            
             if (RectTransformUtility.ScreenPointToLocalPointInRectangle(
-                    canvas.transform as RectTransform,
+                    parentRect,
                     eventData.position,
                     eventCamera,
                     out localPointerPosition))
             {
                 rectTransform.anchoredPosition = localPointerPosition + dragOffset;
+                
+                // NEU: Update drop preview for hand reordering
+                if (_isDraggingInHand)
+                {
+                    UpdateHandDropPreview(eventData.position);
+                }
+            }
+        }
+
+        // NEU: Update drop preview when dragging in hand
+        private void UpdateHandDropPreview(Vector2 screenPosition)
+        {
+            var handLayoutManager = CoreExtensions.GetManager<HandLayoutManager>();
+            if (handLayoutManager == null) return;
+            
+            int newDropIndex = handLayoutManager.GetDropIndexFromScreenPosition(screenPosition);
+            
+            if (newDropIndex != _currentDropIndex)
+            {
+                _currentDropIndex = newDropIndex;
+                
+                if (_currentDropIndex >= 0)
+                {
+                    handLayoutManager.ShowDropPreview(_currentDropIndex);
+                }
+                else
+                {
+                    handLayoutManager.HideDropPreview();
+                }
             }
         }
 
         public void OnEndDrag(PointerEventData eventData)
         {
-            // FIX: Check if group dragging
             if (_isPartOfGroupDrag)
             {
                 // Find drop target for group
@@ -149,45 +203,60 @@ namespace Handler
                 return;
             }
             
-            // Single card drop logic
             bool successfulDrop = false;
             
-            Debug.Log("[CardDragHandler] OnEndDrag - Checking for drop targets...");
-            
-            // Find drop target
-            var raycastResults = new List<RaycastResult>();
-            EventSystem.current.RaycastAll(eventData, raycastResults);
-            
-            Debug.Log($"[CardDragHandler] Found {raycastResults.Count} raycast hits");
-            
-            foreach (var result in raycastResults)
+            // NEU: Handle hand reordering
+            if (_isDraggingInHand)
             {
-                Debug.Log($"  - Hit: {result.gameObject.name} (Tag: {result.gameObject.tag})");
+                successfulDrop = HandleHandReordering();
+            }
+            else
+            {
+                // External drop logic (unchanged from your original)
+                var raycastResults = new List<RaycastResult>();
+                EventSystem.current.RaycastAll(eventData, raycastResults);
                 
-                if (result.gameObject != gameObject)
+                Debug.Log($"[CardDragHandler] Found {raycastResults.Count} raycast hits");
+                
+                foreach (var result in raycastResults)
                 {
-                    // Check for drop areas
-                    var dropArea = result.gameObject.GetComponent<DropAreaHandler>();
-                    if (dropArea != null)
-                    {
-                        Debug.Log("  -> Found DropAreaHandler!");
-                        successfulDrop = HandleDropAreaDrop(dropArea);
-                        if (successfulDrop) break;
-                    }
+                    Debug.Log($"  - Hit: {result.gameObject.name} (Tag: {result.gameObject.tag})");
                     
-                    // Check for PlayArea tag
-                    if (result.gameObject.CompareTag("PlayArea"))
+                    if (result.gameObject != gameObject)
                     {
-                        Debug.Log("  -> Found PlayArea!");
-                        successfulDrop = HandlePlayAreaDrop(result.gameObject);
-                        if (successfulDrop) break;
-                    }
-                    // Check for DiscardArea tag
-                    else if (result.gameObject.CompareTag("DiscardArea"))
-                    {
-                        Debug.Log("  -> Found DiscardArea!");
-                        successfulDrop = HandleDiscardAreaDrop(result.gameObject);
-                        if (successfulDrop) break;
+                        // Check for drop areas
+                        var dropArea = result.gameObject.GetComponent<DropAreaHandler>();
+                        if (dropArea != null)
+                        {
+                            Debug.Log("  -> Found DropAreaHandler!");
+                            successfulDrop = HandleDropAreaDrop(dropArea);
+                            if (successfulDrop) break;
+                        }
+                        
+                        // Check for PlayArea tag
+                        if (result.gameObject.CompareTag("PlayArea"))
+                        {
+                            Debug.Log("  -> Found PlayArea!");
+                            successfulDrop = HandlePlayAreaDrop(result.gameObject);
+                            if (successfulDrop) break;
+                        }
+                        // Check for DiscardArea tag
+                        else if (result.gameObject.CompareTag("DiscardArea"))
+                        {
+                            Debug.Log("  -> Found DiscardArea!");
+                            successfulDrop = HandleDiscardAreaDrop(result.gameObject);
+                            if (successfulDrop) break;
+                        }
+                        // NEU: Check for card-to-card reordering
+                        else
+                        {
+                            var targetCard = result.gameObject.GetComponent<Card>();
+                            if (targetCard != null && IsCardInHand(targetCard))
+                            {
+                                successfulDrop = HandleCardToCardReorder(targetCard);
+                                if (successfulDrop) break;
+                            }
+                        }
                     }
                 }
             }
@@ -200,16 +269,112 @@ namespace Handler
                 ReturnToOriginalPosition();
             }
             
-            // Reset visual feedback
+            // Cleanup
             ResetVisualFeedback();
+            HideDropPreview();
             
             OnCardDragEnd?.Invoke(gameObject);
+        }
+
+        // NEU: Handle reordering within hand
+        private bool HandleHandReordering()
+        {
+            if (_currentDropIndex < 0) return false;
+            
+            var card = GetComponent<Card>();
+            var handLayoutManager = CoreExtensions.GetManager<HandLayoutManager>();
+            
+            if (card == null || handLayoutManager == null) return false;
+            
+            // Adjust drop index if needed (don't drop on self)
+            int adjustedIndex = _currentDropIndex;
+            if (originalHandIndex >= 0 && _currentDropIndex > originalHandIndex)
+            {
+                adjustedIndex = _currentDropIndex - 1;
+            }
+            
+            // Only move if position actually changed
+            if (adjustedIndex != originalHandIndex)
+            {
+                handLayoutManager.MoveCardToPosition(card, adjustedIndex);
+                return true;
+            }
+            
+            return false;
+        }
+
+        // NEU: Handle card-to-card reordering from external drag
+        private bool HandleCardToCardReorder(Card targetCard)
+        {
+            var card = GetComponent<Card>();
+            var handLayoutManager = CoreExtensions.GetManager<HandLayoutManager>();
+            
+            if (card == null || handLayoutManager == null) return false;
+            
+            // Return to original position first
+            ReturnToOriginalPosition();
+            
+            // Move to target position
+            int targetIndex = GetCardHandIndex(targetCard);
+            handLayoutManager.MoveCardToPosition(card, targetIndex);
+            
+            return true;
+        }
+
+        // NEU: Check if card is in hand
+        private bool IsCardInHand(Card card)
+        {
+            var cardManager = CoreExtensions.GetManager<CardManager>();
+            var handCards = cardManager?.GetHandCards();
+            
+            if (handCards != null)
+            {
+                foreach (var handCard in handCards)
+                {
+                    if (handCard == card)
+                        return true;
+                }
+            }
+            
+            return false;
+        }
+
+        // NEU: Get card hand index with fallbacks
+        private int GetCardHandIndex(Card card)
+        {
+            if (card == null) return -1;
+            
+            // Try direct property first
+            var handIndexProperty = card.GetType().GetProperty("HandIndex");
+            if (handIndexProperty != null && handIndexProperty.CanRead)
+            {
+                var value = handIndexProperty.GetValue(card);
+                return value is int intValue ? intValue : -1;
+            }
+            
+            // Fallback: Use transform sibling index
+            var handLayoutManager = CoreExtensions.GetManager<HandLayoutManager>();
+            if (handLayoutManager != null && card.transform.parent == handLayoutManager.transform)
+            {
+                return card.transform.GetSiblingIndex();
+            }
+            
+            return -1;
+        }
+
+        // NEU: Hide drop preview
+        private void HideDropPreview()
+        {
+            var handLayoutManager = CoreExtensions.GetManager<HandLayoutManager>();
+            handLayoutManager?.HideDropPreview();
+            _currentDropIndex = -1;
         }
     
         private void ResetVisualFeedback()
         {
             canvasGroup.alpha = 1f;
             canvasGroup.blocksRaycasts = true;
+            _isDraggingInHand = false;
         }
     
         private bool HandleDropAreaDrop(DropAreaHandler dropArea)
@@ -340,10 +505,8 @@ namespace Handler
             // Reset position
             rectTransform.anchoredPosition = originalPosition;
             
-            // Reset scale
+            // Reset scale and anchors
             rectTransform.localScale = Vector3.one;
-            
-            // Reset anchors for hand layout
             rectTransform.anchorMin = new Vector2(0.5f, 0.5f);
             rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
             rectTransform.pivot = new Vector2(0.5f, 0.5f);
@@ -352,7 +515,18 @@ namespace Handler
             Card cardComponent = GetComponent<Card>();
             CoreExtensions.TryWithManager<CardManager>(this, cm => 
             {
-                if (!cm.GetHandCards().Contains(cardComponent))
+                var handCards = cm.GetHandCards();
+                bool cardInHand = false;
+                foreach (var handCard in handCards)
+                {
+                    if (handCard == cardComponent)
+                    {
+                        cardInHand = true;
+                        break;
+                    }
+                }
+                
+                if (!cardInHand)
                 {
                     Debug.Log("[CardDragHandler] Re-adding card to hand");
                     cm.AddCardToHand(cardComponent);
@@ -365,5 +539,20 @@ namespace Handler
                 hlm.UpdateLayout();
             });
         }
+
+#if UNITY_EDITOR
+        [ContextMenu("Debug Drop Areas")]
+        private void DebugDropAreas()
+        {
+            var playArea = GameObject.FindGameObjectWithTag("PlayArea");
+            var discardArea = GameObject.FindGameObjectWithTag("DiscardArea");
+            
+            Debug.Log($"PlayArea found: {playArea?.name ?? "NOT FOUND"}");
+            Debug.Log($"DiscardArea found: {discardArea?.name ?? "NOT FOUND"}");
+            Debug.Log($"In Hand Container: {_isDraggingInHand}");
+            Debug.Log($"Original Hand Index: {originalHandIndex}");
+            Debug.Log($"Current Drop Index: {_currentDropIndex}");
+        }
+#endif
     }
 }

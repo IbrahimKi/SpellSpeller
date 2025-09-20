@@ -19,12 +19,32 @@ public class HandLayoutManager : SingletonBehaviour<HandLayoutManager>, IGameMan
     [SerializeField] private bool enableHandScaling = false;
     [SerializeField] private float handScaleMultiplier = 0.8f;
     
+    [Header("Drop Preview")]
+    [SerializeField] private float dropPreviewWidth = 5f;
+    [SerializeField] private Color dropPreviewColor = new Color(0, 1, 0, 0.6f);
+    [SerializeField] private bool smoothDropPreview = true;
+    
+    [Header("Layout Group Settings")]
+    [SerializeField] private bool childForceExpandWidth = false;
+    [SerializeField] private bool childForceExpandHeight = false;
+    [SerializeField] private bool childControlWidth = true;
+    [SerializeField] private bool childControlHeight = true;
+    [SerializeField] private bool childScaleWidth = false;
+    [SerializeField] private bool childScaleHeight = false;
+    [SerializeField] private TextAnchor childAlignment = TextAnchor.MiddleCenter;
+    
+    [Header("Padding")]
+    [SerializeField] private int paddingLeft = 10;
+    [SerializeField] private int paddingRight = 10;
+    [SerializeField] private int paddingTop = 10;
+    [SerializeField] private int paddingBottom = 10;
+    
     // Components
     private HorizontalLayoutGroup _layoutGroup;
     private RectTransform _rectTransform;
     private ContentSizeFitter _contentSizeFitter;
     
-    // FIX 2&3: Better position management
+    // NEU: Position management
     private List<Card> _orderedCards = new List<Card>();
     private Dictionary<Card, int> _cardPositions = new Dictionary<Card, int>();
     private bool _layoutDirty = false;
@@ -33,14 +53,26 @@ public class HandLayoutManager : SingletonBehaviour<HandLayoutManager>, IGameMan
     // Drop Preview
     private GameObject _dropPreview;
     private int _dropPreviewIndex = -1;
+    private bool _dropPreviewActive = false;
     
-    public bool IsReady { get; private set; }
+    // Reordering state
+    private bool _isReordering = false;
+    
+    // State
+    private bool _isReady = false;
+    
+    public bool IsReady => _isReady;
+    
+    // NEU: Events for position changes
+    public static event System.Action<List<Card>> OnHandLayoutUpdated;
+    public static event System.Action<Card, int, int> OnCardIndexChanged; // card, oldIndex, newIndex
     
     protected override void OnAwakeInitialize()
     {
         InitializeComponents();
         ConfigureLayoutGroup();
-        IsReady = true;
+        CreateDropPreview();
+        _isReady = true;
     }
     
     private void InitializeComponents()
@@ -49,7 +81,10 @@ public class HandLayoutManager : SingletonBehaviour<HandLayoutManager>, IGameMan
         _layoutGroup = GetComponent<HorizontalLayoutGroup>();
         
         if (_layoutGroup == null)
+        {
             _layoutGroup = gameObject.AddComponent<HorizontalLayoutGroup>();
+            Debug.Log("[HandLayoutManager] Added HorizontalLayoutGroup component");
+        }
         
         _contentSizeFitter = GetComponent<ContentSizeFitter>();
         if (_contentSizeFitter == null)
@@ -65,14 +100,35 @@ public class HandLayoutManager : SingletonBehaviour<HandLayoutManager>, IGameMan
         if (_layoutGroup == null) return;
         
         _layoutGroup.spacing = cardSpacing;
-        _layoutGroup.padding = new RectOffset(10, 10, 10, 10);
-        _layoutGroup.childForceExpandWidth = false;
-        _layoutGroup.childForceExpandHeight = false;
-        _layoutGroup.childControlWidth = true;
-        _layoutGroup.childControlHeight = true;
-        _layoutGroup.childScaleWidth = false;
-        _layoutGroup.childScaleHeight = false;
-        _layoutGroup.childAlignment = TextAnchor.MiddleCenter;
+        _layoutGroup.padding = new RectOffset(paddingLeft, paddingRight, paddingTop, paddingBottom);
+        _layoutGroup.childForceExpandWidth = childForceExpandWidth;
+        _layoutGroup.childForceExpandHeight = childForceExpandHeight;
+        _layoutGroup.childControlWidth = childControlWidth;
+        _layoutGroup.childControlHeight = childControlHeight;
+        _layoutGroup.childScaleWidth = childScaleWidth;
+        _layoutGroup.childScaleHeight = childScaleHeight;
+        _layoutGroup.childAlignment = childAlignment;
+        
+        Debug.Log("[HandLayoutManager] HorizontalLayoutGroup configured optimally");
+    }
+    
+    // NEU: Create drop preview object
+    private void CreateDropPreview()
+    {
+        _dropPreview = new GameObject("DropPreview");
+        _dropPreview.transform.SetParent(transform, false);
+        
+        var image = _dropPreview.AddComponent<Image>();
+        image.color = dropPreviewColor;
+        image.raycastTarget = false;
+        
+        var rect = _dropPreview.GetComponent<RectTransform>();
+        rect.sizeDelta = new Vector2(dropPreviewWidth, cardPreferredSize.y * handScale);
+        rect.anchorMin = new Vector2(0.5f, 0.5f);
+        rect.anchorMax = new Vector2(0.5f, 0.5f);
+        rect.pivot = new Vector2(0.5f, 0.5f);
+        
+        _dropPreview.SetActive(false);
     }
     
     private void LateUpdate()
@@ -85,7 +141,59 @@ public class HandLayoutManager : SingletonBehaviour<HandLayoutManager>, IGameMan
         }
     }
     
-    // FIX 2: Proper position management
+    private void OnEnable()
+    {
+        SubscribeToCardManager();
+    }
+    
+    private void OnDisable()
+    {
+        UnsubscribeFromCardManager();
+    }
+    
+    private void SubscribeToCardManager()
+    {
+        if (CardManager.HasInstance)
+        {
+            CardManager.OnHandUpdated += OnHandUpdated;
+            CardManager.OnCardSpawned += OnCardSpawned;
+        }
+        else
+        {
+            CardManager.OnCardManagerInitialized += DelayedSubscribe;
+        }
+    }
+    
+    private void UnsubscribeFromCardManager()
+    {
+        if (CardManager.HasInstance)
+        {
+            CardManager.OnHandUpdated -= OnHandUpdated;
+            CardManager.OnCardSpawned -= OnCardSpawned;
+        }
+        CardManager.OnCardManagerInitialized -= DelayedSubscribe;
+    }
+    
+    private void DelayedSubscribe()
+    {
+        SubscribeToCardManager();
+    }
+    
+    // EVENT HANDLERS
+    private void OnHandUpdated(List<Card> handCards)
+    {
+        SetCardOrder(handCards);
+    }
+    
+    private void OnCardSpawned(Card card)
+    {
+        if (card != null && card.transform.parent == transform)
+        {
+            AddCard(card, 0); // Add new cards to the left
+        }
+    }
+    
+    // NEU: Position management methods
     public void SetCardOrder(List<Card> cards)
     {
         _orderedCards.Clear();
@@ -93,13 +201,13 @@ public class HandLayoutManager : SingletonBehaviour<HandLayoutManager>, IGameMan
         
         if (cards == null) return;
         
-        _orderedCards = cards.Where(c => c.IsValid()).ToList();
+        _orderedCards = FilterValidCards(cards);
         UpdateCardPositions();
     }
     
     public void AddCard(Card card, int position = -1)
     {
-        if (card == null || _orderedCards.Contains(card)) return;
+        if (card == null || ContainsCard(_orderedCards, card)) return;
         
         if (position < 0 || position >= _orderedCards.Count)
             _orderedCards.Add(card);
@@ -111,34 +219,44 @@ public class HandLayoutManager : SingletonBehaviour<HandLayoutManager>, IGameMan
     
     public void RemoveCard(Card card)
     {
-        if (_orderedCards.Remove(card))
+        if (RemoveCardFromList(_orderedCards, card))
         {
-            _cardPositions.Remove(card);
+            RemoveFromDictionary(_cardPositions, card);
             UpdateCardPositions();
         }
     }
     
-    // FIX 3: Proper card movement with visual update
+    // NEU: Move single card to specific position
     public void MoveCardToPosition(Card card, int newPosition)
     {
-        if (card == null || !_orderedCards.Contains(card)) return;
+        if (card == null || !ContainsCard(_orderedCards, card)) return;
         
-        _orderedCards.Remove(card);
+        int oldPosition = GetCardPosition(card);
         
+        RemoveCardFromList(_orderedCards, card);
         newPosition = Mathf.Clamp(newPosition, 0, _orderedCards.Count);
         _orderedCards.Insert(newPosition, card);
         
         UpdateCardPositions();
+        OnCardIndexChanged?.Invoke(card, oldPosition, newPosition);
     }
     
+    // NEU: Move multiple cards to specific position
     public void MoveCardsToPosition(List<Card> cards, int targetPosition)
     {
         if (cards == null || cards.Count == 0) return;
         
+        // Store old positions for events
+        var oldPositions = new Dictionary<Card, int>();
+        foreach (var card in cards)
+        {
+            oldPositions[card] = GetCardPosition(card);
+        }
+        
         // Remove all cards first
         foreach (var card in cards)
         {
-            _orderedCards.Remove(card);
+            RemoveCardFromList(_orderedCards, card);
         }
         
         // Insert at target position
@@ -151,9 +269,144 @@ public class HandLayoutManager : SingletonBehaviour<HandLayoutManager>, IGameMan
         }
         
         UpdateCardPositions();
+        
+        // Fire events
+        foreach (var card in cards)
+        {
+            int newPosition = GetCardPosition(card);
+            if (TryGetValue(oldPositions, card, out int oldPos) && oldPos != newPosition)
+            {
+                OnCardIndexChanged?.Invoke(card, oldPos, newPosition);
+            }
+        }
     }
     
-    // FIX 2&3: Update positions and trigger visual update
+    // NEU: Get drop index from screen position
+    public int GetDropIndexFromScreenPosition(Vector2 screenPosition)
+    {
+        if (_orderedCards.Count == 0) return 0;
+        
+        Vector2 localPoint;
+        if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(
+                _rectTransform,
+                screenPosition,
+                null,
+                out localPoint))
+        {
+            return -1;
+        }
+        
+        // Account for padding and convert to relative position
+        float padding = _layoutGroup.padding.left;
+        localPoint.x += _rectTransform.rect.width * 0.5f - padding;
+        
+        // Calculate position based on card spacing
+        float cardWidth = cardPreferredSize.x * handScale;
+        float totalCardSpace = cardWidth + cardSpacing;
+        
+        // Find insertion point
+        int insertIndex = 0;
+        float currentX = 0;
+        
+        for (int i = 0; i < _orderedCards.Count; i++)
+        {
+            float cardCenterX = currentX + cardWidth * 0.5f;
+            
+            if (localPoint.x < cardCenterX)
+            {
+                insertIndex = i;
+                break;
+            }
+            
+            currentX += totalCardSpace;
+            insertIndex = i + 1;
+        }
+        
+        return Mathf.Clamp(insertIndex, 0, _orderedCards.Count);
+    }
+    
+    // NEU: Drop preview management
+    public void ShowDropPreview(int index)
+    {
+        if (_dropPreview == null || _isReordering) return;
+        
+        if (_dropPreviewIndex == index && _dropPreviewActive) return;
+        
+        _dropPreviewIndex = index;
+        _dropPreviewActive = true;
+        
+        _dropPreview.SetActive(true);
+        PositionDropPreview(index);
+        
+        // Move drop preview to correct sibling index
+        _dropPreview.transform.SetSiblingIndex(index);
+        
+        if (smoothDropPreview)
+        {
+            StartCoroutine(AnimateDropPreview());
+        }
+    }
+    
+    public void HideDropPreview()
+    {
+        if (_dropPreview == null) return;
+        
+        _dropPreviewIndex = -1;
+        _dropPreviewActive = false;
+        _dropPreview.SetActive(false);
+        
+        StopAllCoroutines();
+    }
+    
+    private void PositionDropPreview(int index)
+    {
+        if (_dropPreview == null) return;
+        
+        var rect = _dropPreview.GetComponent<RectTransform>();
+        var image = _dropPreview.GetComponent<Image>();
+        
+        // Update size to match current scale
+        rect.sizeDelta = new Vector2(dropPreviewWidth, cardPreferredSize.y * handScale);
+        
+        // Position will be handled by layout group automatically when sibling index is set
+        rect.anchoredPosition = Vector2.zero;
+        
+        // Update color intensity based on validity
+        Color color = dropPreviewColor;
+        color.a = 0.6f;
+        image.color = color;
+    }
+    
+    private IEnumerator AnimateDropPreview()
+    {
+        if (_dropPreview == null) yield break;
+        
+        var image = _dropPreview.GetComponent<Image>();
+        Color startColor = dropPreviewColor;
+        startColor.a = 0f;
+        
+        Color endColor = dropPreviewColor;
+        endColor.a = 0.6f;
+        
+        float duration = 0.2f;
+        float elapsed = 0f;
+        
+        while (elapsed < duration && _dropPreviewActive)
+        {
+            elapsed += Time.deltaTime;
+            float t = elapsed / duration;
+            
+            image.color = Color.Lerp(startColor, endColor, t);
+            yield return null;
+        }
+        
+        if (_dropPreviewActive)
+        {
+            image.color = endColor;
+        }
+    }
+    
+    // NEU: Update card positions and indices
     private void UpdateCardPositions()
     {
         _cardPositions.Clear();
@@ -164,19 +417,20 @@ public class HandLayoutManager : SingletonBehaviour<HandLayoutManager>, IGameMan
             if (card != null)
             {
                 _cardPositions[card] = i;
-                card.SetHandIndex(i);
+                SetCardHandIndex(card, i);
             }
         }
         
         _positionsNeedUpdate = true;
         MarkLayoutDirty();
+        OnHandLayoutUpdated?.Invoke(_orderedCards);
     }
     
     private void PerformLayoutUpdate()
     {
         if (_layoutGroup == null) return;
         
-        // FIX 3: Apply visual ordering based on positions
+        // Apply visual ordering based on positions
         ApplyCardOrdering();
         ConfigureAllCards();
         
@@ -186,7 +440,7 @@ public class HandLayoutManager : SingletonBehaviour<HandLayoutManager>, IGameMan
         LayoutRebuilder.ForceRebuildLayoutImmediate(_rectTransform);
     }
     
-    // FIX 3: Ensure visual order matches logical order
+    // Ensure visual order matches logical order
     private void ApplyCardOrdering()
     {
         for (int i = 0; i < _orderedCards.Count; i++)
@@ -219,77 +473,6 @@ public class HandLayoutManager : SingletonBehaviour<HandLayoutManager>, IGameMan
         }
     }
     
-    // Get drop index from screen position
-    public int GetDropIndexFromScreenPosition(Vector2 screenPosition)
-    {
-        if (_orderedCards.Count == 0) return 0;
-        
-        Vector2 localPoint;
-        RectTransformUtility.ScreenPointToLocalPointInRectangle(
-            _rectTransform,
-            screenPosition,
-            null,
-            out localPoint
-        );
-        
-        // Find closest position
-        for (int i = 0; i < _orderedCards.Count; i++)
-        {
-            var card = _orderedCards[i];
-            if (card == null) continue;
-            
-            var cardRect = card.GetComponent<RectTransform>();
-            if (cardRect == null) continue;
-            
-            if (localPoint.x < cardRect.anchoredPosition.x)
-                return i;
-        }
-        
-        return _orderedCards.Count;
-    }
-    
-    public void ShowDropPreview(int index)
-    {
-        if (_dropPreviewIndex == index) return;
-        _dropPreviewIndex = index;
-        
-        if (_dropPreview == null)
-            CreateDropPreview();
-        
-        if (_dropPreview != null)
-        {
-            _dropPreview.SetActive(true);
-            PositionDropPreview(index);
-        }
-    }
-    
-    public void HideDropPreview()
-    {
-        _dropPreviewIndex = -1;
-        if (_dropPreview != null)
-            _dropPreview.SetActive(false);
-    }
-    
-    private void CreateDropPreview()
-    {
-        _dropPreview = new GameObject("DropPreview");
-        _dropPreview.transform.SetParent(transform, false);
-        
-        var image = _dropPreview.AddComponent<Image>();
-        image.color = new Color(0, 1, 0, 0.3f);
-        
-        var rect = _dropPreview.GetComponent<RectTransform>();
-        rect.sizeDelta = new Vector2(5, cardPreferredSize.y);
-    }
-    
-    private void PositionDropPreview(int index)
-    {
-        if (_dropPreview == null) return;
-        
-        var rect = _dropPreview.GetComponent<RectTransform>();
-        rect.SetSiblingIndex(Mathf.Min(index, transform.childCount - 1));
-    }
-    
     private void ApplyDynamicScaling()
     {
         if (!enableHandScaling || _orderedCards.Count == 0) return;
@@ -312,7 +495,9 @@ public class HandLayoutManager : SingletonBehaviour<HandLayoutManager>, IGameMan
     {
         float cardWidth = cardPreferredSize.x * handScale;
         float totalSpacing = cardSpacing * Mathf.Max(0, _orderedCards.Count - 1);
-        return (_orderedCards.Count * cardWidth) + totalSpacing + 20;
+        float padding = paddingLeft + paddingRight;
+        
+        return (_orderedCards.Count * cardWidth) + totalSpacing + padding;
     }
     
     private void ApplyScaleToAllCards(float scale)
@@ -329,6 +514,85 @@ public class HandLayoutManager : SingletonBehaviour<HandLayoutManager>, IGameMan
                 }
             }
         }
+        
+        // Update drop preview size too
+        if (_dropPreview != null)
+        {
+            var rect = _dropPreview.GetComponent<RectTransform>();
+            rect.sizeDelta = new Vector2(dropPreviewWidth, cardPreferredSize.y * scale);
+        }
+    }
+    
+    // Helper Methods - Standalone implementation to avoid Linq dependencies
+    private List<Card> FilterValidCards(List<Card> cards)
+    {
+        var result = new List<Card>();
+        foreach (var card in cards)
+        {
+            if (card != null && card.gameObject != null)
+                result.Add(card);
+        }
+        return result;
+    }
+    
+    private bool ContainsCard(List<Card> cards, Card card)
+    {
+        foreach (var c in cards)
+        {
+            if (c == card) return true;
+        }
+        return false;
+    }
+    
+    private bool RemoveCardFromList(List<Card> cards, Card card)
+    {
+        for (int i = 0; i < cards.Count; i++)
+        {
+            if (cards[i] == card)
+            {
+                cards.RemoveAt(i);
+                return true;
+            }
+        }
+        return false;
+    }
+    
+    private void RemoveFromDictionary(Dictionary<Card, int> dict, Card card)
+    {
+        if (dict.ContainsKey(card))
+            dict.Remove(card);
+    }
+    
+    private bool TryGetValue(Dictionary<Card, int> dict, Card card, out int value)
+    {
+        if (dict.ContainsKey(card))
+        {
+            value = dict[card];
+            return true;
+        }
+        value = -1;
+        return false;
+    }
+    
+    // Card Helper Methods - Compatible with extension methods
+    private void SetCardHandIndex(Card card, int index)
+    {
+        if (card == null) return;
+        
+        // Try direct property first
+        var handIndexProperty = card.GetType().GetProperty("HandIndex");
+        if (handIndexProperty != null && handIndexProperty.CanWrite)
+        {
+            handIndexProperty.SetValue(card, index);
+            return;
+        }
+        
+        // Fallback: Extension method compatible approach
+        var setHandIndexMethod = card.GetType().GetMethod("SetHandIndex");
+        if (setHandIndexMethod != null)
+        {
+            setHandIndexMethod.Invoke(card, new object[] { index });
+        }
     }
     
     // Public API
@@ -336,35 +600,48 @@ public class HandLayoutManager : SingletonBehaviour<HandLayoutManager>, IGameMan
     public void ForceImmediateLayout() => PerformLayoutUpdate();
     private void MarkLayoutDirty() => _layoutDirty = true;
     
-    // Event handlers
-    private void OnEnable()
+    // Getters for current state
+    public List<Card> GetOrderedCards() => new List<Card>(_orderedCards);
+    public int GetCardPosition(Card card) 
     {
-        if (CardManager.HasInstance)
+        if (TryGetValue(_cardPositions, card, out int position))
+            return position;
+        return -1;
+    }
+    
+    public void SetSpacing(float spacing)
+    {
+        cardSpacing = spacing;
+        if (_layoutGroup != null)
         {
-            CardManager.OnHandUpdated += OnHandUpdated;
-            CardManager.OnCardSpawned += OnCardSpawned;
+            _layoutGroup.spacing = spacing;
+            MarkLayoutDirty();
         }
     }
     
-    private void OnDisable()
+    public void SetHandScale(float scale)
     {
-        if (CardManager.HasInstance)
-        {
-            CardManager.OnHandUpdated -= OnHandUpdated;
-            CardManager.OnCardSpawned -= OnCardSpawned;
-        }
+        handScale = Mathf.Max(0.1f, scale);
+        MarkLayoutDirty();
     }
     
-    private void OnHandUpdated(List<Card> handCards)
+    public void SetCardSize(Vector2 size)
     {
-        SetCardOrder(handCards);
+        cardPreferredSize = size;
+        MarkLayoutDirty();
     }
     
-    private void OnCardSpawned(Card card)
+    public void SetPadding(int left, int right, int top, int bottom)
     {
-        if (card != null && card.transform.parent == transform)
+        paddingLeft = left;
+        paddingRight = right;
+        paddingTop = top;
+        paddingBottom = bottom;
+        
+        if (_layoutGroup != null)
         {
-            AddCard(card, 0); // Add new cards to the left
+            _layoutGroup.padding = new RectOffset(left, right, top, bottom);
+            MarkLayoutDirty();
         }
     }
     
@@ -372,12 +649,34 @@ public class HandLayoutManager : SingletonBehaviour<HandLayoutManager>, IGameMan
     {
         RemoveCard(card);
     }
-    
-    // Get current hand order
-    public List<Card> GetOrderedCards() => new List<Card>(_orderedCards);
-    public int GetCardPosition(Card card) => _cardPositions.GetValueOrDefault(card, -1);
 
 #if UNITY_EDITOR
+    [ContextMenu("Force Layout Update")]
+    public void DebugForceLayout()
+    {
+        ForceImmediateLayout();
+    }
+    
+    [ContextMenu("Reset Card Sizes")]
+    public void DebugResetCardSizes()
+    {
+        handScale = 1f;
+        cardPreferredSize = new Vector2(120f, 180f);
+        ForceImmediateLayout();
+    }
+    
+    [ContextMenu("Log Layout Settings")]
+    public void DebugLogSettings()
+    {
+        Debug.Log($"[HandLayoutManager] Settings:");
+        Debug.Log($"  Card Scale: {handScale}");
+        Debug.Log($"  Card Size: {cardPreferredSize}");
+        Debug.Log($"  Spacing: {cardSpacing}");
+        Debug.Log($"  Dynamic Scaling: {enableDynamicScaling}");
+        Debug.Log($"  Tracked Cards: {_orderedCards.Count}");
+        Debug.Log($"  Child Count: {transform.childCount}");
+    }
+    
     [ContextMenu("Debug Card Positions")]
     public void DebugCardPositions()
     {
@@ -385,8 +684,61 @@ public class HandLayoutManager : SingletonBehaviour<HandLayoutManager>, IGameMan
         for (int i = 0; i < _orderedCards.Count; i++)
         {
             var card = _orderedCards[i];
-            Debug.Log($"  {i}: {card?.GetCardName()} (Index: {card?.HandIndex})");
+            Debug.Log($"  {i}: {(card?.GetCardName() ?? "NULL")} (Index: {GetCardHandIndex(card)})");
         }
+    }
+    
+    [ContextMenu("Test Drop Preview")]
+    public void TestDropPreview()
+    {
+        if (_orderedCards.Count > 0)
+        {
+            ShowDropPreview(_orderedCards.Count / 2);
+            StartCoroutine(HidePreviewAfterDelay());
+        }
+    }
+    
+    private IEnumerator HidePreviewAfterDelay()
+    {
+        yield return new WaitForSeconds(2f);
+        HideDropPreview();
+    }
+    
+    private int GetCardHandIndex(Card card)
+    {
+        if (card == null) return -1;
+        
+        // Try direct property first
+        var handIndexProperty = card.GetType().GetProperty("HandIndex");
+        if (handIndexProperty != null && handIndexProperty.CanRead)
+        {
+            var value = handIndexProperty.GetValue(card);
+            return value is int intValue ? intValue : -1;
+        }
+        
+        // Fallback: Use position in ordered cards
+        for (int i = 0; i < _orderedCards.Count; i++)
+        {
+            if (_orderedCards[i] == card)
+                return i;
+        }
+        
+        return -1;
+    }
+    
+    private void OnValidate()
+    {
+        if (Application.isPlaying && _layoutGroup != null)
+        {
+            ConfigureLayoutGroup();
+            MarkLayoutDirty();
+        }
+        
+        handScale = Mathf.Max(0.1f, handScale);
+        cardSpacing = Mathf.Max(0f, cardSpacing);
+        cardPreferredSize.x = Mathf.Max(50f, cardPreferredSize.x);
+        cardPreferredSize.y = Mathf.Max(50f, cardPreferredSize.y);
+        dropPreviewWidth = Mathf.Max(1f, dropPreviewWidth);
     }
 #endif
 }
