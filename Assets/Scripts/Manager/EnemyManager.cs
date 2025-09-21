@@ -2,6 +2,8 @@ using UnityEngine;
 using System.Collections.Generic;
 using System.Linq;
 using System.Collections;
+using CardSystem.Extensions;
+using GameSystem.Extensions;
 
 // FIXED: Using Aliases für ambiguous references
 using UnityRandom = UnityEngine.Random;

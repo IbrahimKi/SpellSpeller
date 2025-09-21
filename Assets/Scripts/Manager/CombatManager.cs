@@ -1,6 +1,8 @@
 using UnityEngine;
 using System.Collections;
 using System;
+using CardSystem.Extensions;
+using GameSystem.Extensions;
 
 [System.Serializable]
 public class Resource

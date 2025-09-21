@@ -1,6 +1,8 @@
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
+using CardSystem.Extensions;
+using GameSystem.Extensions;
 
 public class SelectionManager : SingletonBehaviour<SelectionManager>, IGameManager
 {
@@ -482,9 +484,8 @@ public class SelectionManager : SingletonBehaviour<SelectionManager>, IGameManag
             return value is int intValue ? intValue : -1;
         }
         
-        // Fallback to extension method approach
-        var tracker = card.GetComponent<CardHandIndexTracker>();
-        return tracker?.HandIndex ?? -1;
+        // Use built-in HandIndex property
+        return card.HandIndex;
     }
     
     private bool GetCardIsHighlighted(Card card)
@@ -500,8 +501,8 @@ public class SelectionManager : SingletonBehaviour<SelectionManager>, IGameManag
         }
         
         // Fallback to extension method approach
-        var tracker = card.GetComponent<CardHighlightTracker>();
-        return tracker?.IsHighlighted ?? false;
+        // Since Card already has IsHighlighted property, use it directly
+        return card.IsHighlighted;
     }
     
     private void SetCardHighlighted(Card card, bool highlighted)
@@ -516,12 +517,11 @@ public class SelectionManager : SingletonBehaviour<SelectionManager>, IGameManag
             return;
         }
         
-        // Fallback to extension method approach
-        var tracker = card.GetComponent<CardHighlightTracker>();
-        if (tracker == null)
-            tracker = card.gameObject.AddComponent<CardHighlightTracker>();
-        
-        tracker.IsHighlighted = highlighted;
+        // Use methods to change state since we can't directly set CurrentState
+        if (highlighted)
+            card.Highlight();
+        else
+            card.Unhighlight();
         
         // Apply visual effect
         var outline = card.GetComponent<UnityEngine.UI.Outline>();

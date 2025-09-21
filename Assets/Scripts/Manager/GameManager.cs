@@ -1,6 +1,8 @@
 using UnityEngine;
 using System.Collections;
 using System.Collections.Generic;
+using CardSystem.Extensions;
+using GameSystem.Extensions;
 
 public class GameManager : SingletonBehaviour<GameManager>
 {

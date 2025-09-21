@@ -3,6 +3,8 @@ using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 using System.Collections.Generic;
+using CardSystem.Extensions;
+using GameSystem.Extensions;
 
 public partial class GameUIHandler : MonoBehaviour
 {

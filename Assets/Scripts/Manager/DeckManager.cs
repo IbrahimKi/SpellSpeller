@@ -2,6 +2,8 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
+using CardSystem.Extensions;
+using GameSystem.Extensions;
 
 public class DeckManager : SingletonBehaviour<DeckManager>, IGameManager
 {

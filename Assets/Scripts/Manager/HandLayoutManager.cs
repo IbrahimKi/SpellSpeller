@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using System.Linq;
+using CardSystem.Extensions;
 
 [RequireComponent(typeof(HorizontalLayoutGroup))]
 [RequireComponent(typeof(RectTransform))]
