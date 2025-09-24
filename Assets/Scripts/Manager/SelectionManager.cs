@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using System.Linq;
 using UnityEngine;
 using CardSystem.Extensions;
 using GameSystem.Extensions;
@@ -39,22 +38,38 @@ public class SelectionManager : SingletonBehaviour<SelectionManager>, IGameManag
     protected override void OnAwakeInitialize()
     {
         _isReady = true;
+        Debug.Log("[SelectionManager] Initialized and ready");
     }
     
     private void OnEnable()
     {
-        Card.OnCardSelected += HandleCardSelected;
-        Card.OnCardDeselected += HandleCardDeselected;
-        Card.OnCardHighlighted += HandleCardHighlighted;
-        Card.OnCardUnhighlighted += HandleCardUnhighlighted;
+        // FIXED: Safe Event subscription
+        try
+        {
+            Card.OnCardSelected += HandleCardSelected;
+            Card.OnCardDeselected += HandleCardDeselected;
+            Card.OnCardHighlighted += HandleCardHighlighted;
+            Card.OnCardUnhighlighted += HandleCardUnhighlighted;
+        }
+        catch (System.Exception ex)
+        {
+            Debug.LogWarning($"[SelectionManager] Event subscription failed: {ex.Message}");
+        }
     }
     
     private void OnDisable()
     {
-        Card.OnCardSelected -= HandleCardSelected;
-        Card.OnCardDeselected -= HandleCardDeselected;
-        Card.OnCardHighlighted -= HandleCardHighlighted;
-        Card.OnCardUnhighlighted -= HandleCardUnhighlighted;
+        try
+        {
+            Card.OnCardSelected -= HandleCardSelected;
+            Card.OnCardDeselected -= HandleCardDeselected;
+            Card.OnCardHighlighted -= HandleCardHighlighted;
+            Card.OnCardUnhighlighted -= HandleCardUnhighlighted;
+        }
+        catch (System.Exception ex)
+        {
+            Debug.LogWarning($"[SelectionManager] Event unsubscription failed: {ex.Message}");
+        }
     }
     
     // === SELECTION MANAGEMENT ===
@@ -63,6 +78,8 @@ public class SelectionManager : SingletonBehaviour<SelectionManager>, IGameManag
     {
         if (card == null || !card.IsPlayable() || _selectedCards.Contains(card)) return;
         if (_isUpdatingSelection) return;
+        
+        Debug.Log($"[SelectionManager] Adding card to selection: {card.GetCardName()}");
         
         if (!allowMultiSelect)
         {
@@ -97,6 +114,8 @@ public class SelectionManager : SingletonBehaviour<SelectionManager>, IGameManag
         if (!_selectedCards.Remove(card)) return;
         if (_isUpdatingSelection) return;
         
+        Debug.Log($"[SelectionManager] Removing card from selection: {card.GetCardName()}");
+        
         _isUpdatingSelection = true;
         try
         {
@@ -124,13 +143,15 @@ public class SelectionManager : SingletonBehaviour<SelectionManager>, IGameManag
         var handCards = CoreExtensions.GetManager<CardManager>()?.GetHandCards();
         if (handCards == null) return;
         
-        int fromIndex = GetCardHandIndex(fromCard);
-        int toIndex = GetCardHandIndex(toCard);
+        int fromIndex = fromCard.HandIndex();  // FIXED: Use Extension
+        int toIndex = toCard.HandIndex();      // FIXED: Use Extension
         
         if (fromIndex == -1 || toIndex == -1) return;
         
         int start = Mathf.Min(fromIndex, toIndex);
         int end = Mathf.Max(fromIndex, toIndex);
+        
+        Debug.Log($"[SelectionManager] Selecting range from index {start} to {end}");
         
         ClearSelection();
         
@@ -147,6 +168,9 @@ public class SelectionManager : SingletonBehaviour<SelectionManager>, IGameManag
     public void ClearSelection()
     {
         if (_isUpdatingSelection) return;
+        if (_selectedCards.Count == 0) return;
+        
+        Debug.Log("[SelectionManager] Clearing all selection");
         
         var cardsToDeselect = new List<Card>(_selectedCards);
         _selectedCards.Clear();
@@ -175,13 +199,15 @@ public class SelectionManager : SingletonBehaviour<SelectionManager>, IGameManag
         if (card == null || _highlightedCards.Contains(card)) return;
         if (_isUpdatingHighlight) return;
         
+        Debug.Log($"[SelectionManager] Adding card to highlight: {card.GetCardName()}");
+        
         _highlightedCards.Add(card);
         
         _isUpdatingHighlight = true;
         try
         {
-            if (!GetCardIsHighlighted(card))
-                SetCardHighlighted(card, true);
+            if (!card.IsHighlighted())  // FIXED: Use Extension
+                card.Highlight();       // FIXED: Use Extension
         }
         finally
         {
@@ -196,11 +222,13 @@ public class SelectionManager : SingletonBehaviour<SelectionManager>, IGameManag
         if (!_highlightedCards.Remove(card)) return;
         if (_isUpdatingHighlight) return;
         
+        Debug.Log($"[SelectionManager] Removing card from highlight: {card.GetCardName()}");
+        
         _isUpdatingHighlight = true;
         try
         {
-            if (GetCardIsHighlighted(card))
-                SetCardHighlighted(card, false);
+            if (card.IsHighlighted())   // FIXED: Use Extension
+                card.Unhighlight();     // FIXED: Use Extension
         }
         finally
         {
@@ -214,6 +242,8 @@ public class SelectionManager : SingletonBehaviour<SelectionManager>, IGameManag
     {
         if (_selectedCards.Count == 0) return;
         
+        Debug.Log($"[SelectionManager] Highlighting {_selectedCards.Count} selected cards");
+        
         var cardsToHighlight = new List<Card>(_selectedCards);
         
         _isUpdatingHighlight = true;
@@ -224,7 +254,7 @@ public class SelectionManager : SingletonBehaviour<SelectionManager>, IGameManag
                 if (!_highlightedCards.Contains(card))
                 {
                     _highlightedCards.Add(card);
-                    SetCardHighlighted(card, true);
+                    card.Highlight();  // FIXED: Use Extension
                 }
             }
         }
@@ -234,12 +264,15 @@ public class SelectionManager : SingletonBehaviour<SelectionManager>, IGameManag
         }
         
         OnHighlightChanged?.Invoke(_highlightedCards);
-        ClearSelection();
+        ClearSelection(); // Clear selection after highlighting
     }
     
     public void ClearHighlight()
     {
         if (_isUpdatingHighlight) return;
+        if (_highlightedCards.Count == 0) return;
+        
+        Debug.Log("[SelectionManager] Clearing all highlights");
         
         var cardsToUnhighlight = new List<Card>(_highlightedCards);
         _highlightedCards.Clear();
@@ -249,8 +282,8 @@ public class SelectionManager : SingletonBehaviour<SelectionManager>, IGameManag
         {
             foreach (var card in cardsToUnhighlight)
             {
-                if (card != null && GetCardIsHighlighted(card))
-                    SetCardHighlighted(card, false);
+                if (card != null && card.IsHighlighted())
+                    card.Unhighlight();  // FIXED: Use Extension
             }
         }
         finally
@@ -266,18 +299,22 @@ public class SelectionManager : SingletonBehaviour<SelectionManager>, IGameManag
     public void StartGroupDrag(List<Card> cards)
     {
         _dragGroup = new List<Card>(cards);
+        Debug.Log($"[SelectionManager] Starting group drag with {_dragGroup.Count} cards");
+        
         foreach (var card in _dragGroup)
         {
-            SetCardDragging(card, true);
+            card.StartDrag();  // FIXED: Use Extension
         }
         OnDragGroupChanged?.Invoke(_dragGroup);
     }
     
     public void EndGroupDrag()
     {
+        Debug.Log($"[SelectionManager] Ending group drag");
+        
         foreach (var card in _dragGroup)
         {
-            SetCardDragging(card, false);
+            card.EndDrag();  // FIXED: Use Extension
         }
         _dragGroup.Clear();
         OnDragGroupChanged?.Invoke(_dragGroup);
@@ -292,19 +329,21 @@ public class SelectionManager : SingletonBehaviour<SelectionManager>, IGameManag
         var handLayoutManager = CoreExtensions.GetManager<HandLayoutManager>();
         if (handLayoutManager == null) return;
         
+        Debug.Log($"[SelectionManager] Moving selection {direction}");
+        
         SortSelectionByHandIndex();
         
         if (direction == CardMoveDirection.Left)
         {
             var leftmost = _selectedCards[0];
-            int targetIndex = Mathf.Max(0, GetCardHandIndex(leftmost) - 1);
+            int targetIndex = Mathf.Max(0, leftmost.HandIndex() - 1);  // FIXED: Use Extension
             handLayoutManager.MoveCardsToPosition(_selectedCards, targetIndex);
         }
         else if (direction == CardMoveDirection.Right)
         {
             var rightmost = _selectedCards[_selectedCards.Count - 1];
             var handSize = CoreExtensions.GetManager<CardManager>()?.HandSize ?? 0;
-            int targetIndex = Mathf.Min(handSize - 1, GetCardHandIndex(rightmost) + 1);
+            int targetIndex = Mathf.Min(handSize - 1, rightmost.HandIndex() + 1);  // FIXED: Use Extension
             handLayoutManager.MoveCardsToPosition(_selectedCards, targetIndex);
         }
     }
@@ -315,6 +354,8 @@ public class SelectionManager : SingletonBehaviour<SelectionManager>, IGameManag
         
         var handLayoutManager = CoreExtensions.GetManager<HandLayoutManager>();
         if (handLayoutManager == null) return;
+        
+        Debug.Log($"[SelectionManager] Moving selection to {direction} end");
         
         SortSelectionByHandIndex();
         
@@ -336,6 +377,8 @@ public class SelectionManager : SingletonBehaviour<SelectionManager>, IGameManag
         var cardManager = CoreExtensions.GetManager<CardManager>();
         var handCards = cardManager?.GetHandCards();
         if (handCards == null || handCards.Count == 0) return;
+        
+        Debug.Log($"[SelectionManager] Selecting by pattern: {pattern}");
         
         ClearSelection();
         
@@ -379,9 +422,11 @@ public class SelectionManager : SingletonBehaviour<SelectionManager>, IGameManag
         var handLayoutManager = CoreExtensions.GetManager<HandLayoutManager>();
         if (handLayoutManager == null) return;
         
+        Debug.Log($"[SelectionManager] Reordering selection by: {criteria}");
+        
         var selectedPositions = new List<int>();
         foreach (var card in _selectedCards)
-            selectedPositions.Add(GetCardHandIndex(card));
+            selectedPositions.Add(card.HandIndex());  // FIXED: Use Extension
         selectedPositions.Sort();
         
         if (selectedPositions.Count == 0) return;
@@ -424,6 +469,8 @@ public class SelectionManager : SingletonBehaviour<SelectionManager>, IGameManag
         var handCards = cardManager?.GetHandCards();
         if (handCards == null) return;
         
+        Debug.Log("[SelectionManager] Selecting cards with most letters");
+        
         ClearSelection();
         var sortedByLetters = SortCardsByLetterCount(handCards);
         
@@ -440,6 +487,7 @@ public class SelectionManager : SingletonBehaviour<SelectionManager>, IGameManag
     {
         if (card == null) return false;
         
+        // Try reflection-based approach for compatibility
         var isSelectedProperty = card.GetType().GetProperty("IsSelected");
         if (isSelectedProperty != null && isSelectedProperty.CanRead)
         {
@@ -480,79 +528,6 @@ public class SelectionManager : SingletonBehaviour<SelectionManager>, IGameManag
         }
     }
     
-    private bool GetCardIsHighlighted(Card card)
-    {
-        if (card == null) return false;
-        
-        var isHighlightedProperty = card.GetType().GetProperty("IsHighlighted");
-        if (isHighlightedProperty != null && isHighlightedProperty.CanRead)
-        {
-            var value = isHighlightedProperty.GetValue(card);
-            return value is bool boolValue && boolValue;
-        }
-        
-        var currentStateProperty = card.GetType().GetProperty("CurrentState");
-        if (currentStateProperty != null && currentStateProperty.CanRead)
-        {
-            var state = currentStateProperty.GetValue(card);
-            return state != null && state.ToString() == "Highlighted";
-        }
-        
-        return false;
-    }
-    
-    private void SetCardHighlighted(Card card, bool highlighted)
-    {
-        if (card == null) return;
-        
-        try
-        {
-            if (highlighted)
-            {
-                var highlightMethod = card.GetType().GetMethod("Highlight");
-                highlightMethod?.Invoke(card, null);
-            }
-            else
-            {
-                var unhighlightMethod = card.GetType().GetMethod("Unhighlight");
-                unhighlightMethod?.Invoke(card, null);
-            }
-        }
-        catch (System.Exception ex)
-        {
-            Debug.LogWarning($"[SelectionManager] Failed to set card highlight: {ex.Message}");
-        }
-    }
-    
-    private void SetCardDragging(Card card, bool dragging)
-    {
-        if (card == null) return;
-        
-        var dragMethod = card.GetType().GetMethod(dragging ? "StartDrag" : "EndDrag");
-        if (dragMethod != null)
-        {
-            dragMethod.Invoke(card, null);
-            return;
-        }
-        
-        var canvasGroup = card.GetComponent<CanvasGroup>();
-        if (canvasGroup == null)
-            canvasGroup = card.gameObject.AddComponent<CanvasGroup>();
-        
-        if (dragging)
-        {
-            canvasGroup.alpha = 0.8f;
-            canvasGroup.blocksRaycasts = false;
-            card.transform.localScale = Vector3.one * 1.05f;
-        }
-        else
-        {
-            canvasGroup.alpha = 1f;
-            canvasGroup.blocksRaycasts = true;
-            card.transform.localScale = Vector3.one;
-        }
-    }
-    
     // === EVENT HANDLERS ===
     
     private void HandleCardSelected(Card card)
@@ -587,7 +562,7 @@ public class SelectionManager : SingletonBehaviour<SelectionManager>, IGameManag
     {
         if (!preserveHandOrder) return;
         _selectedCards.Sort((card1, card2) => 
-            GetCardHandIndex(card1).CompareTo(GetCardHandIndex(card2)));
+            card1.HandIndex().CompareTo(card2.HandIndex()));  // FIXED: Use Extension
     }
     
     private List<Card> SortCardsByCriteria(List<Card> cards, ReorderCriteria criteria)
@@ -644,24 +619,10 @@ public class SelectionManager : SingletonBehaviour<SelectionManager>, IGameManag
     {
         foreach (var card in cards)
         {
-            if (GetCardHandIndex(card) == index)
+            if (card.HandIndex() == index)  // FIXED: Use Extension
                 return card;
         }
         return null;
-    }
-    
-    private int GetCardHandIndex(Card card)
-    {
-        if (card == null) return -1;
-        
-        var handIndexProperty = card.GetType().GetProperty("HandIndex");
-        if (handIndexProperty != null && handIndexProperty.CanRead)
-        {
-            var value = handIndexProperty.GetValue(card);
-            return value is int intValue ? intValue : -1;
-        }
-        
-        return card.HandIndex;
     }
     
     // === PUBLIC PROCESSING METHODS ===
@@ -679,7 +640,7 @@ public class SelectionManager : SingletonBehaviour<SelectionManager>, IGameManag
     public void ProcessHighlightedInOrder(System.Action<Card> action)
     {
         var sorted = new List<Card>(_highlightedCards);
-        sorted.Sort((a, b) => GetCardHandIndex(a).CompareTo(GetCardHandIndex(b)));
+        sorted.Sort((a, b) => a.HandIndex().CompareTo(b.HandIndex()));  // FIXED: Use Extension
         
         foreach (var card in sorted)
         {
