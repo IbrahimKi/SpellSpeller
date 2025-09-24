@@ -119,51 +119,57 @@ public class CardInputController : MonoBehaviour
             }
         }
         
-        // MAIN SELECTION LOGIC (not alt, not ctrl)
+        // FIXED: MAIN LOGIC - Korrekte Trennung zwischen Selected und Highlighted
         if (!alt && !ctrl)
         {
-            // When cards are SELECTED (not highlighted)
+            // === WENN KARTEN SELECTED SIND (aber nicht highlighted) ===
             if (selectionManager.HasSelection && !selectionManager.HasHighlight)
             {
                 if (Input.GetKeyDown(KeyCode.UpArrow))
                 {
-                    // Up arrow HIGHLIGHTS selected cards
+                    // Up arrow HIGHLIGHTS selected cards (spielt sie NICHT)
+                    Debug.Log("[CardInputController] Selected → Highlighted");
                     selectionManager.HighlightSelection();
                 }
                 else if (Input.GetKeyDown(KeyCode.DownArrow))
                 {
                     // Down arrow deselects all
+                    Debug.Log("[CardInputController] Clearing selection");
                     selectionManager.ClearSelection();
                 }
             }
             
-            // When cards are HIGHLIGHTED
-            if (selectionManager.HasHighlight)
+            // === WENN KARTEN HIGHLIGHTED SIND ===
+            else if (selectionManager.HasHighlight)
             {
                 if (Input.GetKeyDown(KeyCode.UpArrow))
                 {
                     // Up arrow PLAYS highlighted cards
+                    Debug.Log("[CardInputController] Playing highlighted cards");
                     PlayHighlightedCards();
                 }
                 else if (Input.GetKeyDown(KeyCode.LeftArrow))
                 {
                     // Left arrow returns highlighted to deck
+                    Debug.Log("[CardInputController] Returning highlighted to deck");
                     ReturnHighlightedToDeck();
                 }
                 else if (Input.GetKeyDown(KeyCode.RightArrow))
                 {
                     // Right arrow discards highlighted
+                    Debug.Log("[CardInputController] Discarding highlighted cards");
                     DiscardHighlightedCards();
                 }
                 else if (Input.GetKeyDown(KeyCode.DownArrow))
                 {
-                    // Down arrow clears highlight
+                    // Down arrow clears highlight (zurück zu selected)
+                    Debug.Log("[CardInputController] Highlighted → Cleared");
                     selectionManager.ClearHighlight();
                 }
             }
             
-            // NAVIGATION CONTROLS (Arrow Keys only, no selection)
-            if (!selectionManager.HasHighlight)
+            // === NAVIGATION CONTROLS (Arrow Keys only, no selection) ===
+            else if (!selectionManager.HasSelection && !selectionManager.HasHighlight)
             {
                 if (Input.GetKeyDown(KeyCode.LeftArrow))
                 {
@@ -296,7 +302,7 @@ public class CardInputController : MonoBehaviour
         handLayoutManager.MoveCardsToPosition(selectedCards, minIndex);
     }
     
-    // SELECTION EXTENSION METHODS
+    // SELECTION EXTENSION METHODS (unchanged)
     private void ExtendSelectionLeft()
     {
         var selectionManager = CoreExtensions.GetManager<SelectionManager>();
@@ -533,6 +539,11 @@ public class CardInputController : MonoBehaviour
             {
                 selectionManager.ClearSelection();
                 selectionManager.AddToSelection(card);
+            }
+            else
+            {
+                // FIXED: Card war schon selected - deselect it
+                selectionManager.RemoveFromSelection(card);
             }
         }
         
@@ -789,6 +800,7 @@ public class CardInputController : MonoBehaviour
     {
         return card.IsPlayable(); // Verwendet jetzt GameSystem.Extensions
     }
+    
     // Called by CombatManager on turn end
     public void OnTurnEnd()
     {
