@@ -4,6 +4,7 @@ using System.Collections;
 using System.Collections.Generic;
 using CardSystem.Extensions;
 using GameSystem.Extensions;
+using Handler;
 
 public class CardInputController : MonoBehaviour
 {
@@ -32,6 +33,10 @@ public class CardInputController : MonoBehaviour
     // Draw cost tracking
     private int _currentDrawMultiplier = 0;
     
+    // Last selection tracking
+    private List<Card> _lastSelection = new List<Card>();
+    private bool _hasStoredSelection = false;
+    
     // Singleton pattern
     private static CardInputController _instance;
     public static CardInputController Instance
@@ -52,6 +57,19 @@ public class CardInputController : MonoBehaviour
             Destroy(gameObject);
     }
     
+    void Start()
+    {
+        // Subscribe to selection change events to apply hover effects
+        var selectionManager = CoreExtensions.GetManager<SelectionManager>();
+        if (selectionManager != null)
+        {
+            SelectionManager.OnSelectionChanged += OnSelectionChangedForHover;
+        }
+        
+        // Initialize last selection tracking
+        _lastSelection = new List<Card>();
+    }
+    
     void Update()
     {
         if (enableKeyboardShortcuts)
@@ -59,7 +77,78 @@ public class CardInputController : MonoBehaviour
         
         HandleMouseInput();
     }
-    void HandleKeyboardInput()
+
+    // === HOVER EFFECT MANAGEMENT ===
+    private void OnSelectionChangedForHover(List<Card> selectedCards)
+    {
+        // Apply hover effect to all selected cards
+        if (selectedCards != null)
+        {
+            foreach (var card in selectedCards)
+            {
+                if (card != null)
+                {
+                    var hoverHandler = card.GetComponent<CardHoverHandler>();
+                    if (hoverHandler != null)
+                    {
+                        hoverHandler.UpdateVisualForState();
+                    }
+                    else
+                    {
+                        // Fallback: Apply visual effect directly
+                        card.Highlight();
+                    }
+                }
+            }
+        }
+    }
+
+    // === LAST SELECTION TRACKING ===
+    private void StoreLastSelection()
+    {
+        var selectionManager = CoreExtensions.GetManager<SelectionManager>();
+        if (selectionManager == null) return;
+        
+        _lastSelection.Clear();
+        foreach (var card in selectionManager.SelectedCards)
+        {
+            _lastSelection.Add(card);
+        }
+        _hasStoredSelection = _lastSelection.Count > 0;
+        
+        if (_hasStoredSelection)
+        {
+            Debug.Log($"[CardInputController] Stored last selection: {_lastSelection.Count} cards");
+        }
+    }
+    
+    private void RestoreLastSelection()
+    {
+        if (!_hasStoredSelection || _lastSelection.Count == 0) 
+        {
+            Debug.Log("[CardInputController] No stored selection to restore");
+            return;
+        }
+        
+        var selectionManager = CoreExtensions.GetManager<SelectionManager>();
+        if (selectionManager == null) return;
+        
+        selectionManager.ClearSelection();
+        
+        int restoredCount = 0;
+        foreach (var card in _lastSelection)
+        {
+            if (card != null && card.IsInHand())
+            {
+                selectionManager.AddToSelection(card);
+                restoredCount++;
+            }
+        }
+        
+        Debug.Log($"[CardInputController] Restored {restoredCount}/{_lastSelection.Count} cards from last selection");
+    }
+
+void HandleKeyboardInput()
 {
     // Input Detection mit kontinuierlicher Prüfung
     bool ctrl = Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl);
@@ -83,19 +172,19 @@ public class CardInputController : MonoBehaviour
         Debug.Log($"[CardInputController] State - Selection: {selectionManager.HasSelection} ({selectionManager.SelectedCards.Count}), Highlight: {selectionManager.HasHighlight} ({selectionManager.HighlightedCards.Count})");
     }
     
-    // === PRIORITY 1: REORDERING CONTROLS (Alt + Arrow Keys) ===
-    if (enableKeyboardReordering && alt && selectionManager.HasSelection)
+    // === PRIORITY 1: REORDERING CONTROLS (Ctrl + Arrow Keys) ===
+    if (enableKeyboardReordering && ctrl && selectionManager.HasSelection)
     {
         if (anyArrowDown)
         {
-            Debug.Log("[CardInputController] >>> ALT REORDERING MODE <<<");
+            Debug.Log("[CardInputController] >>> CTRL REORDERING MODE <<<");
         }
         
         if (CanReorder())
         {
             if (Input.GetKeyDown(KeyCode.LeftArrow))
             {
-                Debug.Log("[CardInputController] ALT+LEFT: Move selection left");
+                Debug.Log("[CardInputController] CTRL+LEFT: Move selection left");
                 if (shift) // Move to far left
                     MoveSelectionToEnd(CardMoveDirection.Left);
                 else // Move one step left
@@ -104,7 +193,7 @@ public class CardInputController : MonoBehaviour
             }
             else if (Input.GetKeyDown(KeyCode.RightArrow))
             {
-                Debug.Log("[CardInputController] ALT+RIGHT: Move selection right");
+                Debug.Log("[CardInputController] CTRL+RIGHT: Move selection right");
                 if (shift) // Move to far right
                     MoveSelectionToEnd(CardMoveDirection.Right);
                 else // Move one step right
@@ -113,70 +202,67 @@ public class CardInputController : MonoBehaviour
             }
             else if (Input.GetKeyDown(KeyCode.UpArrow))
             {
-                Debug.Log("[CardInputController] ALT+UP: Move to center");
+                Debug.Log("[CardInputController] CTRL+UP: Move to center");
                 MoveSelectionToCenter();
                 return;
             }
             else if (Input.GetKeyDown(KeyCode.DownArrow))
             {
-                Debug.Log("[CardInputController] ALT+DOWN: Shuffle selection");
+                Debug.Log("[CardInputController] CTRL+DOWN: Shuffle selection");
                 ShuffleSelection();
                 return;
             }
         }
         else if (anyArrowDown)
         {
-            Debug.Log($"[CardInputController] ALT reordering blocked - Cooldown: {Time.time - _lastReorderTime < reorderCooldown}, IsReordering: {_isReordering}");
+            Debug.Log($"[CardInputController] CTRL reordering blocked - Cooldown: {Time.time - _lastReorderTime < reorderCooldown}, IsReordering: {_isReordering}");
             return; // Block weitere Verarbeitung auch wenn Cooldown aktiv
         }
     }
     
-    // === PRIORITY 2: SELECTION EXTENSION (Ctrl + Arrow Keys) ===
-    else if (ctrl && !alt && selectionManager.HasSelection)
+    // === PRIORITY 2: SHIFT-MODIFIER (Range selection & extension) ===
+    else if (shift && !ctrl)
     {
         if (anyArrowDown)
         {
-            Debug.Log("[CardInputController] >>> CTRL SELECTION EXTENSION MODE <<<");
+            Debug.Log("[CardInputController] >>> SHIFT RANGE SELECTION MODE <<<");
         }
         
-        if (Input.GetKeyDown(KeyCode.LeftArrow))
+        if (selectionManager.HasSelection)
         {
-            if (shift) // Extend selection left
+            if (Input.GetKeyDown(KeyCode.LeftArrow))
             {
-                Debug.Log("[CardInputController] CTRL+SHIFT+LEFT: Extend selection left");
+                Debug.Log("[CardInputController] SHIFT+LEFT: Extend selection left");
                 ExtendSelectionLeft();
+                return;
             }
-            else // Contract selection from right
+            else if (Input.GetKeyDown(KeyCode.RightArrow))
             {
-                Debug.Log("[CardInputController] CTRL+LEFT: Contract selection from right");
-                ContractSelectionRight();
-            }
-            return;
-        }
-        else if (Input.GetKeyDown(KeyCode.RightArrow))
-        {
-            if (shift) // Extend selection right
-            {
-                Debug.Log("[CardInputController] CTRL+SHIFT+RIGHT: Extend selection right");
+                Debug.Log("[CardInputController] SHIFT+RIGHT: Extend selection right");
                 ExtendSelectionRight();
+                return;
             }
-            else // Contract selection from left
-            {
-                Debug.Log("[CardInputController] CTRL+RIGHT: Contract selection from left");
-                ContractSelectionLeft();
-            }
-            return;
         }
-        // CTRL+UP/DOWN mit Selection - ignorieren oder andere Aktionen
-        else if (Input.GetKeyDown(KeyCode.UpArrow) || Input.GetKeyDown(KeyCode.DownArrow))
+        else
         {
-            Debug.Log("[CardInputController] CTRL+UP/DOWN with selection - ignoring");
-            return;
+            // Ohne bestehende Selection - Range Selection starten
+            if (Input.GetKeyDown(KeyCode.LeftArrow))
+            {
+                Debug.Log("[CardInputController] SHIFT+LEFT: Start range selection left");
+                SelectAdjacentCard(CardMoveDirection.Left, true);
+                return;
+            }
+            else if (Input.GetKeyDown(KeyCode.RightArrow))
+            {
+                Debug.Log("[CardInputController] SHIFT+RIGHT: Start range selection right");
+                SelectAdjacentCard(CardMoveDirection.Right, true);
+                return;
+            }
         }
     }
     
-    // === PRIORITY 3: MAIN LOGIC (Kein Alt, Kein Ctrl) ===
-    else if (!alt && !ctrl)
+    // === PRIORITY 3: OHNE MODIFIER - NAVIGATION UND SELECTION MOVEMENT ===
+    else if (!ctrl && !shift && !alt)
     {
         // === 3A: WENN KARTEN SELECTED SIND (aber NICHT highlighted) ===
         if (selectionManager.HasSelection && !selectionManager.HasHighlight)
@@ -195,38 +281,23 @@ public class CardInputController : MonoBehaviour
             }
             else if (Input.GetKeyDown(KeyCode.DownArrow))
             {
-                // Down arrow deselects all
-                Debug.Log("[CardInputController] DOWN: Clearing selection");
+                // Down arrow deselects all and stores selection
+                Debug.Log("[CardInputController] DOWN: Storing and clearing selection");
+                StoreLastSelection();
                 selectionManager.ClearSelection();
                 return;
             }
-            // LEFT/RIGHT mit Selection - Navigation mit Shift Support
+            // LEFT/RIGHT ohne Modifier - "Move Selection" (behält Anzahl bei)
             else if (Input.GetKeyDown(KeyCode.LeftArrow))
             {
-                if (shift)
-                {
-                    Debug.Log("[CardInputController] SHIFT+LEFT: Extend selection left (navigation style)");
-                    SelectAdjacentCard(CardMoveDirection.Left, true);
-                }
-                else
-                {
-                    Debug.Log("[CardInputController] LEFT: Navigate left from selection");
-                    SelectAdjacentCard(CardMoveDirection.Left, false);
-                }
+                Debug.Log("[CardInputController] LEFT: Move selection left (same count)");
+                MoveSelectionLeft();
                 return;
             }
             else if (Input.GetKeyDown(KeyCode.RightArrow))
             {
-                if (shift)
-                {
-                    Debug.Log("[CardInputController] SHIFT+RIGHT: Extend selection right (navigation style)");
-                    SelectAdjacentCard(CardMoveDirection.Right, true);
-                }
-                else
-                {
-                    Debug.Log("[CardInputController] RIGHT: Navigate right from selection");
-                    SelectAdjacentCard(CardMoveDirection.Right, false);
-                }
+                Debug.Log("[CardInputController] RIGHT: Move selection right (same count)");
+                MoveSelectionRight();
                 return;
             }
         }
@@ -263,8 +334,24 @@ public class CardInputController : MonoBehaviour
             else if (Input.GetKeyDown(KeyCode.DownArrow))
             {
                 // Down arrow clears highlight (zurück zu selected)
-                Debug.Log("[CardInputController] DOWN: Highlighted → Cleared");
+                Debug.Log("[CardInputController] DOWN: Highlighted → Selected (restored)");
+                var highlightedCards = new List<Card>();
+                foreach (var card in selectionManager.HighlightedCards)
+                {
+                    highlightedCards.Add(card);
+                }
+                
                 selectionManager.ClearHighlight();
+                
+                // Restore as selected
+                foreach (var card in highlightedCards)
+                {
+                    if (card != null && card.IsInHand())
+                    {
+                        selectionManager.AddToSelection(card);
+                    }
+                }
+                
                 return;
             }
         }
@@ -279,51 +366,59 @@ public class CardInputController : MonoBehaviour
             
             if (Input.GetKeyDown(KeyCode.LeftArrow))
             {
-                if (shift) // Select range left
-                {
-                    Debug.Log("[CardInputController] SHIFT+LEFT: Start range selection left");
-                    SelectAdjacentCard(CardMoveDirection.Left, true);
-                }
-                else // Select single card left
-                {
-                    Debug.Log("[CardInputController] LEFT: Select single card left");
-                    SelectAdjacentCard(CardMoveDirection.Left, false);
-                }
+                Debug.Log("[CardInputController] LEFT: Select single card left");
+                SelectAdjacentCard(CardMoveDirection.Left, false);
                 return;
             }
             else if (Input.GetKeyDown(KeyCode.RightArrow))
             {
-                if (shift) // Select range right
-                {
-                    Debug.Log("[CardInputController] SHIFT+RIGHT: Start range selection right");
-                    SelectAdjacentCard(CardMoveDirection.Right, true);
-                }
-                else // Select single card right
-                {
-                    Debug.Log("[CardInputController] RIGHT: Select single card right");
-                    SelectAdjacentCard(CardMoveDirection.Right, false);
-                }
+                Debug.Log("[CardInputController] RIGHT: Select single card right");
+                SelectAdjacentCard(CardMoveDirection.Right, false);
                 return;
             }
-            // UP/DOWN ohne Selection - ignorieren oder zukünftige Features
-            else if (Input.GetKeyDown(KeyCode.UpArrow) || Input.GetKeyDown(KeyCode.DownArrow))
+            else if (Input.GetKeyDown(KeyCode.UpArrow))
             {
-                Debug.Log("[CardInputController] UP/DOWN without selection - ignoring");
+                // UP without selection - restore last selection
+                Debug.Log("[CardInputController] UP: Restoring last selection");
+                RestoreLastSelection();
+                return;
+            }
+            // DOWN ohne Selection - ignorieren
+            else if (Input.GetKeyDown(KeyCode.DownArrow))
+            {
+                Debug.Log("[CardInputController] DOWN without selection - ignoring");
                 return;
             }
         }
     }
     
-    // === PRIORITY 4: SPECIAL CASES (Alt/Ctrl ohne Selection) ===
-    else if (alt && !selectionManager.HasSelection && anyArrowDown)
+    // === PRIORITY 4: ALT-MODIFIER (Selection contraction) ===
+    else if (alt && !shift && !ctrl && selectionManager.HasSelection)
     {
-        Debug.Log("[CardInputController] ALT without selection - ignoring");
-        return;
+        if (anyArrowDown)
+        {
+            Debug.Log("[CardInputController] >>> ALT CONTRACTION MODE <<<");
+            Debug.Log($"[CardInputController] Alt detected: {alt}, Shift: {shift}, Ctrl: {ctrl}");
+        }
+        
+        if (Input.GetKeyDown(KeyCode.LeftArrow))
+        {
+            Debug.Log("[CardInputController] ALT+LEFT: Contract from right side");
+            ContractSelectionRight();
+            return;
+        }
+        else if (Input.GetKeyDown(KeyCode.RightArrow))
+        {
+            Debug.Log("[CardInputController] ALT+RIGHT: Contract from left side");
+            ContractSelectionLeft();
+            return;
+        }
     }
-    else if (ctrl && !selectionManager.HasSelection && anyArrowDown)
+    
+    // === ADDITIONAL ALT HANDLING (Debug) ===
+    else if (alt && anyArrowDown)
     {
-        Debug.Log("[CardInputController] CTRL without selection - ignoring");
-        return;
+        Debug.Log($"[CardInputController] ALT detected but not processed - Alt: {alt}, HasSelection: {selectionManager.HasSelection}, Shift: {shift}, Ctrl: {ctrl}");
     }
     
     // === SPECIAL ACTIONS (unabhängig von Modifier, außer wenn schon verarbeitet) ===
@@ -348,6 +443,85 @@ public class CardInputController : MonoBehaviour
     }
 }
 
+    // === NEW: SELECTION MOVEMENT WITHOUT REORDERING ===
+    
+    private void MoveSelectionLeft()
+    {
+        var selectionManager = CoreExtensions.GetManager<SelectionManager>();
+        var cardManager = CoreExtensions.GetManager<CardManager>();
+        
+        if (selectionManager == null || cardManager == null) return;
+        
+        var handCards = cardManager.GetHandCards();
+        if (handCards == null || handCards.Count == 0) return;
+        
+        var selectedCards = GetSelectedCardsList(selectionManager);
+        int selectionCount = selectedCards.Count;
+        
+        if (selectionCount == 0) return;
+        
+        int leftmostIndex = GetMinHandIndex(selectedCards);
+        int newStartIndex = Mathf.Max(0, leftmostIndex - 1);
+        
+        Debug.Log($"[CardInputController] Moving selection left: from {leftmostIndex} to {newStartIndex}, count: {selectionCount}");
+        
+        // Clear current selection
+        selectionManager.ClearSelection();
+        
+        // Select new range
+        SelectRangeAtIndex(newStartIndex, selectionCount);
+    }
+    
+    private void MoveSelectionRight()
+    {
+        var selectionManager = CoreExtensions.GetManager<SelectionManager>();
+        var cardManager = CoreExtensions.GetManager<CardManager>();
+        
+        if (selectionManager == null || cardManager == null) return;
+        
+        var handCards = cardManager.GetHandCards();
+        if (handCards == null || handCards.Count == 0) return;
+        
+        var selectedCards = GetSelectedCardsList(selectionManager);
+        int selectionCount = selectedCards.Count;
+        
+        if (selectionCount == 0) return;
+        
+        int leftmostIndex = GetMinHandIndex(selectedCards);
+        int maxPossibleStart = handCards.Count - selectionCount;
+        int newStartIndex = Mathf.Min(maxPossibleStart, leftmostIndex + 1);
+        
+        Debug.Log($"[CardInputController] Moving selection right: from {leftmostIndex} to {newStartIndex}, count: {selectionCount}");
+        
+        // Clear current selection
+        selectionManager.ClearSelection();
+        
+        // Select new range
+        SelectRangeAtIndex(newStartIndex, selectionCount);
+    }
+    
+    private void SelectRangeAtIndex(int startIndex, int count)
+    {
+        var selectionManager = CoreExtensions.GetManager<SelectionManager>();
+        var cardManager = CoreExtensions.GetManager<CardManager>();
+        
+        if (selectionManager == null || cardManager == null) return;
+        
+        var handCards = cardManager.GetHandCards();
+        if (handCards == null) return;
+        
+        int actualCount = Mathf.Min(count, handCards.Count - startIndex);
+        
+        for (int i = 0; i < actualCount; i++)
+        {
+            var card = FindCardByHandIndex(handCards, startIndex + i);
+            if (card != null)
+            {
+                selectionManager.AddToSelection(card);
+                Debug.Log($"[CardInputController] Selected card at index {startIndex + i}: {card.GetCardName()}");
+            }
+        }
+    }
     
     // REORDERING HELPER METHODS
     private bool CanReorder()
@@ -500,8 +674,9 @@ public class CardInputController : MonoBehaviour
         handLayoutManager.MoveCardsToPosition(selectedCards, minIndex);
     }
     
-    // SELECTION EXTENSION METHODS
-    private void ExtendSelectionLeft()
+    // === SELECTION EXTENSION METHODS (UPDATED FROM PREVIOUS VERSIONS) ===
+    
+private void ExtendSelectionLeft()
 {
     var selectionManager = CoreExtensions.GetManager<SelectionManager>();
     var cardManager = CoreExtensions.GetManager<CardManager>();
@@ -599,6 +774,7 @@ private void ExtendSelectionRight()
     }
 }
 
+// === UPDATED: SELECTION CONTRACTION METHODS ===
 private void ContractSelectionLeft()
 {
     var selectionManager = CoreExtensions.GetManager<SelectionManager>();
@@ -610,8 +786,9 @@ private void ContractSelectionLeft()
         return;
     }
     
-    Debug.Log($"[CardInputController] Contracting selection from left, current count: {selectedCards.Count}");
+    Debug.Log($"[CardInputController] Contracting selection from LEFT side, current count: {selectedCards.Count}");
     
+    // NEUE LOGIK: Von LINKER Seite reduzieren (Remove leftmost)
     var leftmostCard = FindCardWithMinHandIndex(selectedCards);
     if (leftmostCard != null)
     {
@@ -635,8 +812,9 @@ private void ContractSelectionRight()
         return;
     }
     
-    Debug.Log($"[CardInputController] Contracting selection from right, current count: {selectedCards.Count}");
+    Debug.Log($"[CardInputController] Contracting selection from RIGHT side, current count: {selectedCards.Count}");
     
+    // NEUE LOGIK: Von RECHTER Seite reduzieren (Remove rightmost)
     var rightmostCard = FindCardWithMaxHandIndex(selectedCards);
     if (rightmostCard != null)
     {
@@ -817,7 +995,7 @@ private void ContractSelectionRight()
         }
     }
     
-    // FIXED: HandleCardClick - Bessere Selection Logic
+    // FIXED: HandleCardClick - Bessere Selection Logic mit Toggle
     void HandleCardClick(Card card)
     {
         float timeSinceLastClick = Time.time - _lastClickTime;
@@ -828,7 +1006,6 @@ private void ContractSelectionRight()
         
         bool ctrl = Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl);
         bool shift = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
-        bool alt = Input.GetKey(KeyCode.LeftAlt) || Input.GetKey(KeyCode.RightAlt);
         
         Debug.Log($"[CardInputController] Card clicked: {card.GetCardName()}, DoubleClick: {isDoubleClick}, Ctrl: {ctrl}, Shift: {shift}");
         
@@ -855,24 +1032,80 @@ private void ContractSelectionRight()
         }
         else
         {
-            // Normal click - single select/deselect
+            // Normal click - TOGGLE single card selection
             bool isSelected = GetCardIsSelected(card);
             
             if (!isSelected)
             {
-                Debug.Log("[CardInputController] Normal click: Select card");
+                Debug.Log("[CardInputController] Normal click: Select card (clear others)");
                 selectionManager.ClearSelection();
                 selectionManager.AddToSelection(card);
             }
             else
             {
-                Debug.Log("[CardInputController] Normal click: Deselect card");
+                Debug.Log("[CardInputController] Normal click: Toggle off (deselect)");
                 selectionManager.RemoveFromSelection(card);
             }
         }
         
         _lastClickTime = Time.time;
         _lastClickedCard = card;
+    }
+    
+    void HandleRightClick()
+    {
+        var eventData = new PointerEventData(EventSystem.current)
+        {
+            position = Input.mousePosition
+        };
+        
+        var results = new List<RaycastResult>();
+        EventSystem.current.RaycastAll(eventData, results);
+        
+        Card clickedCard = null;
+        
+        foreach (var result in results)
+        {
+            clickedCard = result.gameObject.GetComponent<Card>();
+            if (clickedCard != null)
+                break;
+        }
+        
+        if (clickedCard != null)
+        {
+            // Right click on card - start drag without selection
+            Debug.Log($"[CardInputController] Right-click drag: {clickedCard.GetCardName()}");
+            StartCardDrag(clickedCard);
+        }
+        else
+        {
+            // Right click on empty space - clear all selections
+            Debug.Log("[CardInputController] Right-click: Clear all selections");
+            var selectionManager = CoreExtensions.GetManager<SelectionManager>();
+            selectionManager?.ClearSelection();
+            selectionManager?.ClearHighlight();
+        }
+    }
+    
+    private void StartCardDrag(Card card)
+    {
+        // Start dragging single card without selecting it
+        var dragHandler = card.GetComponent<CardDragHandler>();
+        if (dragHandler != null)
+        {
+            // Simulate drag start
+            var eventData = new PointerEventData(EventSystem.current)
+            {
+                position = Input.mousePosition,
+                button = PointerEventData.InputButton.Right
+            };
+            
+            dragHandler.OnBeginDrag(eventData);
+        }
+        else
+        {
+            Debug.LogWarning($"[CardInputController] No CardDragHandler found on {card.GetCardName()}");
+        }
     }
     
     void HandleDeckClick()
@@ -888,14 +1121,6 @@ private void ContractSelectionRight()
         
         _lastClickTime = Time.time;
         _lastClickedObject = GameObject.FindWithTag("DeckArea");
-    }
-    
-    void HandleRightClick()
-    {
-        // Right click to deselect all
-        var selectionManager = CoreExtensions.GetManager<SelectionManager>();
-        selectionManager?.ClearSelection();
-        selectionManager?.ClearHighlight();
     }
     
     // ACTION METHODS
@@ -1044,7 +1269,7 @@ private void ContractSelectionRight()
     int min = int.MaxValue;
     foreach (var card in cards)
     {
-        int index = card.HandIndex;
+        int index = card.HandIndex();
         if (index >= 0 && index < min)
             min = index;
     }
@@ -1061,7 +1286,7 @@ private int GetMaxHandIndex(List<Card> cards)
     int max = -1;
     foreach (var card in cards)
     {
-        int index = card.HandIndex;
+        int index = card.HandIndex();
         if (index > max)
             max = index;
     }
@@ -1079,7 +1304,7 @@ private Card FindCardWithMinHandIndex(List<Card> cards)
     
     foreach (var card in cards)
     {
-        int index = card.HandIndex;
+        int index = card.HandIndex();
         if (index >= 0 && index < minIndex)
         {
             minIndex = index;
@@ -1100,7 +1325,7 @@ private Card FindCardWithMaxHandIndex(List<Card> cards)
     
     foreach (var card in cards)
     {
-        int index = card.HandIndex;
+        int index = card.HandIndex();
         if (index > maxIndex)
         {
             maxIndex = index;
@@ -1116,7 +1341,7 @@ private Card FindCardByHandIndex(List<Card> cards, int targetIndex)
 {
     foreach (var card in cards)
     {
-        if (card.HandIndex == targetIndex)
+        if (card.HandIndex() == targetIndex)
         {
             Debug.Log($"[CardInputController] Found card by index {targetIndex}: {card.GetCardName()}");
             return card;
@@ -1141,6 +1366,16 @@ private Card FindCardByHandIndex(List<Card> cards, int targetIndex)
     public void OnTurnEnd()
     {
         ResetDrawCost();
+    }
+
+    // === CLEANUP ===
+    private void OnDestroy()
+    {
+        var selectionManager = CoreExtensions.GetManager<SelectionManager>();
+        if (selectionManager != null)
+        {
+            SelectionManager.OnSelectionChanged -= OnSelectionChangedForHover;
+        }
     }
 
 #if UNITY_EDITOR
@@ -1172,16 +1407,70 @@ private Card FindCardByHandIndex(List<Card> cards, int targetIndex)
         }
     }
     
-    [ContextMenu("Test Alt Detection")]
-    private void TestAltDetection()
+    [ContextMenu("Test Alt Input")]
+    private void TestAltInput()
     {
-        Debug.Log($"Alt Keys: Left={Input.GetKey(KeyCode.LeftAlt)}, Right={Input.GetKey(KeyCode.RightAlt)}");
-        Debug.Log($"Selection Manager Ready: {CoreExtensions.IsManagerReady<SelectionManager>()}");
+        bool leftAlt = Input.GetKey(KeyCode.LeftAlt);
+        bool rightAlt = Input.GetKey(KeyCode.RightAlt);
+        bool anyAlt = leftAlt || rightAlt;
         
-        var sm = CoreExtensions.GetManager<SelectionManager>();
-        if (sm != null)
+        Debug.Log($"[CardInputController] === ALT TEST ===");
+        Debug.Log($"Left Alt: {leftAlt}");
+        Debug.Log($"Right Alt: {rightAlt}");
+        Debug.Log($"Combined Alt: {anyAlt}");
+        
+        if (anyAlt)
         {
-            Debug.Log($"Has Selection: {sm.HasSelection}, Count: {sm.SelectedCards.Count}");
+            Debug.Log("ALT IS DETECTED!");
+        }
+        else
+        {
+            Debug.Log("ALT NOT DETECTED - Try holding Alt while clicking this");
+        }
+    }
+    
+    [ContextMenu("Force Test Alt Contraction")]
+    private void ForceTestAltContraction()
+    {
+        Debug.Log("[CardInputController] Force testing Alt contraction...");
+        
+        var selectionManager = CoreExtensions.GetManager<SelectionManager>();
+        if (selectionManager?.HasSelection == true)
+        {
+            ContractSelectionRight();
+        }
+        else
+        {
+            Debug.Log("No selection available for testing");
+        }
+    }
+    
+    [ContextMenu("Test Selection Movement")]
+    private void TestSelectionMovement()
+    {
+        var selectionManager = CoreExtensions.GetManager<SelectionManager>();
+        if (selectionManager?.HasSelection == true)
+        {
+            Debug.Log("[CardInputController] Testing selection movement...");
+            MoveSelectionRight();
+        }
+        else
+        {
+            Debug.Log("[CardInputController] No cards selected for movement test");
+        }
+    }
+    
+    [ContextMenu("Test Last Selection")]
+    private void TestLastSelection()
+    {
+        if (_hasStoredSelection)
+        {
+            Debug.Log($"[CardInputController] Restoring {_lastSelection.Count} stored cards");
+            RestoreLastSelection();
+        }
+        else
+        {
+            Debug.Log("[CardInputController] No stored selection to restore");
         }
     }
 #endif
