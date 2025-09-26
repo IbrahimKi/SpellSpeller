@@ -539,86 +539,222 @@ void HandleKeyboardInput()
 
     
     private void MoveSelection(CardMoveDirection direction)
+{
+    if (!CanReorder()) 
     {
-        if (!CanReorder()) 
-        {
-            Debug.Log("[CardInputController] MoveSelection blocked by cooldown");
-            return;
-        }
-    
-        Debug.Log($"[CardInputController] Starting move selection {direction}");
-    
-        _lastReorderTime = Time.time;
-        _isReordering = true;
-    
-        var selectionManager = CoreExtensions.GetManager<SelectionManager>();
-        if (selectionManager == null)
-        {
-            Debug.LogError("[CardInputController] SelectionManager is null!");
-            _isReordering = false;
-            return;
-        }
-    
-        try
-        {
-            selectionManager.MoveSelection(direction);
-            Debug.Log($"[CardInputController] Successfully moved selection {direction}");
-        }
-        catch (System.Exception ex)
-        {
-            Debug.LogError($"[CardInputController] Failed to move selection: {ex.Message}");
-        }
-        finally
-        {
-            _isReordering = false;
-        }
-    
-        if (visualReorderFeedback)
-        {
-            StartCoroutine(ReorderFeedback(direction));
-        }
+        Debug.Log("[CardInputController] MoveSelection blocked by cooldown");
+        return;
     }
+
+    Debug.Log($"[CardInputController] Starting move selection {direction}");
+
+    _lastReorderTime = Time.time;
+    _isReordering = true;
+
+    var selectionManager = CoreExtensions.GetManager<SelectionManager>();
+    var handLayoutManager = CoreExtensions.GetManager<HandLayoutManager>();
+    var cardManager = CoreExtensions.GetManager<CardManager>();
     
+    if (selectionManager == null || handLayoutManager == null || cardManager == null)
+    {
+        Debug.LogError("[CardInputController] Missing managers for MoveSelection!");
+        _isReordering = false;
+        return;
+    }
+
+    try
+    {
+        var selectedCards = GetSelectedCardsList(selectionManager);
+        var handCards = cardManager.GetHandCards();
+        
+        if (selectedCards.Count == 0 || handCards == null || handCards.Count <= 1)
+        {
+            Debug.Log("[CardInputController] Nothing to move");
+            return;
+        }
+
+        // FIXED: Manuelle Implementierung statt SelectionManager.MoveSelection()
+        if (direction == CardMoveDirection.Left)
+        {
+            MoveSelectionOneStepLeft(selectedCards, handCards, handLayoutManager);
+        }
+        else if (direction == CardMoveDirection.Right)
+        {
+            MoveSelectionOneStepRight(selectedCards, handCards, handLayoutManager);
+        }
+
+        Debug.Log($"[CardInputController] Successfully moved selection {direction}");
+    }
+    catch (System.Exception ex)
+    {
+        Debug.LogError($"[CardInputController] Failed to move selection: {ex.Message}");
+    }
+    finally
+    {
+        _isReordering = false;
+    }
+
+    if (visualReorderFeedback)
+    {
+        StartCoroutine(ReorderFeedback(direction));
+    }
+}
+
+// === NEUE HILFSMETHODEN ===
+
+    private void MoveSelectionOneStepLeft(List<Card> selectedCards, List<Card> handCards, HandLayoutManager handLayoutManager)
+    {
+        // Sortiere selected cards nach Hand-Index (aufsteigend)
+        var sortedSelectedCards = new List<Card>(selectedCards);
+        sortedSelectedCards.Sort((a, b) => a.HandIndex().CompareTo(b.HandIndex()));
+    
+        int leftmostIndex = sortedSelectedCards[0].HandIndex();
+    
+        if (leftmostIndex <= 0)
+        {
+            Debug.Log("[CardInputController] Already at leftmost position");
+            return;
+        }
+    
+        Debug.Log($"[CardInputController] Moving {selectedCards.Count} cards left from index {leftmostIndex}");
+    
+        // Finde die Karte, die verdrängt werden soll
+        var cardToDisplace = FindCardByHandIndex(handCards, leftmostIndex - 1);
+        if (cardToDisplace == null)
+        {
+            Debug.LogWarning("[CardInputController] No card to displace found");
+            return;
+        }
+    
+        // KORREKTE REIHENFOLGE: Von rechts nach links bewegen um Überschreibungen zu vermeiden
+    
+        // 1. Verdrängte Karte temporär "parken"
+        int rightmostSelectedIndex = sortedSelectedCards[sortedSelectedCards.Count - 1].HandIndex();
+    
+        // 2. Alle selected cards um 1 nach links
+        for (int i = 0; i < sortedSelectedCards.Count; i++)
+        {
+            var selectedCard = sortedSelectedCards[i];
+            int newIndex = selectedCard.HandIndex() - 1;
+        
+            Debug.Log($"[CardInputController] Moving {selectedCard.GetCardName()} from {selectedCard.HandIndex()} to {newIndex}");
+            handLayoutManager.MoveCardToPosition(selectedCard, newIndex);
+        }
+    
+        // 3. Verdrängte Karte an rightmost position
+        Debug.Log($"[CardInputController] Moving displaced card {cardToDisplace.GetCardName()} to {rightmostSelectedIndex}");
+        handLayoutManager.MoveCardToPosition(cardToDisplace, rightmostSelectedIndex);
+    }
+
+    private void MoveSelectionOneStepRight(List<Card> selectedCards, List<Card> handCards, HandLayoutManager handLayoutManager)
+    {
+        // Sortiere selected cards nach Hand-Index (absteigend für rechts)
+        var sortedSelectedCards = new List<Card>(selectedCards);
+        sortedSelectedCards.Sort((a, b) => b.HandIndex().CompareTo(a.HandIndex()));
+    
+        int rightmostIndex = sortedSelectedCards[0].HandIndex();
+    
+        if (rightmostIndex >= handCards.Count - 1)
+        {
+            Debug.Log("[CardInputController] Already at rightmost position");
+            return;
+        }
+    
+        Debug.Log($"[CardInputController] Moving {selectedCards.Count} cards right from index {rightmostIndex}");
+    
+        // Finde die Karte, die verdrängt werden soll
+        var cardToDisplace = FindCardByHandIndex(handCards, rightmostIndex + 1);
+        if (cardToDisplace == null)
+        {
+            Debug.LogWarning("[CardInputController] No card to displace found");
+            return;
+        }
+    
+        // Finde leftmost selected index
+        int leftmostSelectedIndex = GetMinHandIndex(selectedCards);
+    
+        // KORREKTE REIHENFOLGE: Von links nach rechts bewegen
+    
+        // 1. Alle selected cards um 1 nach rechts (von rechts nach links iterieren)
+        for (int i = 0; i < sortedSelectedCards.Count; i++)
+        {
+            var selectedCard = sortedSelectedCards[i];
+            int newIndex = selectedCard.HandIndex() + 1;
+        
+            Debug.Log($"[CardInputController] Moving {selectedCard.GetCardName()} from {selectedCard.HandIndex()} to {newIndex}");
+            handLayoutManager.MoveCardToPosition(selectedCard, newIndex);
+        }
+    
+        // 2. Verdrängte Karte an leftmost position
+        Debug.Log($"[CardInputController] Moving displaced card {cardToDisplace.GetCardName()} to {leftmostSelectedIndex}");
+        handLayoutManager.MoveCardToPosition(cardToDisplace, leftmostSelectedIndex);
+    }    
     private void MoveSelectionToEnd(CardMoveDirection direction)
+{
+    if (!CanReorder()) 
     {
-        if (!CanReorder()) 
-        {
-            Debug.Log("[CardInputController] MoveSelectionToEnd blocked by cooldown");
-            return;
-        }
-    
-        Debug.Log($"[CardInputController] Starting move selection to {direction} end");
-    
-        _lastReorderTime = Time.time;
-        _isReordering = true;
-    
-        var selectionManager = CoreExtensions.GetManager<SelectionManager>();
-        if (selectionManager == null)
-        {
-            Debug.LogError("[CardInputController] SelectionManager is null!");
-            _isReordering = false;
-            return;
-        }
-    
-        try
-        {
-            selectionManager.MoveSelectionToEnd(direction);
-            Debug.Log($"[CardInputController] Successfully moved selection to {direction} end");
-        }
-        catch (System.Exception ex)
-        {
-            Debug.LogError($"[CardInputController] Failed to move selection to end: {ex.Message}");
-        }
-        finally
-        {
-            _isReordering = false;
-        }
-    
-        if (visualReorderFeedback)
-        {
-            StartCoroutine(ReorderFeedback(direction, true));
-        }
+        Debug.Log("[CardInputController] MoveSelectionToEnd blocked by cooldown");
+        return;
     }
+
+    Debug.Log($"[CardInputController] Starting move selection to {direction} end");
+
+    _lastReorderTime = Time.time;
+    _isReordering = true;
+
+    var selectionManager = CoreExtensions.GetManager<SelectionManager>();
+    var handLayoutManager = CoreExtensions.GetManager<HandLayoutManager>();
+    var cardManager = CoreExtensions.GetManager<CardManager>();
+    
+    if (selectionManager == null || handLayoutManager == null || cardManager == null)
+    {
+        Debug.LogError("[CardInputController] Missing managers for MoveSelectionToEnd!");
+        _isReordering = false;
+        return;
+    }
+
+    try
+    {
+        var selectedCards = GetSelectedCardsList(selectionManager);
+        var handCards = cardManager.GetHandCards();
+        
+        if (selectedCards.Count == 0 || handCards == null)
+        {
+            Debug.Log("[CardInputController] Nothing to move to end");
+            return;
+        }
+
+        // FIXED: Direkte Implementierung
+        if (direction == CardMoveDirection.Left)
+        {
+            // Move to far left (position 0)
+            Debug.Log("[CardInputController] Moving selection to far left");
+            handLayoutManager.MoveCardsToPosition(selectedCards, 0);
+        }
+        else if (direction == CardMoveDirection.Right)
+        {
+            // Move to far right
+            int targetIndex = handCards.Count - selectedCards.Count;
+            Debug.Log($"[CardInputController] Moving selection to far right (index {targetIndex})");
+            handLayoutManager.MoveCardsToPosition(selectedCards, targetIndex);
+        }
+
+        Debug.Log($"[CardInputController] Successfully moved selection to {direction} end");
+    }
+    catch (System.Exception ex)
+    {
+        Debug.LogError($"[CardInputController] Failed to move selection to end: {ex.Message}");
+    }
+    finally
+    {
+        _isReordering = false;
+    }
+
+    if (visualReorderFeedback)
+    {
+        StartCoroutine(ReorderFeedback(direction, true));
+    }
+}
 
     
     private void MoveSelectionToCenter()
@@ -995,24 +1131,23 @@ private void ContractSelectionRight()
         }
     }
     
-    // FIXED: HandleCardClick - Bessere Selection Logic mit Toggle
     void HandleCardClick(Card card)
     {
         float timeSinceLastClick = Time.time - _lastClickTime;
         bool isDoubleClick = (timeSinceLastClick <= doubleClickTime && _lastClickedCard == card);
-        
+    
         var selectionManager = CoreExtensions.GetManager<SelectionManager>();
         if (selectionManager == null) return;
-        
+    
         bool ctrl = Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl);
         bool shift = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
-        
-        Debug.Log($"[CardInputController] Card clicked: {card.GetCardName()}, DoubleClick: {isDoubleClick}, Ctrl: {ctrl}, Shift: {shift}");
-        
+    
+        Debug.Log($"[CardInputController] Card clicked: {card.GetCardName()}, Selected: {GetCardIsSelected(card)}");
+    
         if (isDoubleClick)
         {
-            // Double click - toggle highlight DIRECTLY
-            Debug.Log("[CardInputController] Double-click: Toggle highlight directly");
+            // Double click - highlight
+            Debug.Log("[CardInputController] Double-click: Toggle highlight");
             if (IsCardHighlighted(card))
                 selectionManager.RemoveFromHighlight(card);
             else
@@ -1020,37 +1155,37 @@ private void ContractSelectionRight()
         }
         else if (shift && enableMultiSelect && _lastClickedCard != null)
         {
-            // Shift click - select range
+            // Shift click - range select
             Debug.Log("[CardInputController] Shift-click: Select range");
             selectionManager.SelectRange(_lastClickedCard, card);
         }
-        else if (ctrl && enableMultiSelect)
-        {
-            // Ctrl click - toggle selection
-            Debug.Log("[CardInputController] Ctrl-click: Toggle selection");
-            selectionManager.ToggleCardSelection(card);
-        }
         else
         {
-            // Normal click - TOGGLE single card selection
+            // SIMPLE TOGGLE LOGIC
             bool isSelected = GetCardIsSelected(card);
-            
+        
+            if (ctrl)
+            {
+                // Ohne Ctrl: Clear andere selections
+                selectionManager.ClearSelection();
+            }
+        
             if (!isSelected)
             {
-                Debug.Log("[CardInputController] Normal click: Select card (clear others)");
-                selectionManager.ClearSelection();
+                Debug.Log("[CardInputController] Card not selected -> SELECT");
                 selectionManager.AddToSelection(card);
             }
             else
             {
-                Debug.Log("[CardInputController] Normal click: Toggle off (deselect)");
+                Debug.Log("[CardInputController] Card selected -> DESELECT");
                 selectionManager.RemoveFromSelection(card);
             }
         }
-        
+    
         _lastClickTime = Time.time;
         _lastClickedCard = card;
     }
+
     
     void HandleRightClick()
     {
