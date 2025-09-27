@@ -2,6 +2,8 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using System.Linq;
+using CardSystem.Extensions;
+using GameSystem.Extensions;
 
 namespace Handler
 {
@@ -64,8 +66,8 @@ namespace Handler
             _draggedCards = new List<Card>(cards.Where(c => c != null));
             _lastMousePosition = mousePosition;
             
-            // Sort by hand index
-            _draggedCards = _draggedCards.OrderBy(c => c.HandIndex).ToList();
+            // Sort by hand index using CardExtensions
+            _draggedCards = _draggedCards.OrderBy(c => c.HandIndex()).ToList();
             
             // FIX 1: Calculate group center offset from mouse
             CalculateGroupCenterOffset(mousePosition);
@@ -84,7 +86,7 @@ namespace Handler
                 rectTransform.SetParent(_canvas.transform);
                 rectTransform.SetAsLastSibling();
                 
-                // Set visual state
+                // Set visual state using CardExtensions
                 card.StartDrag();
                 var canvasGroup = card.GetComponent<CanvasGroup>();
                 if (canvasGroup != null)
@@ -206,7 +208,7 @@ namespace Handler
                 ReturnCardsToOriginalPositions();
             }
             
-            // Clean up visual state
+            // Clean up visual state using CardExtensions
             foreach (var card in _draggedCards)
             {
                 if (card != null)
@@ -238,9 +240,12 @@ namespace Handler
             // Return cards to hand first
             ReturnCardsToOriginalPositions();
             
-            // Process play
-            return CoreExtensions.TryWithManagerStatic<SpellcastManager, bool>(null, 
-                sm => { sm.ProcessCardPlay(_draggedCards); return true; });
+            // Process play using SpellcastManager
+            return CoreExtensions.TryWithManagerStatic<SpellcastManager, bool>(this, sm => 
+            { 
+                sm.ProcessCardPlay(_draggedCards); 
+                return true; 
+            });
         }
         
         bool HandleDiscardAreaDrop()
@@ -304,11 +309,11 @@ namespace Handler
         bool HandleCardReorder(Card targetCard)
         {
             // FIX 2&3: Use HandLayoutManager for reordering
-            return CoreExtensions.TryWithManagerStatic<HandLayoutManager, bool>(null, hlm =>
+            return CoreExtensions.TryWithManagerStatic<HandLayoutManager, bool>(this, hlm =>
             {
                 ReturnCardsToOriginalPositions();
-                
-                int targetIndex = targetCard.HandIndex;
+
+                int targetIndex = targetCard.HandIndex(); // Use CardExtensions
                 hlm.MoveCardsToPosition(_draggedCards, targetIndex);
                 return true;
             });

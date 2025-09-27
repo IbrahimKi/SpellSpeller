@@ -59,6 +59,14 @@ namespace Handler
 
         public void OnBeginDrag(PointerEventData eventData)
         {
+            // NEW: Check if dragging is temporarily blocked
+            var inputController = CardInputController.Instance;
+            if (inputController != null && inputController.IsDragBlocked())
+            {
+                Debug.Log("[CardDragHandler] Drag blocked - selection in progress");
+                return;
+            }
+            
             if (canvas == null) FindCanvas();
             if (canvas == null) return;
             
@@ -356,22 +364,8 @@ namespace Handler
         {
             if (card == null) return -1;
             
-            // Try direct property first
-            var handIndexProperty = card.GetType().GetProperty("HandIndex");
-            if (handIndexProperty != null && handIndexProperty.CanRead)
-            {
-                var value = handIndexProperty.GetValue(card);
-                return value is int intValue ? intValue : -1;
-            }
-            
-            // Fallback: Use transform sibling index
-            var handLayoutManager = CoreExtensions.GetManager<HandLayoutManager>();
-            if (handLayoutManager != null && card.transform.parent == handLayoutManager.transform)
-            {
-                return card.transform.GetSiblingIndex();
-            }
-            
-            return -1;
+            // Use CardExtensions HandIndex method
+            return card.HandIndex();
         }
 
         private void HideDropPreview()
@@ -411,26 +405,15 @@ namespace Handler
             }
             
             var cardList = new List<Card> { cardComponent };
-            if (!SpellcastManager.CheckCanPlayCards(cardList))
-            {
-                Debug.Log("SpellcastManager says cannot play cards");
-                return false;
-            }
             
             Debug.Log("[CardDragHandler] Playing card...");
             
             // Return to original position first
             ReturnToOriginalPosition();
             
-            // Select if not selected
-            if (!cardComponent.IsSelected)
-            {
-                cardComponent.TrySelect();
-            }
-            
-            // Play the card
+            // Play the card using SpellcastManager
             bool played = false;
-            CoreExtensions.TryWithManager<SpellcastManager>(this, sm => 
+            CoreExtensions.TryWithManagerStatic<SpellcastManager>(sm => 
             {
                 sm.ProcessCardPlay(cardList);
                 played = true;
@@ -458,15 +441,9 @@ namespace Handler
                 return false;
             }
             
-            if (!SpellcastManager.CheckCanDiscardCard(cardComponent))
-            {
-                Debug.Log("Cannot discard card");
-                return false;
-            }
-            
             bool discarded = false;
             
-            CoreExtensions.TryWithManager<CombatManager>(this, cm => 
+            CoreExtensions.TryWithManagerStatic<CombatManager>(cm => 
             {
                 if (cm.CanSpendResource(ResourceType.Creativity, 1))
                 {
@@ -476,21 +453,21 @@ namespace Handler
                     cm.TryModifyResource(ResourceType.Creativity, -1);
                     
                     // Add to discard pile
-                    CoreExtensions.TryWithManager<DeckManager>(this, dm => 
+                    CoreExtensions.TryWithManagerStatic<DeckManager>(dm => 
                     {
                         if (cardComponent.CardData != null)
                             dm.DiscardCard(cardComponent.CardData);
                     });
                     
                     // Remove from hand and destroy
-                    CoreExtensions.TryWithManager<CardManager>(this, cardManager => 
+                    CoreExtensions.TryWithManagerStatic<CardManager>(cardManager => 
                     {
                         cardManager.RemoveCardFromHand(cardComponent);
                         cardManager.DestroyCard(cardComponent);
                     });
                     
                     // Draw new card
-                    CoreExtensions.TryWithManager<DeckManager>(this, dm => dm.TryDrawCard());
+                    CoreExtensions.TryWithManagerStatic<DeckManager>(dm => dm.TryDrawCard());
                     
                     discarded = true;
                 }
@@ -524,7 +501,7 @@ namespace Handler
             
             // Ensure card is in hand
             Card cardComponent = GetComponent<Card>();
-            CoreExtensions.TryWithManager<CardManager>(this, cm => 
+            CoreExtensions.TryWithManagerStatic<CardManager>(cm => 
             {
                 var handCards = cm.GetHandCards();
                 bool cardInHand = false;
@@ -545,7 +522,7 @@ namespace Handler
             });
             
             // Update hand layout
-            CoreExtensions.TryWithManager<HandLayoutManager>(this, hlm => 
+            CoreExtensions.TryWithManagerStatic<HandLayoutManager>(hlm => 
             {
                 hlm.UpdateLayout();
             });

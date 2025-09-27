@@ -2,6 +2,7 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using CardSystem.Extensions;
 using GameSystem.Extensions;
 using Handler;
@@ -12,6 +13,7 @@ public class CardInputController : MonoBehaviour
     [SerializeField] private float doubleClickTime = 0.3f;
     [SerializeField] private bool enableKeyboardShortcuts = true;
     [SerializeField] private bool enableMultiSelect = true;
+    [SerializeField] private float dragStartDelay = 0.15f; // NEW: Drag delay
     
     [Header("Reordering Settings")]
     [SerializeField] private bool enableKeyboardReordering = true;
@@ -25,6 +27,10 @@ public class CardInputController : MonoBehaviour
     private float _lastClickTime = 0f;
     private Card _lastClickedCard = null;
     private GameObject _lastClickedObject = null;
+    
+    // NEW: Drag delay tracking
+    private bool _isDragBlocked = false;
+    private float _dragBlockStartTime = 0f;
     
     // Reordering tracking
     private float _lastReorderTime = 0f;
@@ -76,6 +82,12 @@ public class CardInputController : MonoBehaviour
             HandleKeyboardInput();
         
         HandleMouseInput();
+        
+        // Update drag blocking
+        if (_isDragBlocked && Time.time - _dragBlockStartTime > dragStartDelay)
+        {
+            _isDragBlocked = false;
+        }
     }
 
     // === HOVER EFFECT MANAGEMENT ===
@@ -1034,7 +1046,7 @@ private void ContractSelectionRight()
         for (int i = 0; i < handCards.Count; i++)
         {
             var card = handCards[i];
-            Debug.Log($"  Index {i}: {card.GetCardName()} (HandIndex: {card.HandIndex})");
+            Debug.Log($"  Index {i}: {card.GetCardName()} (HandIndex: {card.HandIndex()})");
         }
     }
 }
@@ -1142,7 +1154,12 @@ private void ContractSelectionRight()
         bool ctrl = Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl);
         bool shift = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
     
-        Debug.Log($"[CardInputController] Card clicked: {card.GetCardName()}, Selected: {GetCardIsSelected(card)}");
+        Debug.Log($"[CardInputController] Card clicked: {card.GetCardName()}, Selected: {GetCardIsSelected(card)}, Ctrl: {ctrl}, Shift: {shift}");
+    
+        // BLOCK DRAGGING temporarily to allow selection
+        _isDragBlocked = true;
+        _dragBlockStartTime = Time.time;
+        StartCoroutine(DisableDragHandlerTemporarily(card));
     
         if (isDoubleClick)
         {
@@ -1159,25 +1176,28 @@ private void ContractSelectionRight()
             Debug.Log("[CardInputController] Shift-click: Select range");
             selectionManager.SelectRange(_lastClickedCard, card);
         }
+        else if (ctrl)
+        {
+            // Ctrl click - PLAY CARD DIRECTLY
+            Debug.Log("[CardInputController] Ctrl-click: Play card directly");
+            var cardList = new List<Card> { card };
+            CoreExtensions.TryWithManagerStatic<SpellcastManager>(sm => sm.ProcessCardPlay(cardList));
+        }
         else
         {
-            // SIMPLE TOGGLE LOGIC
+            // Normal click WITHOUT modifiers
             bool isSelected = GetCardIsSelected(card);
-        
-            if (ctrl)
-            {
-                // Ohne Ctrl: Clear andere selections
-                selectionManager.ClearSelection();
-            }
-        
+            
             if (!isSelected)
             {
-                Debug.Log("[CardInputController] Card not selected -> SELECT");
+                // Card is not selected -> ADD to selection (KEEP others)
+                Debug.Log("[CardInputController] Normal click: ADD card to selection");
                 selectionManager.AddToSelection(card);
             }
             else
             {
-                Debug.Log("[CardInputController] Card selected -> DESELECT");
+                // Card is selected -> REMOVE from selection
+                Debug.Log("[CardInputController] Normal click: REMOVE card from selection");
                 selectionManager.RemoveFromSelection(card);
             }
         }
@@ -1185,7 +1205,19 @@ private void ContractSelectionRight()
         _lastClickTime = Time.time;
         _lastClickedCard = card;
     }
-
+    
+    // NEW: Temporarily disable drag to allow selection
+    private IEnumerator DisableDragHandlerTemporarily(Card card)
+    {
+        var dragHandler = card.GetComponent<CardDragHandler>();
+        if (dragHandler != null)
+        {
+            dragHandler.enabled = false;
+            yield return new WaitForSeconds(dragStartDelay);
+            if (dragHandler != null) // Check if still exists
+                dragHandler.enabled = true;
+        }
+    }
     
     void HandleRightClick()
     {
@@ -1208,17 +1240,27 @@ private void ContractSelectionRight()
         
         if (clickedCard != null)
         {
-            // Right click on card - start drag without selection
-            Debug.Log($"[CardInputController] Right-click drag: {clickedCard.GetCardName()}");
-            StartCardDrag(clickedCard);
+            // Right click on card - start drag of selection (if card is selected) or single card
+            var selectionManager = CoreExtensions.GetManager<SelectionManager>();
+            if (selectionManager != null && selectionManager.HasSelection && 
+                selectionManager.SelectedCards.Contains(clickedCard))
+            {
+                // Card is part of selection - start group drag
+                Debug.Log($"[CardInputController] Right-click: Start group drag of {selectionManager.SelectedCards.Count} cards");
+                var groupHandler = GroupDragHandler.Instance;
+                groupHandler.StartGroupDrag(selectionManager.SelectedCards.ToList(), Input.mousePosition);
+            }
+            else
+            {
+                // Card not selected - start single card drag
+                Debug.Log($"[CardInputController] Right-click: Start single card drag: {clickedCard.GetCardName()}");
+                StartCardDrag(clickedCard);
+            }
         }
         else
         {
-            // Right click on empty space - clear all selections
-            Debug.Log("[CardInputController] Right-click: Clear all selections");
-            var selectionManager = CoreExtensions.GetManager<SelectionManager>();
-            selectionManager?.ClearSelection();
-            selectionManager?.ClearHighlight();
+            // Right click on empty space - do nothing (keep selection)
+            Debug.Log("[CardInputController] Right-click on empty space - keeping selection");
         }
     }
     
@@ -1501,6 +1543,12 @@ private Card FindCardByHandIndex(List<Card> cards, int targetIndex)
     public void OnTurnEnd()
     {
         ResetDrawCost();
+    }
+    
+    // NEW: Public method for CardDragHandler
+    public bool IsDragBlocked()
+    {
+        return _isDragBlocked;
     }
 
     // === CLEANUP ===
